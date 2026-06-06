@@ -1,13 +1,28 @@
-/node_modules
-/.next
+# Dependencies (root + every workspace)
+node_modules/
+
+# Build output
+.next/
 /out
 /build
+dist/
 *.tsbuildinfo
 next-env.d.ts
+
+# Turborepo
+.turbo/
+
+# Expo (apps/mobile)
+.expo/
+
+# Env
 .env
 .env*.local
-/public/uploads/*
-!/public/uploads/.gitkeep
+
+# Uploaded photos (apps/api dev disk storage)
+apps/api/public/uploads/*
+!apps/api/public/uploads/.gitkeep
+
 .DS_Store
 .design-bundle
 
@@ -15,7 +30,5 @@ next-env.d.ts
 .omc
 .remember
 
-# We use npm; reject stray alternate lockfiles
-bun.lock
-yarn.lock
-pnpm-lock.yaml
+# Vercel
+.vercel
