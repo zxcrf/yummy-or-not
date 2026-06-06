@@ -46,6 +46,55 @@ export type UpdateTasteInput = Partial<CreateTasteInput> & {
   incrementBought?: number;
 };
 
+/* ----------------------------------------------------------------
+   AUTH — multi-user accounts & sessions.
+   Two onboarding habits are supported side by side:
+     • Domestic (China): phone number + SMS one-time code, WeChat.
+     • International:     email + password, Google, Apple.
+   ---------------------------------------------------------------- */
+
+/** A signed-in account, as returned to the client (never includes secrets). */
+export interface User {
+  id: string;
+  displayName: string;
+  /** E.164-ish phone, e.g. "+8613800138000". "" if none on file. */
+  phone: string;
+  /** Lower-cased email. "" if none on file. */
+  email: string;
+  avatar: string;
+  locale: string;
+  plan: "free" | "pro";
+  createdAt: string;
+}
+
+/** Social / OAuth providers we can link an account to. */
+export type OAuthProvider = "wechat" | "google" | "apple";
+
+/** POST /api/auth/otp/request — start a phone login (domestic habit). */
+export interface OtpRequestInput {
+  phone: string;
+}
+/** POST /api/auth/otp/verify — finish a phone login with the texted code. */
+export interface OtpVerifyInput {
+  phone: string;
+  code: string;
+}
+/** POST /api/auth/register — email sign-up (international habit). */
+export interface RegisterInput {
+  email: string;
+  password: string;
+  displayName?: string;
+}
+/** POST /api/auth/login — email sign-in. */
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+/** Shape returned by the auth endpoints that establish/return a session. */
+export interface AuthResponse {
+  user: User;
+}
+
 /** GET /api/stats response. */
 export interface Stats {
   total: number;

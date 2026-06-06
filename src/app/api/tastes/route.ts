@@ -6,15 +6,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile } from 'fs/promises';
 import path from 'path';
 import { listTastes, createTaste } from '@/lib/db';
+import { getUserFromRequest } from '@/lib/auth';
 import type { CreateTasteInput, Verdict } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
+  const user = await getUserFromRequest(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { searchParams } = req.nextUrl;
   const q      = searchParams.get('q')      ?? undefined;
   const filter = searchParams.get('filter') ?? undefined;
 
   try {
-    const tastes = await listTastes({ q, filter });
+    const tastes = await listTastes(user.id, { q, filter });
     return NextResponse.json(tastes);
   } catch (err) {
     console.error('GET /api/tastes error:', err);
@@ -23,6 +27,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getUserFromRequest(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const contentType = req.headers.get('content-type') ?? '';
 
@@ -85,7 +92,7 @@ export async function POST(req: NextRequest) {
         imageUrl = `/uploads/${filename}`;
       }
 
-      const taste = await createTaste(input, imageUrl);
+      const taste = await createTaste(user.id, input, imageUrl);
 
       // If we uploaded a photo under a tmp name, rename to the real taste id.
       if (imageUrl && imageUrl.includes('tmp_')) {
@@ -97,7 +104,7 @@ export async function POST(req: NextRequest) {
         await rename(oldPath, newPath);
         // Update the record with the correct image path
         const { updateTaste } = await import('@/lib/db');
-        const updated = await updateTaste(taste.id, { image: `/uploads/${newFilename}` });
+        const updated = await updateTaste(user.id, taste.id, { image: `/uploads/${newFilename}` });
         return NextResponse.json(updated ?? taste, { status: 201 });
       }
 
@@ -105,7 +112,7 @@ export async function POST(req: NextRequest) {
     } else {
       // JSON body
       input = (await req.json()) as CreateTasteInput;
-      const taste = await createTaste(input);
+      const taste = await createTaste(user.id, input);
       return NextResponse.json(taste, { status: 201 });
     }
   } catch (err) {

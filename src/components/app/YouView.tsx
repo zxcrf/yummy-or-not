@@ -6,6 +6,7 @@
 
 import { type Taste } from "@/lib/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ds/Card";
 import { Avatar } from "@/components/ds/Avatar";
 import { Icon } from "@/components/ds/Icon";
@@ -18,23 +19,31 @@ function SettingRow({
   icon,
   label,
   last,
+  onClick,
+  danger,
 }: {
   icon: string;
   label: string;
   last?: boolean;
+  onClick?: () => void;
+  danger?: boolean;
 }) {
   return (
     <div
+      onClick={onClick}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "14px 2px",
         borderBottom: last ? "none" : "2px dotted var(--ink-200)",
+        cursor: onClick ? "pointer" : "default",
       }}
     >
-      <Icon name={icon} size={20} color="var(--ink-700)" />
-      <span style={{ flex: 1, fontWeight: 500 }}>{label}</span>
+      <Icon name={icon} size={20} color={danger ? "var(--candy-pink)" : "var(--ink-700)"} />
+      <span style={{ flex: 1, fontWeight: 500, color: danger ? "var(--candy-pink)" : undefined }}>
+        {label}
+      </span>
       <Icon name="chevron-right" size={18} color="var(--ink-300)" />
     </div>
   );
@@ -42,6 +51,8 @@ function SettingRow({
 
 export default function YouView({ items }: Props) {
   const { t } = useI18n();
+  const { user, signOut } = useAuth();
+  const displayName = user?.displayName || user?.email || user?.phone || "—";
 
   const count = (v: string) => items.filter((it) => it.verdict === v).length;
 
@@ -94,10 +105,10 @@ export default function YouView({ items }: Props) {
     <div className="yon-stats-view">
       {/* avatar header */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
-        <Avatar name="Mina Park" size="lg" />
+        <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
         <div>
           <div style={{ fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 22 }}>
-            Mina Park
+            {displayName}
           </div>
           <div style={{ color: "var(--ink-500)" }}>
             {t("tastes_logged", { n: items.length })}
@@ -139,7 +150,8 @@ export default function YouView({ items }: Props) {
         </span>
         <SettingRow icon="alert" label={t("set_warnings")} />
         <SettingRow icon="map" label={t("set_location")} />
-        <SettingRow icon="lock" label={t("set_private")} last />
+        <SettingRow icon="lock" label={t("set_private")} />
+        <SettingRow icon="arrow-right" label={t("auth_signout")} onClick={signOut} danger last />
       </div>
     </div>
   );

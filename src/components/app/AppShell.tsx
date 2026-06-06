@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { type Taste } from "@/lib/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useAuth } from "@/lib/auth-context";
 import { listTastes } from "@/lib/api-client";
 
 import { Button } from "@/components/ds/Button";
@@ -38,6 +39,7 @@ function Sidebar({
   onAdd: () => void;
 }) {
   const { t, lang, setLang } = useI18n();
+  const { user, signOut } = useAuth();
 
   const navItem = (key: View, icon: string, label: string) => {
     const on = view === key;
@@ -135,24 +137,54 @@ function Sidebar({
       </Button>
 
       {/* user footer */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginTop: 14,
-          padding: "10px 6px 2px",
-          borderTop: "2px dotted var(--ink-200)",
-        }}
-      >
-        <Avatar name="Mina Park" size="sm" />
-        <div style={{ lineHeight: 1.2 }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>Mina Park</div>
-          <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
-            {t("free_plan")}
+      {(() => {
+        const displayName =
+          user?.displayName || user?.email || user?.phone || "—";
+        return (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginTop: 14,
+              padding: "10px 6px 2px",
+              borderTop: "2px dotted var(--ink-200)",
+            }}
+          >
+            <Avatar name={displayName} src={user?.avatar || undefined} size="sm" />
+            <div style={{ lineHeight: 1.2, flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {displayName}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                {user?.plan === "pro" ? t("pro_plan") : t("free_plan")}
+              </div>
+            </div>
+            <button
+              onClick={signOut}
+              aria-label={t("auth_signout")}
+              title={t("auth_signout")}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 4,
+                flex: "none",
+              }}
+            >
+              <Icon name="arrow-right" size={18} color="var(--ink-400)" />
+            </button>
           </div>
-        </div>
-      </div>
+        );
+      })()}
     </aside>
   );
 }

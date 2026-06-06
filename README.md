@@ -20,14 +20,29 @@ Español) with the verdicts localized too.
 
 ```bash
 npm install          # install deps
-npm run db:setup     # create the `tastes` table + seed 8 sample tastes (idempotent)
+npm run db:setup     # create the schema (users/sessions/tastes/…) + seed a demo account
 npm run dev          # start the dev server → http://localhost:3000
 ```
 
 Production: `npm run build && npm start`.
 
+**Signing in.** The app is multi-user and gated behind a login. The seeded demo
+account owns the 8 sample tastes:
+
+- **Email:** `demo@yummy.test` · `demo1234`
+- **Phone:** `+8613800138000` — request a code; in dev the 6-digit code is shown
+  on the login screen and logged to the server console (no SMS gateway needed).
+
+New phone numbers / emails create fresh, **isolated** accounts. Social logins
+(WeChat · Google · Apple) appear once their credentials are set in `.env`
+(see `.env.example`).
+
 ## What works
 
+- **Accounts & sign-in** — phone + SMS code (domestic) or email + password
+  (international), with WeChat/Google/Apple social login when configured. Every
+  taste is owned by a user and isolated server-side; sessions are httpOnly
+  cookies backed by a `sessions` table.
 - **Library** — browse your tastes, search by name/place, filter by tag.
 - **Recall** — "tasted it before?" search → shows the verdict on file, or a
   "no record — log it now" empty state.
@@ -51,12 +66,16 @@ src/
       tastes/route.ts       # GET (search/filter) · POST (JSON or multipart photo)
       tastes/[id]/route.ts  # GET · PATCH · DELETE
       stats/route.ts        # GET aggregate stats
+      auth/                 # login · register · otp/{request,verify} · me · logout · oauth/[provider]
   components/
     ds/                     # design-system components (Button, FoodCard, VerdictStamp, …)
-    app/                    # app surfaces (AppShell, LibraryView, RecallView, StatsView, …)
+    app/                    # app surfaces (AppGate, AuthScreen, AppShell, LibraryView, …)
   lib/
-    types.ts                # shared types + API contract
-    db.ts                   # pg pool + query helpers (row → Taste, stats, …)
+    types.ts                # shared types + API contract (incl. User/auth shapes)
+    db.ts                   # pg pool + query helpers (user-scoped tastes, users, sessions, otp)
+    auth.ts                 # scrypt hashing, OTP codes, session cookies (server only)
+    oauth.ts                # WeChat/Google/Apple provider registry (env-driven)
+    auth-context.tsx        # client session context (useAuth)
     api-client.ts           # typed fetch wrappers for the UI
     i18n/                   # runtime, I18nProvider, locales/{zh,en,ko,ja,es}.ts
   styles/ds/                # design-system CSS (tokens, base, components)

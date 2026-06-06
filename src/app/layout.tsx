@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import "@/app/globals.css";
 import "@/app/app.css";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
+import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
   title: "yummy or not",
@@ -19,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   );

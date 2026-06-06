@@ -9,6 +9,50 @@ performed with Chrome DevTools on 2026-06-06.
 
 ---
 
+## [Unreleased]
+
+### Added — Multi-user accounts, auth & per-user isolation
+
+Yummy or Not is no longer a single shared log: every taste now belongs to a
+user, and the app is gated behind sign-in. Two onboarding habits are supported
+side by side so it fits both markets:
+
+- **Domestic (China):** phone number + SMS one-time code, plus **WeChat** social
+  login. Accounts are created on first successful code entry.
+- **International:** email + password sign-up/sign-in, plus **Google** and
+  **Apple** social login.
+
+Highlights:
+
+- **Per-user isolation.** `tastes` gained a `user_id` FK; every query
+  (`list/get/create/update/delete/stats`) is scoped to the signed-in user, and
+  all `/api/tastes*` + `/api/stats` routes return `401` without a session.
+  Verified end-to-end: a fresh user sees an empty library; one user's tastes are
+  invisible to another.
+- **Sessions.** Opaque server-side tokens in a `sessions` table, carried in an
+  httpOnly `yon_session` cookie, so logout / revocation is real. Passwords are
+  hashed with scrypt and OTP codes are stored only as sha256 — **no new runtime
+  dependencies** (Node `crypto` only).
+- **Pluggable delivery.** SMS goes through `SMS_WEBHOOK_URL` (Aliyun/Tencent/
+  Twilio); outside production the code is returned as `devCode` and logged so the
+  flow is testable with no gateway. Social providers light up automatically once
+  their `*_CLIENT_ID` / `*_CLIENT_SECRET` (or `WECHAT_APP_ID`/`_SECRET`) env
+  vars are present; otherwise their buttons render disabled.
+- **UI.** New `AuthScreen` (phone / email tabs + social buttons + language
+  switcher) behind an `AppGate`; the sidebar and **You** screen now show the real
+  account and a sign-out action. New auth strings localized across all 5 locales.
+- **Schema & seed.** New `users`, `auth_identities`, `sessions`, `otp_codes`
+  tables; the 8 sample tastes are now owned by a demo account
+  (`demo@yummy.test` / `demo1234`, or phone `+8613800138000` via dev OTP).
+
+_New files:_ `src/lib/auth.ts`, `src/lib/oauth.ts`, `src/lib/auth-context.tsx`,
+`src/components/app/AuthScreen.tsx`, `src/components/app/AppGate.tsx`,
+`src/app/api/auth/**`. _Touched:_ `db/{schema,seed}.sql`, `src/lib/{db,types,
+api-client}.ts`, the `tastes`/`stats` routes, `AppShell`, `YouView`, `layout`,
+`page`, all `i18n/locales/*`, `.env.example`.
+
+---
+
 ## [0.1.1] — 2026-06-06
 
 QA pass on the initial build, then a parallel fix round. A Chrome-DevTools

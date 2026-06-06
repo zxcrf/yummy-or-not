@@ -1,8 +1,8 @@
-/* Home page — mounts the responsive app shell.
-   Single-page app; all view state lives inside AppShell. */
+/* Home page — mounts the auth gate, which renders either the login screen or
+   the responsive app shell depending on the session. */
 
-import AppShell from "@/components/app/AppShell";
+import AppGate from "@/components/app/AppGate";
 
 export default function Home() {
-  return <AppShell />;
+  return <AppGate />;
 }
