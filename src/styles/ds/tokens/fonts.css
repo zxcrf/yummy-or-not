@@ -1,0 +1,15 @@
+/* ============================================================
+   YUMMY OR NOT — Fonts
+   Newtro pixel display + bold grotesque UI + pan-CJK pixel.
+   NOTE: Loaded from CDN. To ship offline/self-hosted font binaries,
+   drop .woff2 files in assets/fonts/ and replace these @imports with
+   @font-face rules pointing at them.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Silkscreen:wght@400;700&display=swap');
+
+/* Fusion Pixel Font (TakWolf, OFL) — open-source pan-CJK pixel font.
+   Gives Korean / Japanese / Chinese the same pixel feel as the Latin display. */
+@import url('https://cdn.jsdelivr.net/fontsource/css/fusion-pixel-12px-proportional-sc@latest/index.css');
+@import url('https://cdn.jsdelivr.net/fontsource/css/fusion-pixel-12px-proportional-jp@latest/index.css');
+@import url('https://cdn.jsdelivr.net/fontsource/css/fusion-pixel-12px-proportional-kr@latest/index.css');

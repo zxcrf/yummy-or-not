@@ -1,0 +1,65 @@
+// Idempotent DB setup: runs schema.sql then seed.sql against DATABASE_URL.
+// Reads .env manually since dotenv is not a dependency.
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '..');
+
+// Parse .env manually — simple KEY=VALUE, ignore comments and blanks.
+function loadDotEnv(envPath) {
+  try {
+    const text = readFileSync(envPath, 'utf8');
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+      if (!(key in process.env)) process.env[key] = val;
+    }
+  } catch {
+    // .env not found — rely on environment already having DATABASE_URL
+  }
+}
+
+loadDotEnv(path.join(root, '.env'));
+
+const { DATABASE_URL } = process.env;
+if (!DATABASE_URL) {
+  console.error('ERROR: DATABASE_URL is not set.');
+  process.exit(1);
+}
+
+const require = createRequire(import.meta.url);
+const { Pool } = require('pg');
+
+const pool = new Pool({ connectionString: DATABASE_URL });
+
+async function run() {
+  const schema = readFileSync(path.join(root, 'db', 'schema.sql'), 'utf8');
+  const seed   = readFileSync(path.join(root, 'db', 'seed.sql'),   'utf8');
+
+  const client = await pool.connect();
+  try {
+    console.log('Running schema.sql…');
+    await client.query(schema);
+
+    console.log('Running seed.sql…');
+    await client.query(seed);
+
+    const { rows } = await client.query('SELECT COUNT(*) AS n FROM tastes;');
+    console.log(`Done — ${rows[0].n} row(s) in tastes.`);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+run().catch((err) => {
+  console.error('db-setup failed:', err.message);
+  process.exit(1);
+});

@@ -1,0 +1,21 @@
+/node_modules
+/.next
+/out
+/build
+*.tsbuildinfo
+next-env.d.ts
+.env
+.env*.local
+/public/uploads/*
+!/public/uploads/.gitkeep
+.DS_Store
+.design-bundle
+
+# OMC orchestration / session state (machine-local, not product code)
+.omc
+.remember
+
+# We use npm; reject stray alternate lockfiles
+bun.lock
+yarn.lock
+pnpm-lock.yaml

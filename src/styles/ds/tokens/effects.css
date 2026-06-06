@@ -1,0 +1,49 @@
+/* ============================================================
+   YUMMY OR NOT — Effects: borders, radii, hard pop-shadows
+   Signature look: chunky ink borders + solid offset shadows
+   (no blur) = newtro / neo-brutalist candy.
+   ============================================================ */
+
+:root {
+  /* ---------- Border widths ---------- */
+  --border-thin: 2px;
+  --border-w: 3px;   /* default chunky border */
+  --border-thick: 4px;
+
+  /* ---------- Corner radii (small & friendly, not soft) ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  /* ---------- Pop shadows (solid, offset, NO blur) ---------- */
+  --shadow-pop-xs: 2px 2px 0 var(--ink-900);
+  --shadow-pop-sm: 3px 3px 0 var(--ink-900);
+  --shadow-pop:    5px 5px 0 var(--ink-900);
+  --shadow-pop-lg: 8px 8px 0 var(--ink-900);
+
+  /* Colored pop shadows for playful accents */
+  --shadow-pink: 5px 5px 0 var(--candy-pink);
+  --shadow-blue: 5px 5px 0 var(--candy-blue);
+
+  /* Soft ambient shadow (used sparingly, e.g. floating sheets) */
+  --shadow-soft: 0 8px 24px rgba(25, 16, 23, 0.16);
+
+  /* ---------- Motion ---------- */
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1); /* @kind other */ /* slight overshoot bounce */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1); /* @kind other */
+  --dur-fast: 110ms; /* @kind other */
+  --dur-base: 180ms; /* @kind other */
+  --dur-slow: 280ms; /* @kind other */
+
+  /* Press travel (how far an element nudges into its shadow) */
+  --press-travel: 3px;
+
+  /* ---------- Z-index ---------- */
+  --z-base: 1; /* @kind other */
+  --z-sticky: 100; /* @kind other */
+  --z-overlay: 1000; /* @kind other */
+  --z-toast: 2000; /* @kind other */
+}

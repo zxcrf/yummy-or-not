@@ -1,0 +1,219 @@
+/* ============================================================
+   YUMMY OR NOT — Component styles
+   Class-based so :hover / :active / :focus work. JSX components
+   are thin wrappers over these classes. All values are tokens.
+   ============================================================ */
+
+/* ---------------- Button ---------------- */
+.yon-btn {
+  font-family: var(--font-body);
+  font-weight: var(--weight-bold);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  border: var(--border-w) solid var(--ink-900);
+  border-radius: var(--radius-md);
+  background: var(--candy-pink); color: #fff;
+  cursor: pointer; line-height: 1; text-decoration: none; white-space: nowrap;
+  box-shadow: var(--shadow-pop-sm);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.yon-btn:hover { transform: translate(-1px, -1px); box-shadow: var(--shadow-pop); }
+.yon-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 0 var(--ink-900); }
+.yon-btn:disabled, .yon-btn[aria-disabled="true"] {
+  opacity: .45; cursor: not-allowed; transform: none; box-shadow: var(--shadow-pop-sm);
+}
+.yon-btn--sm { font-size: var(--text-sm); padding: 7px 12px; border-radius: var(--radius-sm); }
+.yon-btn--md { font-size: var(--text-md); padding: 11px 18px; }
+.yon-btn--lg { font-size: var(--text-lg); padding: 15px 26px; border-radius: var(--radius-lg); }
+.yon-btn--block { display: flex; width: 100%; }
+
+.yon-btn--primary   { background: var(--candy-pink);  color: #fff; }
+.yon-btn--secondary { background: var(--white);       color: var(--ink-900); }
+.yon-btn--accent    { background: var(--candy-yellow);color: var(--ink-900); }
+.yon-btn--dark      { background: var(--ink-900);     color: var(--paper); }
+.yon-btn--ghost     { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-900); }
+.yon-btn--ghost:hover  { background: var(--ink-100); transform: none; box-shadow: none; }
+.yon-btn--ghost:active { background: var(--ink-200); transform: translateY(1px); box-shadow: none; }
+
+/* ---------------- Icon button ---------------- */
+.yon-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-md);
+  background: var(--white); color: var(--ink-900); cursor: pointer;
+  box-shadow: var(--shadow-pop-sm);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast);
+  -webkit-tap-highlight-color: transparent; padding: 0;
+}
+.yon-iconbtn:hover  { transform: translate(-1px, -1px); box-shadow: var(--shadow-pop); }
+.yon-iconbtn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 0 var(--ink-900); }
+.yon-iconbtn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: var(--shadow-pop-sm); }
+.yon-iconbtn--sm { width: 34px; height: 34px; border-radius: var(--radius-sm); }
+.yon-iconbtn--md { width: 42px; height: 42px; }
+.yon-iconbtn--lg { width: 52px; height: 52px; }
+.yon-iconbtn--pink  { background: var(--candy-pink); color: #fff; }
+.yon-iconbtn--accent{ background: var(--candy-yellow); color: var(--ink-900); }
+.yon-iconbtn--round { border-radius: var(--radius-pill); }
+
+/* ---------------- Field / Input ---------------- */
+.yon-field { display: flex; flex-direction: column; gap: 6px; font-family: var(--font-body); }
+.yon-field__label {
+  font-family: var(--font-micro); font-size: var(--text-2xs); letter-spacing: var(--tracking-wider);
+  text-transform: uppercase; color: var(--ink-700);
+}
+.yon-input, .yon-textarea {
+  font-family: var(--font-body); font-size: var(--text-md); color: var(--ink-900);
+  background: var(--white); border: var(--border-w) solid var(--ink-900);
+  border-radius: var(--radius-sm); padding: 11px 13px; width: 100%;
+  box-shadow: inset 2px 2px 0 rgba(25, 16, 23, 0.06);
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+.yon-textarea { resize: vertical; min-height: 88px; line-height: 1.5; }
+.yon-input::placeholder, .yon-textarea::placeholder { color: var(--ink-400); }
+.yon-input:focus, .yon-textarea:focus { outline: none; box-shadow: 3px 3px 0 var(--candy-blue); }
+.yon-input--error, .yon-textarea--error { border-color: var(--verdict-nah); }
+.yon-input--error:focus { box-shadow: 3px 3px 0 var(--verdict-nah); }
+.yon-field__hint { font-size: var(--text-xs); color: var(--ink-500); }
+.yon-field__hint--error { color: var(--verdict-nah-2); }
+
+/* ---------------- Badge ---------------- */
+.yon-badge {
+  display: inline-flex; align-items: center; gap: 5px; line-height: 1; white-space: nowrap;
+  font-family: var(--font-micro); font-size: var(--text-3xs); letter-spacing: var(--tracking-wide);
+  text-transform: uppercase; padding: 5px 9px; border-radius: var(--radius-pill);
+  border: 2px solid var(--ink-900); background: var(--white); color: var(--ink-900);
+}
+.yon-badge--pink  { background: var(--candy-pink); color: #fff; }
+.yon-badge--blue  { background: var(--candy-blue); color: #fff; }
+.yon-badge--dark  { background: var(--ink-900); color: var(--paper); }
+.yon-badge--yum   { background: var(--verdict-yum); color: #fff; }
+.yon-badge--meh   { background: var(--verdict-meh); color: var(--ink-900); }
+.yon-badge--nah   { background: var(--verdict-nah); color: #fff; }
+
+/* ---------------- Tag / chip ---------------- */
+.yon-tag {
+  display: inline-flex; align-items: center; gap: 6px; line-height: 1; white-space: nowrap;
+  font-family: var(--font-body); font-weight: var(--weight-semibold); font-size: var(--text-sm);
+  padding: 7px 13px; border-radius: var(--radius-pill);
+  border: 2px solid var(--ink-900); background: var(--paper-2); color: var(--ink-900);
+  cursor: default; transition: background var(--dur-fast), transform var(--dur-fast);
+}
+button.yon-tag, .yon-tag--clickable { cursor: pointer; }
+button.yon-tag:active { transform: translateY(1px); }
+.yon-tag--active { background: var(--candy-yellow); }
+.yon-tag__x {
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  width: 16px; height: 16px; margin-right: -3px; border: none; background: transparent; padding: 0; color: inherit;
+}
+
+/* ---------------- Avatar ---------------- */
+.yon-avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-md);
+  background: var(--candy-grape); color: #fff;
+  font-family: var(--font-pixel); font-weight: var(--weight-bold);
+  overflow: hidden; object-fit: cover;
+}
+.yon-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.yon-avatar--circle { border-radius: var(--radius-pill); }
+.yon-avatar--sm { width: 34px; height: 34px; font-size: 14px; }
+.yon-avatar--md { width: 44px; height: 44px; font-size: 18px; }
+.yon-avatar--lg { width: 64px; height: 64px; font-size: 26px; }
+
+/* ---------------- Switch ---------------- */
+.yon-switch {
+  position: relative; width: 56px; height: 30px; flex: none; padding: 0;
+  border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-pill);
+  background: var(--ink-200); cursor: pointer; transition: background var(--dur-base) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.yon-switch__knob {
+  position: absolute; top: 1px; left: 1px; width: 22px; height: 22px;
+  background: #fff; border: 2px solid var(--ink-900); border-radius: 50%;
+  transition: left var(--dur-base) var(--ease-pop);
+}
+.yon-switch[aria-checked="true"] { background: var(--verdict-yum); }
+.yon-switch[aria-checked="true"] .yon-switch__knob { left: 27px; }
+.yon-switch:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------------- Card ---------------- */
+.yon-card {
+  background: var(--surface); border: var(--border-w) solid var(--ink-900);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden;
+}
+.yon-card--flat { box-shadow: var(--shadow-pop-sm); }
+.yon-card--soft { box-shadow: var(--shadow-soft); }
+.yon-card--pad { padding: var(--space-5); }
+.yon-card--interactive { cursor: pointer; transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.yon-card--interactive:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow-pop-lg); }
+.yon-card--interactive:active { transform: translate(2px, 2px); box-shadow: var(--shadow-pop-sm); }
+
+/* ---------------- Verdict stamp ---------------- */
+.yon-stamp {
+  display: inline-flex; align-items: center; gap: 8px; line-height: 1;
+  font-family: var(--font-pixel); font-weight: var(--weight-bold); color: #fff;
+  border: var(--border-thick) solid var(--ink-900); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop-sm);
+}
+.yon-stamp--sm { font-size: 15px; padding: 6px 11px; gap: 6px; }
+.yon-stamp--md { font-size: 22px; padding: 9px 15px; }
+.yon-stamp--lg { font-size: 32px; padding: 13px 22px; }
+.yon-stamp--yum { background: var(--verdict-yum); }
+.yon-stamp--meh { background: var(--verdict-meh); color: var(--ink-900); }
+.yon-stamp--nah { background: var(--verdict-nah); }
+.yon-stamp__face { font-family: var(--font-body); opacity: .92; }
+
+/* ---------------- Verdict picker ---------------- */
+.yon-picker { display: flex; gap: var(--space-3); }
+.yon-picker__opt {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 14px 8px; border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-md);
+  background: var(--white); color: var(--ink-900); cursor: pointer;
+  font-family: var(--font-pixel); font-weight: var(--weight-bold); font-size: var(--text-md);
+  box-shadow: var(--shadow-pop-sm);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background var(--dur-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.yon-picker__opt:hover { transform: translate(-1px, -1px); box-shadow: var(--shadow-pop); }
+.yon-picker__opt:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 var(--ink-900); }
+.yon-picker__face { font-family: var(--font-body); font-size: 26px; line-height: 1; }
+.yon-picker__opt--on.yon-picker__opt--yum { background: var(--verdict-yum); color: #fff; }
+.yon-picker__opt--on.yon-picker__opt--meh { background: var(--verdict-meh); color: var(--ink-900); }
+.yon-picker__opt--on.yon-picker__opt--nah { background: var(--verdict-nah); color: #fff; }
+.yon-picker__opt--on { transform: translate(-1px, -1px); box-shadow: var(--shadow-pop); }
+
+/* ---------------- Food card ---------------- */
+.yon-food { position: relative; display: flex; flex-direction: column; }
+.yon-food__media { position: relative; aspect-ratio: 4 / 3; background: var(--paper-3); border-bottom: var(--border-w) solid var(--ink-900); overflow: hidden; }
+.yon-food__media img { width: 100%; height: 100%; object-fit: cover; }
+.yon-food__stamp { position: absolute; top: 10px; right: 10px; transform: rotate(-5deg); }
+.yon-food__body { padding: var(--space-4); display: flex; flex-direction: column; gap: 7px; }
+.yon-food__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.yon-food__name { font-family: var(--font-body); font-weight: var(--weight-bold); font-size: var(--text-lg); line-height: 1.15; }
+.yon-food__place { font-size: var(--text-sm); color: var(--ink-500); }
+.yon-food__price { font-family: var(--font-pixel); font-weight: 700; font-size: var(--text-lg); }
+.yon-food__meta { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
+
+/* ---------------- Language switcher ---------------- */
+.yon-lang__btn {
+  display: inline-flex; align-items: center; gap: 8px; line-height: 1;
+  font-family: var(--font-pixel); font-weight: var(--weight-bold); font-size: 15px; color: #fff;
+  border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-pill);
+  padding: 7px 13px; cursor: pointer; box-shadow: var(--shadow-pop-sm);
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent; white-space: nowrap;
+}
+.yon-lang__btn:hover { transform: translate(-1px, -1px); box-shadow: var(--shadow-pop); }
+.yon-lang__btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 var(--ink-900); }
+.yon-lang__menu {
+  position: absolute; top: calc(100% + 8px); z-index: var(--z-overlay); min-width: 184px;
+  background: var(--white); border: var(--border-w) solid var(--ink-900); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.yon-lang__opt {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: none; padding: 9px 10px; border-radius: var(--radius-sm); font-family: var(--font-body);
+}
+.yon-lang__opt:hover { background: var(--ink-100); }
+.yon-lang__opt--on { background: var(--paper-2); }
+.yon-lang__native { font-weight: var(--weight-bold); font-size: 15px; flex: none; }
+.yon-lang__en { color: var(--ink-500); font-size: 13px; flex: 1; }

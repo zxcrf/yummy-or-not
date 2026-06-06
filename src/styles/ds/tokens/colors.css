@@ -1,0 +1,66 @@
+/* ============================================================
+   YUMMY OR NOT — Color tokens
+   Candy-pop palette on warm cream + ink. Bright, saturated, fun.
+   ============================================================ */
+
+:root {
+  /* ---------- Ink (warm near-black neutral ramp) ---------- */
+  --ink-900: #191017; /* primary text, borders, shadows */
+  --ink-700: #3a2c36;
+  --ink-500: #6b5b65;
+  --ink-400: #8f8189;
+  --ink-300: #b8aeb4;
+  --ink-200: #ddd6da;
+  --ink-100: #ece7ea;
+
+  /* ---------- Paper (warm cream surfaces) ---------- */
+  --paper:   #fff6e6; /* app background */
+  --paper-2: #ffeecf; /* sunken / alt surface */
+  --paper-3: #ffe6b8; /* deeper accent surface */
+  --white:   #ffffff; /* raised cards */
+
+  /* ---------- Candy hues (the pop palette) ---------- */
+  --candy-pink:      #ff2e88; /* brand primary */
+  --candy-pink-deep: #d6005f;
+  --candy-yellow:    #ffd12e;
+  --candy-tangerine: #ff6a1a;
+  --candy-blue:      #2f6bff;
+  --candy-cyan:      #16d6e6;
+  --candy-lime:      #8ce60e;
+  --candy-grape:     #9b4dff;
+  --candy-mint:      #19e68c;
+
+  /* ---------- Verdict colors (the core product semantic) ----------
+     YUM = liked it · MEH = it's fine · NAH = don't buy again      */
+  --verdict-yum:    #14c46b; /* juicy green */
+  --verdict-yum-2:  #0a9b51;
+  --verdict-meh:    #ffb20e; /* amber */
+  --verdict-meh-2:  #d98b00;
+  --verdict-nah:    #ff3147; /* candy red */
+  --verdict-nah-2:  #d40e26;
+
+  /* ---------- Semantic aliases ---------- */
+  --brand:          var(--candy-pink);
+  --brand-deep:     var(--candy-pink-deep);
+  --on-brand:       #ffffff;
+
+  --bg:             var(--paper);
+  --surface:        var(--white);
+  --surface-sunken: var(--paper-2);
+  --surface-accent: var(--paper-3);
+
+  --text:           var(--ink-900);
+  --text-muted:     var(--ink-500);
+  --text-faint:     var(--ink-400);
+  --on-dark:        var(--paper);
+
+  --border:         var(--ink-900);
+  --border-soft:    var(--ink-200);
+
+  --focus-ring:     var(--candy-blue);
+
+  --success:        var(--verdict-yum);
+  --warning:        var(--verdict-meh);
+  --danger:         var(--verdict-nah);
+  --info:           var(--candy-blue);
+}
