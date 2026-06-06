@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.yummyornot.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#fff6e6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,6 +35,13 @@
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#fff6e6"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Yummy or Not needs access to your photos so you can add pictures of your meals.",
+          "cameraPermission": "Yummy or Not needs access to your camera so you can take pictures of your meals."
         }
       ]
     ],
