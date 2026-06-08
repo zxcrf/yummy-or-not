@@ -1,5 +1,7 @@
 -- Yummy or Not — multi-user schema.
 -- Drops in dependency order so a re-run is a clean rebuild.
+DROP TABLE IF EXISTS promo_redemptions;
+DROP TABLE IF EXISTS promo_codes;
 DROP TABLE IF EXISTS otp_codes;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS auth_identities;
@@ -78,3 +80,30 @@ CREATE INDEX tastes_user_created_idx ON tastes (user_id, created_at DESC);
 
 -- Fast tag filtering
 CREATE INDEX tastes_tags_gin_idx ON tastes USING GIN (tags);
+
+-- ── Promo codes ──────────────────────────────────────────────────────────────
+-- A code grants a plan (e.g. 'pro') when redeemed — at sign-up
+-- (RegisterInput.promoCode) or after login (POST /api/promo/redeem).
+-- `code` is stored in canonical form (upper-cased, no spaces); see lib/promo.ts.
+CREATE TABLE promo_codes (
+  code        text        PRIMARY KEY,                 -- e.g. 'YON-PRO-7F3KQ2'
+  grants_plan text        NOT NULL DEFAULT 'pro' CHECK (grants_plan IN ('free', 'pro')),
+  max_uses    int         NOT NULL DEFAULT 1,          -- <= 0 means unlimited
+  used_count  int         NOT NULL DEFAULT 0,
+  note        text        NOT NULL DEFAULT '',         -- human label, e.g. "for Alex"
+  created_by  text        REFERENCES users(id) ON DELETE SET NULL,
+  expires_at  timestamptz,                             -- null = never expires
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── Promo redemptions ────────────────────────────────────────────────────────
+-- One row per (code, user). The UNIQUE constraint makes a second redeem by the
+-- same user a no-op (ON CONFLICT) — that's how "already_redeemed" is detected.
+CREATE TABLE promo_redemptions (
+  id          bigserial   PRIMARY KEY,
+  code        text        NOT NULL REFERENCES promo_codes(code) ON DELETE CASCADE,
+  user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redeemed_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (code, user_id)
+);
+CREATE INDEX promo_redemptions_user_idx ON promo_redemptions (user_id);

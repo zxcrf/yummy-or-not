@@ -1,9 +1,10 @@
 // DB client singleton + typed query helpers for Yummy or Not.
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl } from './env';
+import { normalizePromoCode, isPromoExpired, promoHasUsesLeft, type PromoCodeRow } from './promo';
 
 // ── Pool singleton ────────────────────────────────────────────────────────────
 
@@ -334,10 +335,11 @@ export async function createUser(input: {
   passwordHash?: string;
   avatar?: string;
   locale?: string;
+  plan?: Plan;
 }): Promise<User> {
   const { rows } = await pool.query(
-    `INSERT INTO users (display_name, phone, email, password_hash, avatar, locale)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (display_name, phone, email, password_hash, avatar, locale, plan)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       input.displayName ?? '',
@@ -346,6 +348,7 @@ export async function createUser(input: {
       input.passwordHash ?? null,
       input.avatar ?? '',
       input.locale ?? 'zh',
+      input.plan ?? 'free',
     ]
   );
   return rowToUser(rows[0]);
@@ -454,4 +457,92 @@ export async function consumeOtp(phone: string, codeHash: string): Promise<boole
   if (!rows.length) return false;
   await pool.query('UPDATE otp_codes SET consumed = true WHERE phone = $1', [phone]);
   return true;
+}
+
+// ── Plans & promo codes ──────────────────────────────────────────────────────
+
+/** Count a user's tastes — used to enforce the free-tier record cap. */
+export async function countTastes(userId: string): Promise<number> {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM tastes WHERE user_id = $1',
+    [userId]
+  );
+  return rows[0]?.n ?? 0;
+}
+
+/** Set a user's plan directly (admin / seed path). Returns the updated user. */
+export async function setUserPlan(userId: string, plan: Plan): Promise<User | null> {
+  const { rows } = await pool.query(
+    'UPDATE users SET plan = $2 WHERE id = $1 RETURNING *',
+    [userId, plan]
+  );
+  return rows.length ? rowToUser(rows[0]) : null;
+}
+
+/** Look up a promo code by its canonical (normalized) form, or null. */
+export async function getPromoCode(rawCode: string): Promise<PromoCodeRow | null> {
+  const { rows } = await pool.query(
+    'SELECT * FROM promo_codes WHERE code = $1',
+    [normalizePromoCode(rawCode)]
+  );
+  return rows.length ? (rows[0] as PromoCodeRow) : null;
+}
+
+/** Outcome of a redemption attempt. `ok:false` carries a machine-readable reason
+ *  matching the RedeemError union in @yon/shared. */
+export type RedeemOutcome =
+  | { ok: true; user: User }
+  | { ok: false; error: 'invalid_code' | 'code_expired' | 'code_exhausted' | 'already_redeemed' };
+
+/**
+ * Redeem a promo code for a user, atomically. Locks the code row (FOR UPDATE)
+ * so concurrent redemptions can't oversell a limited code, records the
+ * redemption (the (code,user) UNIQUE makes a repeat a no-op → already_redeemed),
+ * bumps used_count, and upgrades the user's plan to what the code grants.
+ */
+export async function redeemPromoCode(userId: string, rawCode: string): Promise<RedeemOutcome> {
+  const code = normalizePromoCode(rawCode);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT * FROM promo_codes WHERE code = $1 FOR UPDATE',
+      [code]
+    );
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'invalid_code' };
+    }
+    const promo = rows[0] as PromoCodeRow;
+    if (isPromoExpired(promo)) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'code_expired' };
+    }
+    if (!promoHasUsesLeft(promo)) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'code_exhausted' };
+    }
+    const ins = await client.query(
+      `INSERT INTO promo_redemptions (code, user_id) VALUES ($1, $2)
+       ON CONFLICT (code, user_id) DO NOTHING
+       RETURNING id`,
+      [code, userId]
+    );
+    if (!ins.rows.length) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'already_redeemed' };
+    }
+    await client.query('UPDATE promo_codes SET used_count = used_count + 1 WHERE code = $1', [code]);
+    const upd = await client.query(
+      'UPDATE users SET plan = $2 WHERE id = $1 RETURNING *',
+      [userId, promo.grants_plan]
+    );
+    await client.query('COMMIT');
+    return { ok: true, user: rowToUser(upd.rows[0]) };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

@@ -17,6 +17,13 @@ ON CONFLICT (id) DO UPDATE SET
   locale        = EXCLUDED.locale,
   plan          = EXCLUDED.plan;
 
+-- Dev promo code: grants Pro, unlimited uses. Redeem at sign-up (promoCode) or
+-- via POST /api/promo/redeem. For local testing only — prod codes are seeded
+-- separately (one-off, never via this fixture).
+INSERT INTO promo_codes (code, grants_plan, max_uses, note) VALUES
+  ('YON-PRO-DEMO', 'pro', 0, 'dev fixture — unlimited Pro')
+ON CONFLICT (code) DO NOTHING;
+
 -- Sample tastes (owned by the demo user). created_at staggered for newest-first.
 INSERT INTO tastes (id, user_id, name, place, price, verdict, tags, bought_count, notes, image, created_at) VALUES
   ('burger',  'demo-user', 'Double smash burger',   'Shake Shack',          '$9.40',  'yum', ARRAY['Burger','Savory'],  4, 'Reliable. Crispy edges every time.',                                  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&q=80', now() - interval '1 day'),

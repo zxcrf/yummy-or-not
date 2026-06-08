@@ -40,6 +40,10 @@ function errKey(code: string): string {
     email_taken: 'auth_err_email_taken',
     invalid_credentials: 'auth_err_invalid_credentials',
     provider_unavailable: 'auth_err_provider_unavailable',
+    invalid_code: 'auth_err_invalid_code',
+    code_expired: 'auth_err_code_expired',
+    code_exhausted: 'auth_err_code_exhausted',
+    already_redeemed: 'auth_err_already_redeemed',
   }
   return map[code] ?? 'auth_err_generic'
 }
@@ -308,13 +312,14 @@ function EmailForm({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [promo, setPromo] = useState('')
 
   const submit = async () => {
     setError(null)
     setBusy(true)
     try {
       if (mode === 'register') {
-        await registerEmail({ email, password, displayName: name })
+        await registerEmail({ email, password, displayName: name, promoCode: promo.trim() || undefined })
       } else {
         await loginEmail({ email, password })
       }
@@ -354,6 +359,16 @@ function EmailForm({
         value={password}
         onChangeText={setPassword}
       />
+      {mode === 'register' ? (
+        <Input
+          label={t('auth_promo_label')}
+          autoCapitalize="characters"
+          autoComplete="off"
+          placeholder={t('auth_promo_ph')}
+          value={promo}
+          onChangeText={setPromo}
+        />
+      ) : null}
       <Button block onPress={submit} disabled={busy || !email || !password}>
         {mode === 'login' ? t('auth_login') : t('auth_register')}
       </Button>

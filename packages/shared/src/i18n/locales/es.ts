@@ -38,4 +38,10 @@ export const es: Record<string, string> = {
   auth_err_invalid_credentials: "Correo o contraseña incorrectos.",
   auth_err_provider_unavailable: "El inicio con {p} aún no está configurado.",
   auth_err_generic: "Algo salió mal. Inténtalo de nuevo.",
+  auth_promo_label: "Código promocional (opcional)", auth_promo_ph: "¿Tienes un código? Pégalo aquí",
+  auth_err_invalid_code: "Ese código promocional no es válido.",
+  auth_err_code_expired: "Ese código promocional ha caducado.",
+  auth_err_code_exhausted: "Ese código promocional ya se ha usado por completo.",
+  auth_err_already_redeemed: "Ya has canjeado ese código.",
+  taste_limit_reached: "Alcanzaste el límite de 100 registros del plan gratis. Mejora a Pro para registros ilimitados.",
 };
