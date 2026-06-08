@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useRef, useState } from 'react'
-import { Platform } from 'react-native'
+import { Image, Platform } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { ScrollView, Text, View } from 'tamagui'
@@ -224,10 +224,10 @@ export default function AddModal({ onClose, onSaved }: Props) {
             cursor="pointer"
           >
             {photoPreview ? (
-              <img
-                src={photoPreview}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              <Image
+                source={{ uri: photoPreview }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
               />
             ) : (
               <>
