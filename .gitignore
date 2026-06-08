@@ -41,6 +41,8 @@ apps/api/public/uploads/*
 # Tool artifacts
 .rtk/
 *.rtk.bak
+playwright-report/
+test-results/
 
 # CodeGraph local index
 .codegraph/
