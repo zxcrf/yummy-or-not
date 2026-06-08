@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useRef, useState } from 'react'
-import { Platform } from 'react-native'
+import { KeyboardAvoidingView, Platform } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { ScrollView, Text, View } from 'tamagui'
@@ -185,6 +185,10 @@ export default function AddModal({ onClose, onSaved }: Props) {
   }
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <View flex={1} backgroundColor="$background">
       {/* sticky header */}
       <View
@@ -205,7 +209,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
       </View>
 
       {/* scrollable body */}
-      <ScrollView flex={1} contentContainerStyle={{ padding: 20, gap: 20 }}>
+      <ScrollView flex={1} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 20 }}>
         {/* photo + basic fields */}
         <View gap="$4">
           {/* photo dropzone */}
@@ -345,5 +349,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
         </View>
       </ScrollView>
     </View>
+    </KeyboardAvoidingView>
   )
 }
