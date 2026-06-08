@@ -13,8 +13,20 @@ import { Alert, Image } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { deleteTaste, getTaste, type Taste } from '@yon/shared'
-import { Badge, Button, Card, Icon, IconButton, Switch, VerdictStamp } from '@/components/ds'
+import { deleteTaste, getTaste, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import {
+  Badge,
+  Button,
+  Card,
+  Icon,
+  IconButton,
+  Input,
+  Switch,
+  Tag,
+  Textarea,
+  VerdictPicker,
+  VerdictStamp,
+} from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function DetailView() {
@@ -27,6 +39,15 @@ export default function DetailView() {
   const [loading, setLoading] = useState(true)
   const [remind, setRemind] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPlace, setEditPlace] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editVerdict, setEditVerdict] = useState<Verdict>('yum')
+  const [editTags, setEditTags] = useState<string[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -68,6 +89,52 @@ export default function DetailView() {
       { text: t('cancel'), style: 'cancel' },
       { text: t('del'), style: 'destructive', onPress: doDelete },
     ])
+  }
+
+  const startEditing = () => {
+    if (!item) return
+    setEditName(item.name)
+    setEditPlace(item.place)
+    setEditPrice(item.price)
+    setEditNotes(item.notes)
+    setEditVerdict(item.verdict)
+    setEditTags(item.tags)
+    setSaveError(null)
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setSaveError(null)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  const toggleEditTag = (tag: string) => {
+    setEditTags((tags) =>
+      tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag],
+    )
+  }
+
+  const saveEdit = async () => {
+    if (!item || !editName || saving) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await updateTaste(item.id, {
+        name: editName,
+        place: editPlace,
+        price: editPrice,
+        verdict: editVerdict,
+        tags: editTags,
+        notes: editNotes,
+      })
+      setItem(updated)
+      setEditing(false)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -141,73 +208,150 @@ export default function DetailView() {
 
       {/* content */}
       <YStack padding={22} paddingTop={36} gap="$3">
-        <XStack justifyContent="space-between" alignItems="flex-start" gap="$3">
-          <YStack flex={1}>
-            <Text color="$ink900" fontWeight="700" fontSize={24} lineHeight={26}>
-              {item.name}
-            </Text>
-            <Text color="$ink500" marginTop="$1">
-              {item.place}
-            </Text>
-          </YStack>
-          {item.price ? (
-            <Text color="$ink900" fontWeight="700" fontSize={26}>
-              {item.price}
-            </Text>
-          ) : null}
-        </XStack>
+        {editing ? (
+          <>
+            <Input
+              label={t('f_what')}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Brown sugar boba"
+            />
+            <Input
+              label={t('f_where')}
+              value={editPlace}
+              onChangeText={setEditPlace}
+              placeholder="Tiger Sugar · Hongdae"
+            />
+            <Input
+              label={t('f_price')}
+              value={editPrice}
+              onChangeText={setEditPrice}
+              placeholder="$5.80"
+            />
 
-        {/* badges */}
-        <XStack gap="$2" flexWrap="wrap">
-          <Badge tone="dark">{t('bought_n', { n: item.boughtCount })}</Badge>
-          {item.tags.map((tg) => (
-            <Badge key={tg}>{tg}</Badge>
-          ))}
-          {item.date ? <Badge>{item.date}</Badge> : null}
-        </XStack>
+            <YStack gap="$2">
+              <Text color="$ink700" fontSize={11} letterSpacing={1.32} textTransform="uppercase">
+                {t('how_was_it')}
+              </Text>
+              <VerdictPicker
+                value={editVerdict}
+                onChange={setEditVerdict}
+                labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
+              />
+            </YStack>
 
-        {/* note */}
-        {item.notes ? (
-          <Card padded>
-            <Text
-              color="$ink400"
-              fontSize={10}
-              letterSpacing={1}
-              textTransform="uppercase"
-            >
-              {t('your_note')}
-            </Text>
-            <Text color="$ink900" marginTop="$2" lineHeight={22}>
-              {item.notes}
-            </Text>
-          </Card>
-        ) : null}
+            <YStack gap="$2">
+              <Text color="$ink700" fontSize={11} letterSpacing={1.32} textTransform="uppercase">
+                {t('tags')}
+              </Text>
+              <XStack flexWrap="wrap" gap="$2">
+                {TAG_CHOICES.map((tag) => (
+                  <Tag key={tag} active={editTags.includes(tag)} onPress={() => toggleEditTag(tag)}>
+                    {tag}
+                  </Tag>
+                ))}
+              </XStack>
+            </YStack>
 
-        {/* warn toggle */}
-        <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1">
-          <XStack alignItems="center" gap="$3">
-            <Icon name="alert" size={20} color="#ff5d8f" />
-            <Text color="$ink900" fontWeight="500">
-              {t('warn_before')}
-            </Text>
-          </XStack>
-          <Switch checked={remind} onChange={setRemind} />
-        </XStack>
+            <Textarea
+              label={t('your_take')}
+              value={editNotes}
+              onChangeText={setEditNotes}
+              numberOfLines={3}
+              placeholder="Too sweet, but the texture was perfect..."
+            />
 
-        {/* actions */}
-        <XStack gap="$3" marginTop="$1">
-          <Button variant="secondary" iconLeft={<Icon name="edit" size={18} />}>
-            {t('edit')}
-          </Button>
-          <Button
-            variant="secondary"
-            iconLeft={<Icon name="trash" size={18} />}
-            disabled={deleting}
-            onPress={handleDelete}
-          >
-            {t('del')}
-          </Button>
-        </XStack>
+            {saveError ? (
+              <Text color="$verdictNah2" fontSize={14}>
+                {saveError}
+              </Text>
+            ) : null}
+
+            <XStack gap="$3" marginTop="$1">
+              <Button variant="ghost" onPress={cancelEditing}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!editName || saving}
+                iconLeft={<Icon name="check" size={18} color="#fff" />}
+                onPress={saveEdit}
+              >
+                {t('save_taste_web')}
+              </Button>
+            </XStack>
+          </>
+        ) : (
+          <>
+            <XStack justifyContent="space-between" alignItems="flex-start" gap="$3">
+              <YStack flex={1}>
+                <Text color="$ink900" fontWeight="700" fontSize={24} lineHeight={26}>
+                  {item.name}
+                </Text>
+                <Text color="$ink500" marginTop="$1">
+                  {item.place}
+                </Text>
+              </YStack>
+              {item.price ? (
+                <Text color="$ink900" fontWeight="700" fontSize={26}>
+                  {item.price}
+                </Text>
+              ) : null}
+            </XStack>
+
+            {/* badges */}
+            <XStack gap="$2" flexWrap="wrap">
+              <Badge tone="dark">{t('bought_n', { n: item.boughtCount })}</Badge>
+              {item.tags.map((tg) => (
+                <Badge key={tg}>{tg}</Badge>
+              ))}
+              {item.date ? <Badge>{item.date}</Badge> : null}
+            </XStack>
+
+            {/* note */}
+            {item.notes ? (
+              <Card padded>
+                <Text
+                  color="$ink400"
+                  fontSize={10}
+                  letterSpacing={1}
+                  textTransform="uppercase"
+                >
+                  {t('your_note')}
+                </Text>
+                <Text color="$ink900" marginTop="$2" lineHeight={22}>
+                  {item.notes}
+                </Text>
+              </Card>
+            ) : null}
+
+            {/* warn toggle */}
+            <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1">
+              <XStack alignItems="center" gap="$3">
+                <Icon name="alert" size={20} color="#ff5d8f" />
+                <Text color="$ink900" fontWeight="500">
+                  {t('warn_before')}
+                </Text>
+              </XStack>
+              <Switch checked={remind} onChange={setRemind} />
+            </XStack>
+
+            {/* actions */}
+            <XStack gap="$3" marginTop="$1">
+              <Button variant="secondary" iconLeft={<Icon name="edit" size={18} />} onPress={startEditing}>
+                {t('edit')}
+              </Button>
+              <Button
+                variant="secondary"
+                iconLeft={<Icon name="trash" size={18} />}
+                disabled={deleting}
+                onPress={handleDelete}
+              >
+                {t('del')}
+              </Button>
+            </XStack>
+          </>
+        )}
       </YStack>
     </ScrollView>
   )
