@@ -14,9 +14,9 @@ const destDir = resolve(ROOT, 'apps/api/public/web');
 // 1. Export Expo web (static, with baseUrl:/web in app.json)
 console.log('[embed-web] exporting Expo web bundle…');
 execSync(
-  'pnpm --filter @yon/mobile exec expo export -p web --clear',
+  'pnpm exec expo export -p web --clear',
   {
-    cwd: ROOT,
+    cwd: resolve(ROOT, 'apps/mobile'),
     stdio: 'inherit',
     env: {
       ...process.env,
