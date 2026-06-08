@@ -32,6 +32,7 @@ import {
 } from '@/components/ds'
 
 import { useI18n } from '@/providers/I18nProvider'
+import { PhotoPreview } from './PhotoPreview'
 
 interface Props {
   onClose: () => void
@@ -224,11 +225,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
             cursor="pointer"
           >
             {photoPreview ? (
-              <img
-                src={photoPreview}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              <PhotoPreview uri={photoPreview} />
             ) : (
               <>
                 <Icon name="camera" size={32} color="#a89fae" />
