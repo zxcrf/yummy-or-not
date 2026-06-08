@@ -1,0 +1,58 @@
+name: EAS Release (Android)
+
+# CI release path: local `expo run:android` is for dev verification;
+# tagged releases build the distributable artifact on EAS.
+# Trigger: push a tag like `v1.0.0`, or run manually.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+
+concurrency:
+  group: eas-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      # Install at the monorepo root so the @yon/shared workspace pkg resolves.
+      - name: Install deps (workspace root)
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # production = AAB (for Play Store); preview = APK (sideload).
+      - name: EAS build (Android)
+        run: eas build --platform android --profile ${{ github.event.inputs.profile || 'production' }} --non-interactive --no-wait
