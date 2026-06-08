@@ -4,9 +4,9 @@
    name / place / price, verdict picker, tag chips, notes.
 
    Photo capture:
-     - Native (iOS/Android): expo-image-picker — pick from library OR
-       take a photo with the camera. The picked asset's { uri, name,
-       type } is passed to createTaste() as an RNFile (multipart).
+     - Native (iOS/Android): expo-image-picker — pick from library. The
+       picked asset's { uri, name, type } is passed to createTaste() as an
+       RNFile (multipart).
      - Web: a hidden <input type="file"> file picker; the browser File
        is passed straight to createTaste().
 
@@ -95,6 +95,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [notes, setNotes] = useState('')
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [picked, setPicked] = useState<string[]>([])
+  const [customTag, setCustomTag] = useState('')
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
@@ -106,32 +107,25 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const toggle = (tg: string) =>
     setPicked((p) => (p.includes(tg) ? p.filter((x) => x !== tg) : [...p, tg]))
 
+  const addCustomTag = () => {
+    const tag = customTag.trim()
+    if (!tag) {
+      setCustomTag('')
+      return
+    }
+    setPicked((p) => (p.includes(tag) ? p : [...p, tag]))
+    setCustomTag('')
+  }
+
   // --- Native photo capture ------------------------------------------------
   const pickFromLibrary = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
-      setError(t('add_photo'))
+      setError(t('photo_permission_denied'))
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    })
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0]
-      setPhotoPreview(asset.uri)
-      setPhoto(await compressAsset(asset))
-    }
-  }
-
-  const takePhoto = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) {
-      setError(t('add_photo'))
-      return
-    }
-    const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.8,
     })
@@ -153,8 +147,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
     if (Platform.OS === 'web') {
       fileInputRef.current?.click()
     } else {
-      // Native: offer camera; library is the common path so default to it.
-      // takePhoto() is wired to the secondary affordance below.
       void pickFromLibrary()
     }
   }
@@ -245,18 +237,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
             )}
           </View>
 
-          {/* native-only: explicit "take a photo" affordance */}
-          {Platform.OS !== 'web' ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              iconLeft={<Icon name="camera" size={16} />}
-              onPress={takePhoto}
-            >
-              {t('add_photo')}
-            </Button>
-          ) : null}
-
           {/* web-only: hidden native file input */}
           {Platform.OS === 'web' ? (
             <View height={0} overflow="hidden">
@@ -310,6 +290,32 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 {tg}
               </Tag>
             ))}
+            {picked
+              .filter((tg) => !(TAG_CHOICES as readonly string[]).includes(tg))
+              .map((tg) => (
+                <Tag
+                  key={tg}
+                  active
+                  onPress={() => toggle(tg)}
+                  onRemove={() => toggle(tg)}
+                >
+                  {tg}
+                </Tag>
+              ))}
+          </View>
+          <View flexDirection="row" alignItems="flex-end" gap="$2">
+            <View flex={1}>
+              <Input
+                placeholder={t('tag_placeholder')}
+                value={customTag}
+                onChangeText={setCustomTag}
+                onSubmitEditing={addCustomTag}
+                returnKeyType="done"
+              />
+            </View>
+            <Button variant="secondary" size="sm" onPress={addCustomTag}>
+              {t('add_tag')}
+            </Button>
           </View>
         </View>
 

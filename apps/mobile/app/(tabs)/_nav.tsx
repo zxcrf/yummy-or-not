@@ -76,6 +76,7 @@ function Sidebar({ props }: { props: TabBarProps }) {
   const { t, lang, setLang } = useI18n()
   const { activeRoute, go } = useNav(props)
   const insets = useSafeAreaInsets()
+  const showGlobalLangSwitcher = activeRoute !== 'you'
 
   return (
     <View
@@ -100,15 +101,17 @@ function Sidebar({ props }: { props: TabBarProps }) {
       </View>
 
       {/* lang switcher */}
-      <View paddingHorizontal={2} paddingBottom={14}>
-        <LangSwitcher
-          value={lang}
-          onChange={setLang}
-          languages={LANGS}
-          align="left"
-          tone="$candyPink"
-        />
-      </View>
+      {showGlobalLangSwitcher ? (
+        <View paddingHorizontal={2} paddingBottom={14}>
+          <LangSwitcher
+            value={lang}
+            onChange={setLang}
+            languages={LANGS}
+            align="left"
+            tone="$candyPink"
+          />
+        </View>
+      ) : null}
 
       {/* nav items */}
       {NAV.map((n) => {

@@ -20,6 +20,14 @@ export interface LangEntry {
   native: string
 }
 
+const LANG_FLAGS: Record<string, string> = {
+  zh: '🇨🇳',
+  en: '🇺🇸',
+  ko: '🇰🇷',
+  ja: '🇯🇵',
+  es: '🇪🇸',
+}
+
 const Trigger = styled(View, {
   name: 'LangSwitcherTrigger',
   flexDirection: 'row',
@@ -68,6 +76,7 @@ export type LangSwitcherProps = Omit<GetProps<typeof View>, 'onChange'> & {
   languages?: LangEntry[]
   align?: 'left' | 'right'
   tone?: GetProps<typeof Trigger>['backgroundColor']
+  triggerMode?: 'label' | 'flag'
 }
 
 export function LangSwitcher({
@@ -76,6 +85,7 @@ export function LangSwitcher({
   languages = [],
   align = 'left',
   tone = '$candyBlue',
+  triggerMode = 'label',
   ...rest
 }: LangSwitcherProps) {
   const [open, setOpen] = useState(false)
@@ -84,6 +94,7 @@ export function LangSwitcher({
   const wrapperRef = useRef<any>(null)
   const current = languages.find((l) => l.code === value) ||
     languages[0] || { code: '', native: '—', label: '' }
+  const currentFlag = LANG_FLAGS[current.code] ?? '🏳️'
 
   const handleOpen = () => {
     if (Platform.OS === 'web' && triggerRef.current) {
@@ -154,16 +165,30 @@ export function LangSwitcher({
     <View ref={wrapperRef} position="relative" alignSelf="flex-start" {...rest}>
       <View ref={triggerRef}>
         <Trigger
-          backgroundColor={tone}
+          backgroundColor={triggerMode === 'flag' ? '$white' : tone}
           accessibilityRole="button"
+          aria-label={current.label || current.native}
           aria-expanded={open}
+          width={triggerMode === 'flag' ? 44 : undefined}
+          height={triggerMode === 'flag' ? 42 : undefined}
+          justifyContent={triggerMode === 'flag' ? 'center' : undefined}
+          paddingHorizontal={triggerMode === 'flag' ? '$2' : '$3'}
+          paddingVertical="$2"
           onPress={handleOpen}
         >
-          <Icon name="flag" size={15} color="#fff" />
-          <Text color="#fff" fontWeight="700" fontSize={14}>
-            {current.native}
-          </Text>
-          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#fff" />
+          {triggerMode === 'flag' ? (
+            <Text fontSize={22} lineHeight={24}>
+              {currentFlag}
+            </Text>
+          ) : (
+            <>
+              <Icon name="flag" size={15} color="#fff" />
+              <Text color="#fff" fontWeight="700" fontSize={14}>
+                {current.native}
+              </Text>
+              <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#fff" />
+            </>
+          )}
         </Trigger>
       </View>
 

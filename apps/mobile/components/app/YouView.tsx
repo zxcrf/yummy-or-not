@@ -133,11 +133,13 @@ export default function YouView({ items }: Props) {
           </View>
           <Text color="$ink500">{t('tastes_logged', { n: items.length })}</Text>
         </View>
-      </View>
-
-      {/* language switcher */}
-      <View marginTop="$4">
-        <LangSwitcher value={lang} onChange={setLang} languages={LANGS} />
+        <LangSwitcher
+          value={lang}
+          onChange={setLang}
+          languages={LANGS}
+          align="right"
+          triggerMode="flag"
+        />
       </View>
 
       {/* verdict stat tiles */}
