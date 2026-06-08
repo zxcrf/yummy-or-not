@@ -48,7 +48,7 @@ jobs:
 
       - name: Increase Gradle JVM memory
         run: |
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError" \
+          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
             >> apps/mobile/android/gradle.properties
 
       - name: Setup Gradle
