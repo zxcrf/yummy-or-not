@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useRef, useState } from 'react'
-import { Image, Platform } from 'react-native'
+import { Platform } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { ScrollView, Text, View } from 'tamagui'
@@ -32,6 +32,7 @@ import {
 } from '@/components/ds'
 
 import { useI18n } from '@/providers/I18nProvider'
+import { PhotoPreview } from './PhotoPreview'
 
 interface Props {
   onClose: () => void
@@ -224,11 +225,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
             cursor="pointer"
           >
             {photoPreview ? (
-              <Image
-                source={{ uri: photoPreview }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
-              />
+              <PhotoPreview uri={photoPreview} />
             ) : (
               <>
                 <Icon name="camera" size={32} color="#a89fae" />
