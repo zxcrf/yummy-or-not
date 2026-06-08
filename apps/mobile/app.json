@@ -56,9 +56,7 @@
       }
     },
     "owner": "eas-wynston",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/ee3132e2-1edf-468b-89fd-f0aa0bc7d3b1"
     }
