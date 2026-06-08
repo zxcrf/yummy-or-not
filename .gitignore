@@ -33,8 +33,10 @@ apps/api/public/uploads/*
 # Vercel
 .vercel
 
-# Local Claude state
-.claude/
+# Local Claude state (skills/ is shared and tracked)
+.claude/*.lock
+.claude/settings*.json
+.claude/todos*
 
 # Tool artifacts
 .rtk/
