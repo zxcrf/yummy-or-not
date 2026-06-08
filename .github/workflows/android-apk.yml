@@ -1,0 +1,59 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  EXPO_PUBLIC_API_URL: https://yon.baobao.click
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @yon/shared build 2>/dev/null || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew :app:createBundleReleaseJsAndAssets --rerun-tasks && ./gradlew :app:assembleRelease
+        env:
+          EXPO_PUBLIC_API_URL: https://yon.baobao.click
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ github.sha }}
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
