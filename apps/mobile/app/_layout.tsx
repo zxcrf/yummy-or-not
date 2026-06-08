@@ -17,7 +17,9 @@ import { useEffect } from 'react'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { TamaguiProvider, Theme } from 'tamagui'
 
+import AppGate from '@/components/app/AppGate'
 import { fontMapForLocale } from '@/constants/fonts'
+import { AuthProvider } from '@/providers/AuthProvider'
 import { I18nProvider } from '@/providers/I18nProvider'
 import { tamaguiConfig } from '../tamagui.config'
 
@@ -61,23 +63,27 @@ export default function RootLayout() {
       <TamaguiProvider config={tamaguiConfig} defaultTheme="yum">
         <Theme name="yum">
           <I18nProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: '#fff6e6' },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="taste/[id]"
-                options={{
-                  // Detail opens as a card over the tabs (drawer-equivalent).
-                  presentation: 'card',
-                  headerShown: false,
-                }}
-              />
-            </Stack>
+            <AuthProvider>
+              <StatusBar style="dark" />
+              <AppGate>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: '#fff6e6' },
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="taste/[id]"
+                    options={{
+                      // Detail opens as a card over the tabs (drawer-equivalent).
+                      presentation: 'card',
+                      headerShown: false,
+                    }}
+                  />
+                </Stack>
+              </AppGate>
+            </AuthProvider>
           </I18nProvider>
         </Theme>
       </TamaguiProvider>

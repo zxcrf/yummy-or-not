@@ -12,7 +12,8 @@
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { LANGS, type Taste } from '@yon/shared'
 
-import { Avatar, Card, Icon, LangSwitcher } from '@/components/ds'
+import { Avatar, Button, Card, Icon, LangSwitcher } from '@/components/ds'
+import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
 interface Props {
@@ -50,6 +51,9 @@ function SettingRow({
 
 export default function YouView({ items }: Props) {
   const { t, lang, setLang } = useI18n()
+  const { user, signOut } = useAuth()
+
+  const displayName = user?.displayName || 'Mina Park'
 
   const count = (v: 'yum' | 'meh' | 'nah') =>
     items.filter((it) => it.verdict === v).length
@@ -100,11 +104,33 @@ export default function YouView({ items }: Props) {
     <ScrollView flex={1} backgroundColor="$background" contentContainerStyle={{ padding: 20 }}>
       {/* avatar header */}
       <View flexDirection="row" alignItems="center" gap={14} marginTop="$1">
-        <Avatar name="Mina Park" size="lg" />
-        <View>
-          <Text color="$ink900" fontWeight="700" fontSize={22}>
-            Mina Park
-          </Text>
+        <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
+        <View flex={1}>
+          <View flexDirection="row" alignItems="center" gap={8} flexWrap="wrap">
+            <Text color="$ink900" fontWeight="700" fontSize={22}>
+              {displayName}
+            </Text>
+            {user?.plan === 'pro' ? (
+              <View
+                backgroundColor="$candyYellow"
+                borderWidth={2}
+                borderColor="$ink900"
+                borderRadius="$sm"
+                paddingHorizontal={8}
+                paddingVertical={2}
+              >
+                <Text
+                  color="$ink900"
+                  fontWeight="700"
+                  fontSize={10}
+                  letterSpacing={0.8}
+                  textTransform="uppercase"
+                >
+                  {t('pro_plan')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <Text color="$ink500">{t('tastes_logged', { n: items.length })}</Text>
         </View>
       </View>
@@ -155,6 +181,19 @@ export default function YouView({ items }: Props) {
         <SettingRow icon="map" label={t('set_location')} />
         <SettingRow icon="lock" label={t('set_private')} last />
       </View>
+
+      {/* sign out */}
+      <Button
+        variant="secondary"
+        block
+        marginTop={18}
+        onPress={() => {
+          void signOut()
+        }}
+        iconLeft={<Icon name="arrow-right" size={18} color="#191017" />}
+      >
+        {t('auth_signout')}
+      </Button>
     </ScrollView>
   )
 }
