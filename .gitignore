@@ -32,3 +32,6 @@ apps/api/public/uploads/*
 
 # Vercel
 .vercel
+
+# Local Claude state
+.claude/
