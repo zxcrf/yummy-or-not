@@ -39,3 +39,6 @@ apps/api/public/uploads/*
 # Tool artifacts
 .rtk/
 *.rtk.bak
+
+# CodeGraph local index
+.codegraph/
