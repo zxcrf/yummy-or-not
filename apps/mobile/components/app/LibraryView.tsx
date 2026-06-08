@@ -7,8 +7,8 @@
    navigation uses expo-router instead of an onOpen callback.
    ============================================================ */
 
-import { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, useWindowDimensions } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { FILTERS, listTastes, type Taste } from '@yon/shared'
@@ -23,26 +23,39 @@ export default function LibraryView() {
 
   const [items, setItems] = useState<Taste[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
+  const mounted = useRef(false)
 
-  useEffect(() => {
-    let alive = true
-    setLoading(true)
-    listTastes()
-      .then((data) => {
-        if (alive) setItems(data)
-      })
-      .catch(() => {
-        if (alive) setItems([])
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
+  const load = useCallback(async () => {
+    try {
+      const data = await listTastes()
+      if (mounted.current) setItems(data)
+    } catch {
+      if (mounted.current) setItems([])
     }
   }, [])
+
+  useEffect(() => {
+    mounted.current = true
+    setLoading(true)
+    void load().finally(() => {
+      if (mounted.current) setLoading(false)
+    })
+    return () => {
+      mounted.current = false
+    }
+  }, [load])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await load()
+    } finally {
+      if (mounted.current) setRefreshing(false)
+    }
+  }, [load])
 
   const shown = useMemo(
     () =>
@@ -65,6 +78,14 @@ export default function LibraryView() {
       flex={1}
       backgroundColor="$background"
       contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#191017"
+          colors={['#191017']}
+        />
+      }
     >
       {/* header */}
       <YStack gap="$3">

@@ -7,8 +7,8 @@
    navigation via expo-router (taste detail + /add).
    ============================================================ */
 
-import { useEffect, useState } from 'react'
-import { Image } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Image, RefreshControl } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { listTastes, type Taste, type Verdict } from '@yon/shared'
@@ -96,20 +96,34 @@ export default function RecallView() {
 
   const [items, setItems] = useState<Taste[]>([])
   const [q, setQ] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const mounted = useRef(false)
 
-  useEffect(() => {
-    let alive = true
-    listTastes()
-      .then((data) => {
-        if (alive) setItems(data)
-      })
-      .catch(() => {
-        if (alive) setItems([])
-      })
-    return () => {
-      alive = false
+  const load = useCallback(async () => {
+    try {
+      const data = await listTastes()
+      if (mounted.current) setItems(data)
+    } catch {
+      if (mounted.current) setItems([])
     }
   }, [])
+
+  useEffect(() => {
+    mounted.current = true
+    void load()
+    return () => {
+      mounted.current = false
+    }
+  }, [load])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await load()
+    } finally {
+      if (mounted.current) setRefreshing(false)
+    }
+  }, [load])
 
   const match = q
     ? items.find((it) => it.name.toLowerCase().includes(q.toLowerCase()))
@@ -120,6 +134,14 @@ export default function RecallView() {
       flex={1}
       backgroundColor="$background"
       contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 40 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#191017"
+          colors={['#191017']}
+        />
+      }
     >
       {/* header */}
       <YStack gap="$2">

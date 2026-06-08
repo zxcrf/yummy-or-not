@@ -16,6 +16,8 @@ const styled = jest.fn((Comp, _config) => {
 module.exports = {
   styled,
   View: ({ children, ...props }) => React.createElement('View', props, children),
+  XStack: ({ children, ...props }) => React.createElement('View', props, children),
+  YStack: ({ children, ...props }) => React.createElement('View', props, children),
   Text: ({ children, ...props }) => React.createElement('Text', props, children),
   Input: 'TextInput',
   TextArea: 'TextInput',

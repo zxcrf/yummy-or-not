@@ -6,26 +6,40 @@
    pattern (listTastes → state, empty array on failure).
    ============================================================ */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listTastes, type Taste } from '@yon/shared'
 
-/** Returns the current taste list; empty until loaded or on failure. */
-export function useTastes(): Taste[] {
-  const [items, setItems] = useState<Taste[]>([])
+interface RefreshableTastes {
+  items: Taste[]
+  refresh: () => Promise<void>
+}
 
-  useEffect(() => {
-    let alive = true
-    listTastes()
-      .then((data) => {
-        if (alive) setItems(data)
-      })
-      .catch(() => {
-        if (alive) setItems([])
-      })
-    return () => {
-      alive = false
+/** Returns the current taste list plus a manual refresh hook. */
+export function useRefreshableTastes(): RefreshableTastes {
+  const [items, setItems] = useState<Taste[]>([])
+  const mounted = useRef(false)
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await listTastes()
+      if (mounted.current) setItems(data)
+    } catch {
+      if (mounted.current) setItems([])
     }
   }, [])
 
-  return items
+  useEffect(() => {
+    mounted.current = true
+    void refresh()
+    return () => {
+      mounted.current = false
+    }
+  }, [refresh])
+
+  return { items, refresh }
+}
+
+/** Returns the current taste list; empty until loaded or on failure. */
+export function useTastes(): Taste[] {
+  return useRefreshableTastes().items
 }

@@ -8,7 +8,8 @@
    renders empty.
    ============================================================ */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { RefreshControl } from 'react-native'
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { getStats, type Stats, type Taste } from '@yon/shared'
 
@@ -17,6 +18,7 @@ import { useI18n } from '@/providers/I18nProvider'
 
 interface Props {
   items: Taste[]
+  onRefresh?: () => Promise<void> | void
 }
 
 const KICKER = {
@@ -26,21 +28,48 @@ const KICKER = {
   textTransform: 'uppercase',
 } as const
 
-export default function StatsView({ items }: Props) {
+export default function StatsView({ items, onRefresh: refreshItems }: Props) {
   const { t } = useI18n()
   const [stats, setStats] = useState<Stats | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const mounted = useRef(false)
+
+  const loadStats = useCallback(async (): Promise<Stats | null> => {
+    try {
+      return await getStats()
+    } catch {
+      // Keep the local item-count fallback visible when stats cannot load.
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
-    getStats()
-      .then((s) => {
-        if (active) setStats(s)
-      })
-      .catch(() => null)
+    void loadStats().then((s) => {
+      if (active && s) setStats(s)
+    })
     return () => {
       active = false
     }
-  }, [items.length])
+  }, [loadStats, items.length])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await refreshItems?.()
+      const s = await loadStats()
+      if (mounted.current && s) setStats(s)
+    } finally {
+      if (mounted.current) setRefreshing(false)
+    }
+  }, [loadStats, refreshItems])
 
   const count = (v: 'yum' | 'meh' | 'nah') =>
     stats ? stats[v] : items.filter((it) => it.verdict === v).length
@@ -108,7 +137,19 @@ export default function StatsView({ items }: Props) {
   }
 
   return (
-    <ScrollView flex={1} backgroundColor="$background" contentContainerStyle={{ padding: 20 }}>
+    <ScrollView
+      flex={1}
+      backgroundColor="$background"
+      contentContainerStyle={{ padding: 20 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#191017"
+          colors={['#191017']}
+        />
+      }
+    >
       {/* page heading */}
       <Text color="$ink900" fontWeight="700" fontSize={40} lineHeight={40}>
         {t('stats_title')}
