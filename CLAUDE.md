@@ -66,3 +66,19 @@ renders and that no raw `img` element appears in the tree.
 
 **当前项目建议**
 继续当前方向：`AuthScreen` 共享 `<Input />`，`Input` 内部 Android raw `TextInput`，Web/iOS Tamagui。若 `Input` Android 分支继续变长，再拆成 `Input.android.tsx`。测试保留 Android 回归：确认真实 RN `TextInput` 存在，且 `color` 是 concrete hex。
+
+## 部署拓扑
+
+| 层 | 地址 / 位置 | 说明 |
+|---|---|---|
+| API (Next.js) | `https://yon.baobao.click` | 自托管，baobao.click 服务器，Docker + Caddy TLS |
+| 数据库 | Neon (外部) | `DATABASE_URL` in `/etc/yum-api/.env` |
+| 对象存储 | Cloudflare R2 (外部) | S3_* 变量同上 |
+| Docker 镜像 | `ghcr.io/zxcrf/yum-api:latest` | GHA (`docker-api.yml`) push main 自动构建 |
+| Web SPA | `https://yon.baobao.click/web` | 嵌入 Next.js public/，同一容器服务 |
+
+**更新 API 流程**：push main → GHA 构建推镜像 → 服务器 `docker pull ghcr.io/zxcrf/yum-api:latest && docker restart yum-api`。
+
+**⚠️ EXPO_PUBLIC_API_URL 烧入构建**：`eas.json` 所有 profile 已指向 `https://yon.baobao.click`。
+修改 API host → 必须重新构建 APK/AAB，否则旧包仍打旧地址。
+OAuth callback URL 也注册在 `yon.baobao.click`，换域名需同步改 provider 配置。

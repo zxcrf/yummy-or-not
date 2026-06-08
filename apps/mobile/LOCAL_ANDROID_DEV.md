@@ -43,7 +43,7 @@ Expo/gradle expect.)
 4. Edit code → it hot-reloads. Native change → re-run `expo run:android` (incremental, ~1–3 min).
 
 `EXPO_PUBLIC_API_URL` for local dev points at the live API via `eas.json`'s profile env, or set inline:
-`EXPO_PUBLIC_API_URL=https://yum-or-not.vercel.app bunx expo run:android`.
+`EXPO_PUBLIC_API_URL=https://yon.baobao.click bunx expo run:android`.
 
 ## Emulator (optional, if no device)
 

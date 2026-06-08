@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://yum-or-not.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://yon.baobao.click"
       },
       "android": {
         "buildType": "apk"
@@ -18,7 +18,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://yum-or-not.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://yon.baobao.click"
       },
       "android": {
         "buildType": "apk"
@@ -26,6 +26,9 @@
     },
     "production": {
       "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://yon.baobao.click"
+      },
       "android": {
         "buildType": "app-bundle"
       },
