@@ -5,7 +5,8 @@
    shadow; the error state turns the border red. Wraps Tamagui Input.
    ============================================================ */
 
-import { Platform } from 'react-native'
+import { useState } from 'react'
+import { Platform, TextInput as RNTextInput, type TextInputProps } from 'react-native'
 import { Input as TInput, type GetProps, styled, Text, View } from 'tamagui'
 
 // Exported for testing: '#191017' must be a concrete hex, not a Tamagui token ($ink900
@@ -59,6 +60,46 @@ export type InputProps = Omit<GetProps<typeof Field>, 'error'> & {
 }
 
 /**
+ * Android renders a raw RN TextInput instead of the Tamagui-styled `Field`:
+ * Tamagui's styled(TextInput) does not forward the resolved text `color` to the
+ * native input on release builds, so typed characters come out invisible (and
+ * OS font padding misplaces the cursor). Plain RN style guarantees both. Web/iOS
+ * keep `Field` for the hard pop-shadow focus look (Android elevation blurs it
+ * anyway — see tamagui.config popShadow caveat — so focus is shown via border).
+ */
+function AndroidField({ error, ...props }: TextInputProps & { error?: boolean }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <RNTextInput
+      {...props}
+      onFocus={(e) => {
+        setFocused(true)
+        props.onFocus?.(e)
+      }}
+      onBlur={(e) => {
+        setFocused(false)
+        props.onBlur?.(e)
+      }}
+      placeholderTextColor="#8f8189"
+      selectionColor="#2f6bff"
+      style={{
+        fontSize: 16,
+        color: _FIELD_COLOR,
+        backgroundColor: '#ffffff',
+        borderWidth: 3,
+        borderColor: error ? '#ff3147' : focused ? '#2f6bff' : '#191017',
+        borderRadius: 6,
+        paddingHorizontal: 13,
+        paddingVertical: 11,
+        width: '100%',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+      }}
+    />
+  )
+}
+
+/**
  * Input — single-line text field with optional label and hint.
  */
 export function Input({ label, hint, error, secureTextEntry, ...rest }: InputProps) {
@@ -66,12 +107,6 @@ export function Input({ label, hint, error, secureTextEntry, ...rest }: InputPro
     secureTextEntry && Platform.OS === 'web'
       ? ({ secureTextEntry: true, type: 'password' } as Record<string, unknown>)
       : { secureTextEntry }
-  // Android: Tamagui styled() color doesn't reach TextInput.style.color — force it
-  // via the style prop directly. includeFontPadding removes OS bottom padding that
-  // pushes the cursor down in single-line fields.
-  const androidStyle = Platform.OS === 'android'
-    ? { style: { color: _FIELD_COLOR, textAlignVertical: 'center' as const }, includeFontPadding: false }
-    : {}
   return (
     <View gap={6} width="100%">
       {label ? (
@@ -84,7 +119,15 @@ export function Input({ label, hint, error, secureTextEntry, ...rest }: InputPro
           {label}
         </Text>
       ) : null}
-      <Field error={!!error} {...passwordProps} {...rest} {...androidStyle} />
+      {Platform.OS === 'android' ? (
+        <AndroidField
+          error={!!error}
+          secureTextEntry={secureTextEntry}
+          {...(rest as unknown as TextInputProps)}
+        />
+      ) : (
+        <Field error={!!error} {...passwordProps} {...rest} />
+      )}
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>
           {error || hint}

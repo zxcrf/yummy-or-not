@@ -64,7 +64,7 @@ export default function AuthScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#fff6e6' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         flex={1}
