@@ -8,10 +8,14 @@
 import { Platform } from 'react-native'
 import { Input as TInput, type GetProps, styled, Text, View } from 'tamagui'
 
+// Exported for testing: '#191017' must be a concrete hex, not a Tamagui token ($ink900
+// doesn't reach Android TextInput's text color — typed characters become invisible).
+export const _FIELD_COLOR = '#191017' as const
+
 const Field = styled(TInput, {
   name: 'Input',
   fontSize: 16,
-  color: '$ink900',
+  color: _FIELD_COLOR,
   backgroundColor: '$white',
   borderWidth: 3,
   borderColor: '$ink900',
@@ -62,6 +66,12 @@ export function Input({ label, hint, error, secureTextEntry, ...rest }: InputPro
     secureTextEntry && Platform.OS === 'web'
       ? ({ secureTextEntry: true, type: 'password' } as Record<string, unknown>)
       : { secureTextEntry }
+  // Android: Tamagui styled() color doesn't reach TextInput.style.color — force it
+  // via the style prop directly. includeFontPadding removes OS bottom padding that
+  // pushes the cursor down in single-line fields.
+  const androidStyle = Platform.OS === 'android'
+    ? { style: { color: _FIELD_COLOR, textAlignVertical: 'center' as const }, includeFontPadding: false }
+    : {}
   return (
     <View gap={6} width="100%">
       {label ? (
@@ -74,7 +84,7 @@ export function Input({ label, hint, error, secureTextEntry, ...rest }: InputPro
           {label}
         </Text>
       ) : null}
-      <Field error={!!error} {...passwordProps} {...rest} />
+      <Field error={!!error} {...passwordProps} {...rest} {...androidStyle} />
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>
           {error || hint}

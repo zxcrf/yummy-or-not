@@ -5,12 +5,13 @@
    shadow; error state turns the border red. Wraps Tamagui TextArea.
    ============================================================ */
 
+import { Platform } from 'react-native'
 import { type GetProps, styled, TextArea as TTextArea, Text, View } from 'tamagui'
 
 const Field = styled(TTextArea, {
   name: 'Textarea',
   fontSize: 16,
-  color: '$ink900',
+  color: '#191017', // hardcoded: Tamagui theme token doesn't reach Android TextInput text color
   backgroundColor: '$white',
   borderWidth: 3,
   borderColor: '$ink900',
@@ -57,6 +58,10 @@ export type TextareaProps = Omit<GetProps<typeof Field>, 'error'> & {
  * Textarea — multi-line text field with optional label and hint.
  */
 export function Textarea({ label, hint, error, ...rest }: TextareaProps) {
+  // Android: same as Input — force color via style prop; fix cursor padding.
+  const androidStyle = Platform.OS === 'android'
+    ? { style: { color: '#191017' as const, textAlignVertical: 'top' as const }, includeFontPadding: false }
+    : {}
   return (
     <View gap={6} width="100%">
       {label ? (
@@ -69,7 +74,7 @@ export function Textarea({ label, hint, error, ...rest }: TextareaProps) {
           {label}
         </Text>
       ) : null}
-      <Field error={!!error} {...rest} />
+      <Field error={!!error} {...rest} {...androidStyle} />
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>
           {error || hint}

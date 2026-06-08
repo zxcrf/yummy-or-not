@@ -35,3 +35,7 @@ apps/api/public/uploads/*
 
 # Local Claude state
 .claude/
+
+# Tool artifacts
+.rtk/
+*.rtk.bak

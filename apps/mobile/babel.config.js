@@ -1,22 +1,23 @@
 module.exports = function (api) {
   api.cache(true)
+  const isTest = process.env.NODE_ENV === 'test'
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      // Tamagui compiler/runtime plugin. Reads tokens/themes from tamagui.config.ts.
-      [
+      // Tamagui compiler/runtime plugin — skip in Jest (NODE_ENV=test) because
+      // it injects @tamagui/core runtime calls that can't be resolved from
+      // the CJS stub used by unit tests.
+      !isTest && [
         '@tamagui/babel-plugin',
         {
           components: ['tamagui'],
           config: './tamagui.config.ts',
           logTimings: true,
-          // Runtime-only: skip CSS extraction so no tamagui.generated.css import
-          // is required for the app to boot. Enable later for optimized web CSS.
           disableExtraction: process.env.NODE_ENV === 'development',
         },
       ],
       // react-native-reanimated plugin must be listed last.
       'react-native-worklets/plugin',
-    ],
+    ].filter(Boolean),
   }
 }
