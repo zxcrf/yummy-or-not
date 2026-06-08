@@ -45,6 +45,14 @@ Expo/gradle expect.)
 `EXPO_PUBLIC_API_URL` for local dev points at the live API via `eas.json`'s profile env, or set inline:
 `EXPO_PUBLIC_API_URL=https://yon.baobao.click bunx expo run:android`.
 
+> **⚠️ Local Gradle builds**: `eas.json` env vars are EAS-cloud-only. For
+> `./gradlew :app:assembleRelease` you MUST set the var in the shell:
+> ```bash
+> EXPO_PUBLIC_API_URL=https://yon.baobao.click JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
+>   ./gradlew :app:assembleRelease
+> ```
+> Without it `BASE_URL` falls back to `""` (same-origin), and all API calls fail on device.
+
 ## Emulator (optional, if no device)
 
 ```bash
