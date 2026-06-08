@@ -5,9 +5,11 @@ EAS cloud is reserved for CI release builds (see `.github/workflows/eas-release.
 
 ## One-time toolchain (macOS, Apple Silicon)
 
-JDK 17 is already present (GraalVM CE 17). Android SDK installed via Homebrew:
+Use a **standard OpenJDK 17** — GraalVM 17 fails the Android `JdkImageTransform`
+(`:react-native-worklets:compileDebugJavaWithJavac` → `core-for-system-modules.jar`).
 
 ```bash
+brew install openjdk@17                                # standard JDK (no sudo; keg-only)
 brew install --cask android-commandlinetools          # sdkmanager
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 sdkmanager --sdk_root="$ANDROID_HOME" --licenses       # accept all
@@ -23,7 +25,7 @@ Add to `~/.zshrc` (then `source ~/.zshrc`):
 ```bash
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin"
-export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
 ```
 
 (cmdline-tools from brew live at `/opt/homebrew/share/android-commandlinetools/...`;
@@ -55,7 +57,7 @@ emulator -avd pixel &        # then: bunx expo run:android
 
 - `android/` and `ios/` are gitignored (managed workflow — `expo prebuild` regenerates them). Don't commit them.
 - The repo's `.npmrc` (`node-linker=hoisted`) is required for RN native-module autolinking — local AND EAS.
-- GraalVM 17 works for Gradle; if you hit a JDK-specific error, `brew install --cask temurin@17` (needs sudo) and re-point `JAVA_HOME`.
+- **Do not use GraalVM 17** — it fails the Android `JdkImageTransform`. Use `brew install openjdk@17` (keg-only, no sudo) and set `JAVA_HOME=/opt/homebrew/opt/openjdk@17`.
 
 ## CI release (EAS)
 
