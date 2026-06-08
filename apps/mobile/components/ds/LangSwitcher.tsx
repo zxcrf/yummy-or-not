@@ -11,7 +11,8 @@
    same `languages` prop the web component accepted.
    ============================================================ */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Platform } from 'react-native'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { Icon } from './Icon'
 
@@ -39,13 +40,14 @@ const Menu = styled(View, {
   position: 'absolute',
   top: '100%',
   marginTop: '$1',
-  minWidth: 180,
+  minWidth: 220,
   backgroundColor: '$white',
   borderWidth: 3,
   borderColor: '$ink900',
   borderRadius: '$md',
   paddingVertical: '$1',
   zIndex: 1000,
+  overflow: 'hidden',
   shadowColor: '$ink900',
   shadowOffset: { width: 4, height: 4 },
   shadowOpacity: 1,
@@ -89,11 +91,23 @@ export function LangSwitcher({
   ...rest
 }: LangSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<any>(null)
   const current = languages.find((l) => l.code === value) ||
     languages[0] || { code: '', native: '—', label: '' }
 
+  useEffect(() => {
+    if (!open || Platform.OS !== 'web') return
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
   return (
-    <View position="relative" alignSelf="flex-start" {...rest}>
+    <View ref={wrapperRef} position="relative" alignSelf="flex-start" {...rest}>
       <Trigger
         backgroundColor={tone}
         accessibilityRole="button"
