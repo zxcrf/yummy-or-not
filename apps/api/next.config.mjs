@@ -20,6 +20,7 @@ const photoPattern =
   remotePatternFromBase(process.env.S3_PUBLIC_BASE_URL);
 
 const nextConfig = {
+  output: 'standalone',
   async redirects() {
     return [
       { source: '/', destination: '/web', permanent: false },

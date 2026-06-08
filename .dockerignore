@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+apps/mobile
+*.md
+.turbo
+.codegraph
+.omc
+.remember
+.claude
