@@ -8,7 +8,7 @@
    ============================================================ */
 
 import { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator } from 'react-native'
+import { ActivityIndicator, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { FILTERS, listTastes, type Taste } from '@yon/shared'
@@ -18,6 +18,8 @@ import { useI18n } from '@/providers/I18nProvider'
 export default function LibraryView() {
   const { t } = useI18n()
   const router = useRouter()
+  const { width } = useWindowDimensions()
+  const isDesktop = width >= 768
 
   const [items, setItems] = useState<Taste[]>([])
   const [loading, setLoading] = useState(true)
@@ -110,23 +112,28 @@ export default function LibraryView() {
           <Text color="$colorMuted">{t('nothing_here')}</Text>
         </YStack>
       ) : (
-        <YStack gap="$3">
+        <View
+          flexDirection={isDesktop ? 'row' : 'column'}
+          flexWrap={isDesktop ? 'wrap' : 'nowrap'}
+          gap="$3"
+        >
           {shown.map((it) => (
-            <FoodCard
-              key={it.id}
-              image={it.image || undefined}
-              name={it.name}
-              place={it.place}
-              price={it.price}
-              verdict={it.verdict}
-              tags={it.tags}
-              boughtCount={it.boughtCount}
-              boughtLabel={t('bought_n', { n: it.boughtCount })}
-              verdictLabel={t('v_' + it.verdict)}
-              onPress={() => router.push(`/taste/${it.id}`)}
-            />
+            <View key={it.id} style={isDesktop ? { width: '48%' } : undefined}>
+              <FoodCard
+                image={it.image || undefined}
+                name={it.name}
+                place={it.place}
+                price={it.price}
+                verdict={it.verdict}
+                tags={it.tags}
+                boughtCount={it.boughtCount}
+                boughtLabel={t('bought_n', { n: it.boughtCount })}
+                verdictLabel={t('v_' + it.verdict)}
+                onPress={() => router.push(`/taste/${it.id}`)}
+              />
+            </View>
           ))}
-        </YStack>
+        </View>
       )}
     </ScrollView>
   )

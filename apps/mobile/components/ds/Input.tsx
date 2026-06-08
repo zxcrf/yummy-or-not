@@ -5,6 +5,7 @@
    shadow; the error state turns the border red. Wraps Tamagui Input.
    ============================================================ */
 
+import { Platform } from 'react-native'
 import { Input as TInput, type GetProps, styled, Text, View } from 'tamagui'
 
 const Field = styled(TInput, {
@@ -56,7 +57,11 @@ export type InputProps = Omit<GetProps<typeof Field>, 'error'> & {
 /**
  * Input — single-line text field with optional label and hint.
  */
-export function Input({ label, hint, error, ...rest }: InputProps) {
+export function Input({ label, hint, error, secureTextEntry, ...rest }: InputProps) {
+  const passwordProps =
+    secureTextEntry && Platform.OS === 'web'
+      ? ({ secureTextEntry: true, type: 'password' } as Record<string, unknown>)
+      : { secureTextEntry }
   return (
     <View gap={6} width="100%">
       {label ? (
@@ -69,7 +74,7 @@ export function Input({ label, hint, error, ...rest }: InputProps) {
           {label}
         </Text>
       ) : null}
-      <Field error={!!error} {...rest} />
+      <Field error={!!error} {...passwordProps} {...rest} />
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>
           {error || hint}
