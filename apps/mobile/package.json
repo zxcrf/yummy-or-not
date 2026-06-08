@@ -10,6 +10,7 @@
     "@tamagui/core": "^2.1.0",
     "@yon/shared": "workspace:*",
     "expo": "~56.0.9",
+    "expo-build-properties": "~56.0.17",
     "expo-constants": "~56.0.17",
     "expo-font": "~56.0.5",
     "expo-image-manipulator": "^56.0.17",
