@@ -4,11 +4,9 @@
    `onChange(code)`; persistence is handled elsewhere. Shows the current
    language as a candy pill and opens a dropdown of options.
 
-   Ported from the web DS. The web version closed on document mousedown
-   (a DOM-only affordance); RN has no document, so this opens/closes a
-   panel on tap of the trigger / an option. The `languages` list is
-   passed in by the caller (the screens feed LANGS from @yon/shared) —
-   same `languages` prop the web component accepted.
+   On web the menu is rendered via ReactDOM.createPortal at document.body so
+   it escapes any ancestor stacking context. On native it uses position:
+   absolute within the wrapper (no DOM, no stacking issue).
    ============================================================ */
 
 import { useEffect, useRef, useState } from 'react'
@@ -38,15 +36,13 @@ const Trigger = styled(View, {
 const Menu = styled(View, {
   name: 'LangSwitcherMenu',
   position: 'absolute',
-  top: '100%',
-  marginTop: '$1',
   minWidth: 220,
   backgroundColor: '$white',
   borderWidth: 3,
   borderColor: '$ink900',
   borderRadius: '$md',
   paddingVertical: '$1',
-  zIndex: 1000,
+  zIndex: 99999,
   overflow: 'hidden',
   shadowColor: '$ink900',
   shadowOffset: { width: 4, height: 4 },
@@ -67,21 +63,13 @@ const MenuOpt = styled(View, {
 })
 
 export type LangSwitcherProps = Omit<GetProps<typeof View>, 'onChange'> & {
-  /** Currently selected language code. */
   value?: string
-  /** Called with the chosen language code. */
   onChange?: (code: string) => void
-  /** Available languages (screens pass LANGS from @yon/shared). */
   languages?: LangEntry[]
-  /** Dropdown alignment. */
   align?: 'left' | 'right'
-  /** Background color of the trigger pill (token name or color string). */
   tone?: GetProps<typeof Trigger>['backgroundColor']
 }
 
-/**
- * LangSwitcher — on-brand language picker. Controlled via `value` + `onChange`.
- */
 export function LangSwitcher({
   value,
   onChange,
@@ -91,14 +79,33 @@ export function LangSwitcher({
   ...rest
 }: LangSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [menuStyle, setMenuStyle] = useState<Record<string, number>>({})
+  const triggerRef = useRef<any>(null)
   const wrapperRef = useRef<any>(null)
   const current = languages.find((l) => l.code === value) ||
     languages[0] || { code: '', native: '—', label: '' }
 
+  const handleOpen = () => {
+    if (Platform.OS === 'web' && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setMenuStyle(
+        align === 'right'
+          ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+          : { top: rect.bottom + 4, left: rect.left }
+      )
+    }
+    setOpen((o) => !o)
+  }
+
+  // Close on outside click (web only)
   useEffect(() => {
     if (!open || Platform.OS !== 'web') return
     const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+      const target = e.target as Node
+      if (
+        wrapperRef.current && !wrapperRef.current.contains(target) &&
+        !(e.target as Element).closest?.('[data-lang-menu]')
+      ) {
         setOpen(false)
       }
     }
@@ -106,47 +113,72 @@ export function LangSwitcher({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  const menuItems = languages.map((l) => {
+    const on = l.code === value
+    return (
+      <MenuOpt
+        key={l.code}
+        accessibilityRole="button"
+        aria-selected={on}
+        onPress={() => {
+          onChange?.(l.code)
+          setOpen(false)
+        }}
+      >
+        <Text color="$ink900" fontWeight="700" fontSize={14} flex={1}>
+          {l.native}
+        </Text>
+        <Text color="$colorMuted" fontSize={12}>
+          {l.label}
+        </Text>
+        {on ? <Icon name="check" size={16} color="#0a9b51" /> : null}
+      </MenuOpt>
+    )
+  })
+
+  // Web: portal to document.body so menu escapes ancestor stacking contexts
+  const webMenu = open && Platform.OS === 'web' ? (() => {
+    const { createPortal } = require('react-dom')
+    return createPortal(
+      <Menu
+        data-lang-menu="true"
+        style={{ position: 'fixed', ...menuStyle } as any}
+      >
+        {menuItems}
+      </Menu>,
+      document.body
+    )
+  })() : null
+
   return (
     <View ref={wrapperRef} position="relative" alignSelf="flex-start" {...rest}>
-      <Trigger
-        backgroundColor={tone}
-        accessibilityRole="button"
-        aria-expanded={open}
-        onPress={() => setOpen((o) => !o)}
-      >
-        <Icon name="flag" size={15} color="#fff" />
-        <Text color="#fff" fontWeight="700" fontSize={14}>
-          {current.native}
-        </Text>
-        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#fff" />
-      </Trigger>
+      <View ref={triggerRef}>
+        <Trigger
+          backgroundColor={tone}
+          accessibilityRole="button"
+          aria-expanded={open}
+          onPress={handleOpen}
+        >
+          <Icon name="flag" size={15} color="#fff" />
+          <Text color="#fff" fontWeight="700" fontSize={14}>
+            {current.native}
+          </Text>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#fff" />
+        </Trigger>
+      </View>
 
-      {open ? (
-        <Menu {...(align === 'right' ? { right: 0 } : { left: 0 })}>
-          {languages.map((l) => {
-            const on = l.code === value
-            return (
-              <MenuOpt
-                key={l.code}
-                accessibilityRole="button"
-                aria-selected={on}
-                onPress={() => {
-                  onChange?.(l.code)
-                  setOpen(false)
-                }}
-              >
-                <Text color="$ink900" fontWeight="700" fontSize={14} flex={1}>
-                  {l.native}
-                </Text>
-                <Text color="$colorMuted" fontSize={12}>
-                  {l.label}
-                </Text>
-                {on ? <Icon name="check" size={16} color="#0a9b51" /> : null}
-              </MenuOpt>
-            )
-          })}
+      {/* Native: absolute positioned within wrapper */}
+      {open && Platform.OS !== 'web' ? (
+        <Menu
+          top="100%"
+          marginTop="$1"
+          {...(align === 'right' ? { right: 0 } : { left: 0 })}
+        >
+          {menuItems}
         </Menu>
       ) : null}
+
+      {webMenu}
     </View>
   )
 }

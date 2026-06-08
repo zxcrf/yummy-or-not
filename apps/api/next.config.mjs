@@ -20,6 +20,12 @@ const photoPattern =
   remotePatternFromBase(process.env.S3_PUBLIC_BASE_URL);
 
 const nextConfig = {
+  async rewrites() {
+    return [
+      { source: '/web', destination: '/web/index.html' },
+      { source: '/web/', destination: '/web/index.html' },
+    ]
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
