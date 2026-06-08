@@ -1,25 +1,24 @@
 {
-  "name": "yummy-or-not",
+  "name": "yummy-or-not-monorepo",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:setup": "node scripts/db-setup.mjs"
-  },
-  "dependencies": {
-    "next": "15.1.6",
-    "pg": "^8.13.1",
-    "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@types/node": "^22.10.7",
-    "@types/pg": "^8.11.10",
-    "@types/react": "^19.0.7",
-    "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.3"
+    "turbo": "^2.3.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss@<8.5.10": ">=8.5.10"
+    }
   }
 }
