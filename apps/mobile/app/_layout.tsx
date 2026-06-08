@@ -9,6 +9,9 @@
    screen once font loading resolves.
    ============================================================ */
 
+// Web-only: map Tamagui $tokens onto body so CSS vars resolve without .tm_xxt hash class
+import '../assets/global.css'
+
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
