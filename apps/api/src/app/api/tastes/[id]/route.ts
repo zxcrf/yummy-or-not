@@ -6,6 +6,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTaste, updateTaste, deleteTaste, getRawImage } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { getUserFromRequest } from '@/lib/auth';
 import { deletePhoto } from '@/lib/storage';
 import type { UpdateTasteInput } from '@yon/shared';
 
@@ -27,9 +28,11 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest, { params }: RouteContext) {
   const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { id } = await params;
   try {
-    const taste = await getTaste(id);
+    const taste = await getTaste(user.id, id);
     if (!taste) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
     return withCors(NextResponse.json(taste), origin);
   } catch (err) {
@@ -40,10 +43,12 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
 
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { id } = await params;
   try {
     const patch = (await req.json()) as UpdateTasteInput;
-    const taste = await updateTaste(id, patch);
+    const taste = await updateTaste(user.id, id, patch);
     if (!taste) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
     return withCors(NextResponse.json(taste), origin);
   } catch (err) {
@@ -54,12 +59,14 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
 export async function DELETE(req: NextRequest, { params }: RouteContext) {
   const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { id } = await params;
   try {
     // Capture the stored key BEFORE deleting the row so we can clean up the object.
-    const rawImage = await getRawImage(id);
+    const rawImage = await getRawImage(user.id, id);
 
-    const deleted = await deleteTaste(id);
+    const deleted = await deleteTaste(user.id, id);
     if (!deleted) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
 
     // Best-effort object cleanup: the DB row is authoritative; never fail the

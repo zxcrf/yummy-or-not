@@ -5,6 +5,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { listTastes, createTaste } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { getUserFromRequest } from '@/lib/auth';
 import { uploadPhoto } from '@/lib/storage';
 import type { CreateTasteInput, Verdict } from '@yon/shared';
 
@@ -14,12 +15,14 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { searchParams } = req.nextUrl;
   const q      = searchParams.get('q')      ?? undefined;
   const filter = searchParams.get('filter') ?? undefined;
 
   try {
-    const tastes = await listTastes({ q, filter });
+    const tastes = await listTastes(user.id, { q, filter });
     return withCors(NextResponse.json(tastes), origin);
   } catch (err) {
     console.error('GET /api/tastes error:', err);
@@ -29,6 +32,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   try {
     const contentType = req.headers.get('content-type') ?? '';
 
@@ -81,12 +86,12 @@ export async function POST(req: NextRequest) {
         imageUrl = await uploadPhoto(buffer, { key, contentType: photo.type || 'application/octet-stream' });
       }
 
-      const taste = await createTaste(input, imageUrl);
+      const taste = await createTaste(user.id, input, imageUrl);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     } else {
       // JSON body
       input = (await req.json()) as CreateTasteInput;
-      const taste = await createTaste(input);
+      const taste = await createTaste(user.id, input);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     }
   } catch (err) {

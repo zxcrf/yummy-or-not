@@ -1,7 +1,8 @@
 // DB client singleton + typed query helpers for Yummy or Not.
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
-import { Pool, PoolClient } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput } from '@yon/shared';
+import { Pool } from 'pg';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User } from '@yon/shared';
+import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl } from './env';
 
 // ── Pool singleton ────────────────────────────────────────────────────────────
@@ -117,17 +118,20 @@ function normalizeTag(tag: string): string[] {
 
 // ── Query helpers ─────────────────────────────────────────────────────────────
 
-/** List tastes, optionally filtered by a search term and/or tag. Newest first. */
-export async function listTastes({
-  q,
-  filter,
-}: {
-  q?: string;
-  filter?: string;
-} = {}): Promise<Taste[]> {
-  const conditions: string[] = [];
+/** List a user's tastes, optionally filtered by a search term and/or tag. Newest first. */
+export async function listTastes(
+  userId: string,
+  {
+    q,
+    filter,
+  }: {
+    q?: string;
+    filter?: string;
+  } = {}
+): Promise<Taste[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const values: any[] = [];
+  const values: any[] = [userId];
+  const conditions: string[] = [`user_id = $1`];
 
   if (q && q.trim()) {
     values.push(`%${q.trim().toLowerCase()}%`);
@@ -148,14 +152,18 @@ export async function listTastes({
   return rows.map(rowToTaste);
 }
 
-/** Fetch a single taste by id; returns null if not found. */
-export async function getTaste(id: string): Promise<Taste | null> {
-  const { rows } = await pool.query('SELECT * FROM tastes WHERE id = $1', [id]);
+/** Fetch a single taste owned by the user; returns null if not found. */
+export async function getTaste(userId: string, id: string): Promise<Taste | null> {
+  const { rows } = await pool.query(
+    'SELECT * FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
   return rows.length ? rowToTaste(rows[0]) : null;
 }
 
-/** Insert a new taste, optionally overriding the image URL. Returns the created Taste. */
+/** Insert a new taste owned by the user, optionally overriding the image URL. */
 export async function createTaste(
+  userId: string,
   input: CreateTasteInput,
   imageUrl?: string
 ): Promise<Taste> {
@@ -173,16 +181,17 @@ export async function createTaste(
   const normalizedPrice = normalizePrice(price);
 
   const { rows } = await pool.query(
-    `INSERT INTO tastes (name, place, price, verdict, tags, notes, image)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [name, place, normalizedPrice, verdict, tags, notes, resolvedImage]
+    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage]
   );
   return rowToTaste(rows[0]);
 }
 
-/** Patch an existing taste; returns the updated Taste or null if not found. */
+/** Patch a taste owned by the user; returns the updated Taste or null if not found. */
 export async function updateTaste(
+  userId: string,
   id: string,
   patch: UpdateTasteInput
 ): Promise<Taste | null> {
@@ -219,11 +228,14 @@ export async function updateTaste(
 
   if (setClauses.length === 0) {
     // Nothing to change — just return existing row.
-    return getTaste(id);
+    return getTaste(userId, id);
   }
 
   values.push(id);
-  const sql = `UPDATE tastes SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`;
+  const idParam = values.length;
+  values.push(userId);
+  const userParam = values.length;
+  const sql = `UPDATE tastes SET ${setClauses.join(', ')} WHERE id = $${idParam} AND user_id = $${userParam} RETURNING *`;
 
   const { rows } = await pool.query(sql, values);
   return rows.length ? rowToTaste(rows[0]) : null;
@@ -232,20 +244,26 @@ export async function updateTaste(
 /** Fetch the RAW stored `image` value (key or legacy URL) for a taste.
  *  Unlike getTaste, this does NOT run resolvePhotoUrl, so callers that need
  *  the original storage key (e.g. to delete the object) get it verbatim.
- *  Returns null if the row does not exist. */
-export async function getRawImage(id: string): Promise<string | null> {
-  const { rows } = await pool.query('SELECT image FROM tastes WHERE id = $1', [id]);
+ *  Returns null if the row does not exist or is not owned by the user. */
+export async function getRawImage(userId: string, id: string): Promise<string | null> {
+  const { rows } = await pool.query(
+    'SELECT image FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
   return rows.length ? (rows[0].image ?? null) : null;
 }
 
-/** Delete a taste by id; returns true if a row was deleted. */
-export async function deleteTaste(id: string): Promise<boolean> {
-  const { rowCount } = await pool.query('DELETE FROM tastes WHERE id = $1', [id]);
+/** Delete a taste owned by the user; returns true if a row was deleted. */
+export async function deleteTaste(userId: string, id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
   return (rowCount ?? 0) > 0;
 }
 
-/** Compute aggregate stats across all tastes. */
-export async function getStats(): Promise<Stats> {
+/** Compute aggregate stats across the user's tastes. */
+export async function getStats(userId: string): Promise<Stats> {
   const { rows } = await pool.query(`
     SELECT
       COUNT(*)                            AS total,
@@ -257,7 +275,8 @@ export async function getStats(): Promise<Stats> {
         '[]'
       )                                   AS nah_prices
     FROM tastes
-  `);
+    WHERE user_id = $1
+  `, [userId]);
 
   const row = rows[0];
   const nahPrices: string[] = Array.isArray(row.nah_prices) ? row.nah_prices : [];
@@ -270,4 +289,169 @@ export async function getStats(): Promise<Stats> {
     nah:   Number(row.nah),
     savedAmount: `$${saved.toFixed(2)}`,
   };
+}
+
+// ── Users & auth ────────────────────────────────────────────────────────────
+
+/** Map a users row → the client-safe User (never includes password_hash). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUser(row: any): User {
+  return {
+    id:          row.id,
+    displayName: row.display_name ?? '',
+    phone:       row.phone ?? '',
+    email:       row.email ?? '',
+    avatar:      row.avatar ?? '',
+    locale:      row.locale ?? 'zh',
+    plan:        row.plan ?? 'free',
+    createdAt:   new Date(row.created_at).toISOString(),
+  };
+}
+
+export async function findUserById(id: string): Promise<User | null> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  return rows.length ? rowToUser(rows[0]) : null;
+}
+
+export async function findUserByPhone(phone: string): Promise<User | null> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+  return rows.length ? rowToUser(rows[0]) : null;
+}
+
+/** Fetch by email INCLUDING the password hash — for login verification only. */
+export async function findUserByEmailWithHash(
+  email: string
+): Promise<{ user: User; passwordHash: string | null } | null> {
+  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+  if (!rows.length) return null;
+  return { user: rowToUser(rows[0]), passwordHash: rows[0].password_hash ?? null };
+}
+
+export async function createUser(input: {
+  displayName?: string;
+  phone?: string;
+  email?: string;
+  passwordHash?: string;
+  avatar?: string;
+  locale?: string;
+}): Promise<User> {
+  const { rows } = await pool.query(
+    `INSERT INTO users (display_name, phone, email, password_hash, avatar, locale)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      input.displayName ?? '',
+      input.phone ?? null,
+      input.email ?? null,
+      input.passwordHash ?? null,
+      input.avatar ?? '',
+      input.locale ?? 'zh',
+    ]
+  );
+  return rowToUser(rows[0]);
+}
+
+/** Phone-OTP login: return the existing user for this phone, or create one. */
+export async function findOrCreateUserByPhone(phone: string): Promise<User> {
+  const existing = await findUserByPhone(phone);
+  if (existing) return existing;
+  // Friendly default name from the last 4 digits.
+  const tail = phone.replace(/[^0-9]/g, '').slice(-4);
+  return createUser({ phone, displayName: `Foodie ${tail}` });
+}
+
+/**
+ * Resolve a social login to a user: find the linked identity, else create a
+ * fresh user and link it. Links to an existing email account when possible.
+ */
+export async function findOrCreateUserByOAuth(
+  provider: string,
+  profile: ProviderProfile
+): Promise<User> {
+  const linked = await pool.query(
+    'SELECT user_id FROM auth_identities WHERE provider = $1 AND provider_uid = $2',
+    [provider, profile.uid]
+  );
+  if (linked.rows.length) {
+    const user = await findUserById(linked.rows[0].user_id);
+    if (user) return user;
+  }
+
+  // No identity yet — reuse an account with the same email if present, else new.
+  let user: User | null = null;
+  if (profile.email) {
+    const byEmail = await findUserByEmailWithHash(profile.email.toLowerCase());
+    user = byEmail?.user ?? null;
+  }
+  if (!user) {
+    user = await createUser({
+      displayName: profile.displayName,
+      email: profile.email?.toLowerCase(),
+      avatar: profile.avatar ?? '',
+    });
+  }
+
+  await pool.query(
+    'INSERT INTO auth_identities (user_id, provider, provider_uid) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+    [user.id, provider, profile.uid]
+  );
+  return user;
+}
+
+// ── Sessions ─────────────────────────────────────────────────────────────────
+
+export async function createSession(
+  token: string,
+  userId: string,
+  expiresAt: Date,
+  userAgent = ''
+): Promise<void> {
+  await pool.query(
+    'INSERT INTO sessions (token, user_id, expires_at, user_agent) VALUES ($1, $2, $3, $4)',
+    [token, userId, expiresAt, userAgent]
+  );
+}
+
+/** Resolve a session token → its (unexpired) user, or null. */
+export async function getSessionUser(token: string): Promise<User | null> {
+  const { rows } = await pool.query(
+    `SELECT u.* FROM sessions s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.token = $1 AND s.expires_at > now()`,
+    [token]
+  );
+  return rows.length ? rowToUser(rows[0]) : null;
+}
+
+export async function deleteSession(token: string): Promise<void> {
+  await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+}
+
+// ── One-time codes (phone OTP) ───────────────────────────────────────────────
+
+export async function saveOtp(
+  phone: string,
+  codeHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await pool.query(
+    'INSERT INTO otp_codes (phone, code_hash, expires_at) VALUES ($1, $2, $3)',
+    [phone, codeHash, expiresAt]
+  );
+}
+
+/**
+ * Verify and consume the most recent unexpired code for a phone.
+ * Returns true on success (and marks every outstanding code for the phone used).
+ */
+export async function consumeOtp(phone: string, codeHash: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT id FROM otp_codes
+      WHERE phone = $1 AND code_hash = $2 AND consumed = false AND expires_at > now()
+      ORDER BY created_at DESC LIMIT 1`,
+    [phone, codeHash]
+  );
+  if (!rows.length) return false;
+  await pool.query('UPDATE otp_codes SET consumed = true WHERE phone = $1', [phone]);
+  return true;
 }
