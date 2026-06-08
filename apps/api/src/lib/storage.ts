@@ -112,13 +112,18 @@ async function uploadToS3(buffer: Buffer, { key, contentType }: UploadOptions): 
   const client = await s3Client();
   const bucket = process.env.S3_BUCKET ?? '';
 
+  // Cloudflare R2 controls public access via the bucket's r2.dev URL / custom
+  // domain, not per-object ACLs, and rejects `ACL: public-read`. Set
+  // S3_NO_ACL=true for R2; other S3-compatible stores (AWS, B2) keep the ACL.
+  const noAcl = (process.env.S3_NO_ACL ?? '').toLowerCase() === 'true';
+
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: buffer,
       ContentType: contentType,
-      ACL: 'public-read',
+      ...(noAcl ? {} : { ACL: 'public-read' as const }),
     })
   );
 
