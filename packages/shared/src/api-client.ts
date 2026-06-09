@@ -115,8 +115,11 @@ export async function createTaste(
     if (isRNFile(photo)) {
       // Expo 56+ fetch requires Blob/File entries — the legacy RN {uri,name,type}
       // convention triggers "Unsupported FormDataPart implementation".
+      // On Android, new File([blob], ...) throws "Creating blobs from ArrayBuffer
+      // not supported" — use the 3-arg FormData.append which attaches the blob
+      // with a filename without constructing a new Blob from it.
       const blob = await fetch(photo.uri).then((r) => r.blob());
-      fd.append("photo", new File([blob], photo.name, { type: photo.type }));
+      fd.append("photo", blob, photo.name);
     } else {
       fd.append("photo", photo);
     }
