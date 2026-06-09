@@ -3,7 +3,8 @@
 import { Pool } from 'pg';
 import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
-import { getPhotoPublicBaseUrl } from './env';
+import { getPhotoPublicBaseUrl, getPhotoStorage } from './env';
+import { getSignedPhotoUrl } from './storage';
 import { normalizePromoCode, isPromoExpired, promoHasUsesLeft, type PromoCodeRow } from './promo';
 
 // ── Pool singleton ────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ function relativeDate(createdAt: Date): string {
  *  - http(s):// …     → as-is (seed rows, blob full URLs, absolute legacy URLs)
  *  - /uploads/ …      → as-is (legacy local paths)
  *  - otherwise        → bare key, rendered as `${PHOTO_PUBLIC_BASE_URL}/${key}` */
-export function resolvePhotoUrl(image: string | null | undefined): string {
+export async function resolvePhotoUrl(image: string | null | undefined): Promise<string> {
   if (!image) return '';
   if (
     image.startsWith('http://') ||
@@ -60,14 +61,17 @@ export function resolvePhotoUrl(image: string | null | undefined): string {
   ) {
     return image;
   }
-  const base = getPhotoPublicBaseUrl();
   const key = image.replace(/^\//, '');
+  if (getPhotoStorage() === 's3') {
+    return getSignedPhotoUrl(key);
+  }
+  const base = getPhotoPublicBaseUrl();
   return base ? `${base}/${key}` : `/${key}`;
 }
 
 /** Map a DB row (snake_case) to a Taste (camelCase). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToTaste(row: any): Taste {
+async function rowToTaste(row: any): Promise<Taste> {
   return {
     id:         row.id,
     name:       row.name,
@@ -78,7 +82,7 @@ function rowToTaste(row: any): Taste {
     boughtCount: Number(row.bought_count),
     date:       relativeDate(new Date(row.created_at)),
     notes:      row.notes ?? '',
-    image:      resolvePhotoUrl(row.image),
+    image:      await resolvePhotoUrl(row.image),
     createdAt:  new Date(row.created_at).toISOString(),
   };
 }
@@ -150,7 +154,7 @@ export async function listTastes(
   const sql = `SELECT * FROM tastes ${where} ORDER BY created_at DESC`;
 
   const { rows } = await pool.query(sql, values);
-  return rows.map(rowToTaste);
+  return Promise.all(rows.map(rowToTaste));
 }
 
 /** Fetch a single taste owned by the user; returns null if not found. */
@@ -159,7 +163,7 @@ export async function getTaste(userId: string, id: string): Promise<Taste | null
     'SELECT * FROM tastes WHERE id = $1 AND user_id = $2',
     [id, userId]
   );
-  return rows.length ? rowToTaste(rows[0]) : null;
+  return rows.length ? await rowToTaste(rows[0]) : null;
 }
 
 /** Insert a new taste owned by the user, optionally overriding the image URL. */
@@ -187,7 +191,7 @@ export async function createTaste(
      RETURNING *`,
     [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage]
   );
-  return rowToTaste(rows[0]);
+  return await rowToTaste(rows[0]);
 }
 
 /** Patch a taste owned by the user; returns the updated Taste or null if not found. */
@@ -239,7 +243,7 @@ export async function updateTaste(
   const sql = `UPDATE tastes SET ${setClauses.join(', ')} WHERE id = $${idParam} AND user_id = $${userParam} RETURNING *`;
 
   const { rows } = await pool.query(sql, values);
-  return rows.length ? rowToTaste(rows[0]) : null;
+  return rows.length ? await rowToTaste(rows[0]) : null;
 }
 
 /** Fetch the RAW stored `image` value (key or legacy URL) for a taste.
