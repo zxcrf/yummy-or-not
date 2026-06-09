@@ -9,6 +9,7 @@
 
 import { type ReactNode } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { View, useMedia } from 'tamagui'
 
 import { SIDEBAR_W } from './_nav'
@@ -23,7 +24,12 @@ export function Screen({ children }: { children: ReactNode }) {
       paddingTop={insets.top}
       paddingLeft={media.gtMd ? SIDEBAR_W : 0}
     >
-      {children}
+      {/* Restrained content entrance: a soft fade-through on first focus so a
+          page never appears as an instant snap. Per-switch positional motion
+          is handled by the navigator's `animation: 'shift'`. */}
+      <Animated.View entering={FadeIn.duration(260)} style={{ flex: 1 }}>
+        {children}
+      </Animated.View>
     </View>
   )
 }
