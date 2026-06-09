@@ -138,6 +138,26 @@ async function deleteFromS3(key: string): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
+// ── Presigned read URL ───────────────────────────────────────────────────────
+
+const PRESIGN_TTL_SECONDS = 86400; // 24h — long to reduce mobile image-cache churn
+
+export async function getSignedPhotoUrl(
+  key: string,
+  ttlSeconds = PRESIGN_TTL_SECONDS
+): Promise<string> {
+  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+  const client = await s3Client();
+  const bucket = process.env.S3_BUCKET ?? '';
+
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: ttlSeconds }
+  );
+}
+
 // ── Vercel Blob backend ─────────────────────────────────────────────────────────
 
 async function uploadToBlob(buffer: Buffer, { key, contentType }: UploadOptions): Promise<string> {
