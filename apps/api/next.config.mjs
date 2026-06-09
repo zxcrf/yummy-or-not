@@ -21,7 +21,6 @@ const photoPattern =
 
 const nextConfig = {
   output: 'standalone',
-  serverExternalPackages: ['@aws-sdk/s3-request-presigner'],
   async redirects() {
     return [
       { source: '/', destination: '/web', permanent: false },

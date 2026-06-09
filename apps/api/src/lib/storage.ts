@@ -35,6 +35,8 @@
 
 import path from 'path';
 import { writeFile, mkdir, unlink } from 'fs/promises';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getPhotoStorage } from './env';
 
 export interface UploadOptions {
@@ -94,22 +96,19 @@ async function deleteFromLocal(key: string): Promise<void> {
 // ── S3 backend ────────────────────────────────────────────────────────────────
 
 function s3Client() {
-  return import('@aws-sdk/client-s3').then(({ S3Client }) => {
-    const endpoint = process.env.S3_ENDPOINT;
-    const region   = process.env.S3_REGION ?? 'us-east-1';
-    const accessKeyId     = process.env.S3_ACCESS_KEY_ID     ?? '';
-    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY ?? '';
-    return new S3Client({
-      region,
-      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-      credentials: { accessKeyId, secretAccessKey },
-    });
+  const endpoint = process.env.S3_ENDPOINT;
+  const region   = process.env.S3_REGION ?? 'us-east-1';
+  const accessKeyId     = process.env.S3_ACCESS_KEY_ID     ?? '';
+  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY ?? '';
+  return new S3Client({
+    region,
+    ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    credentials: { accessKeyId, secretAccessKey },
   });
 }
 
 async function uploadToS3(buffer: Buffer, { key, contentType }: UploadOptions): Promise<string> {
-  const { PutObjectCommand } = await import('@aws-sdk/client-s3');
-  const client = await s3Client();
+  const client = s3Client();
   const bucket = process.env.S3_BUCKET ?? '';
 
   // Cloudflare R2 controls public access via the bucket's r2.dev URL / custom
@@ -131,8 +130,7 @@ async function uploadToS3(buffer: Buffer, { key, contentType }: UploadOptions): 
 }
 
 async function deleteFromS3(key: string): Promise<void> {
-  const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-  const client = await s3Client();
+  const client = s3Client();
   const bucket = process.env.S3_BUCKET ?? '';
 
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
@@ -146,9 +144,7 @@ export async function getSignedPhotoUrl(
   key: string,
   ttlSeconds = PRESIGN_TTL_SECONDS
 ): Promise<string> {
-  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-  const client = await s3Client();
+  const client = s3Client();
   const bucket = process.env.S3_BUCKET ?? '';
 
   return getSignedUrl(
