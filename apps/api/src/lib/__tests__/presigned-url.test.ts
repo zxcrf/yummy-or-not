@@ -1,4 +1,5 @@
 jest.mock('../storage', () => ({
+  ...jest.requireActual('../storage'),
   getSignedPhotoUrl: jest.fn().mockResolvedValue(
     'https://yon-prod.s3.amazonaws.com/photos/abc.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=fakesig'
   ),
@@ -10,6 +11,7 @@ jest.mock('../env', () => ({
 }));
 
 import { resolvePhotoUrl } from '../db';
+import { PRESIGN_TTL_SECONDS } from '../storage';
 
 describe('resolvePhotoUrl (presigned)', () => {
   it('returns a promise (is async)', () => {
@@ -21,6 +23,10 @@ describe('resolvePhotoUrl (presigned)', () => {
     const url = await resolvePhotoUrl('photos/abc.jpg');
     expect(typeof url).toBe('string');
     expect(url).toContain('X-Amz-Signature');
+  });
+
+  it('keeps presigned URLs short lived', () => {
+    expect(PRESIGN_TTL_SECONDS).toBe(3600);
   });
 
   it('passes through http(s) URLs unchanged', async () => {

@@ -138,7 +138,7 @@ async function deleteFromS3(key: string): Promise<void> {
 
 // ── Presigned read URL ───────────────────────────────────────────────────────
 
-const PRESIGN_TTL_SECONDS = 86400; // 24h — long to reduce mobile image-cache churn
+export const PRESIGN_TTL_SECONDS = 3600; // 1h — limit leaked URL lifetime
 
 export async function getSignedPhotoUrl(
   key: string,

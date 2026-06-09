@@ -41,13 +41,24 @@ CREATE INDEX auth_identities_user_idx ON auth_identities (user_id);
 -- header) and/or cookie. Server-side storage lets us revoke (logout / "sign out
 -- everywhere") without trusting the client.
 CREATE TABLE sessions (
-  token       text        PRIMARY KEY,
+  token       text        UNIQUE,
+  token_hash  text        UNIQUE,
   user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   user_agent  text        NOT NULL DEFAULT '',
   created_at  timestamptz NOT NULL DEFAULT now(),
-  expires_at  timestamptz NOT NULL
+  expires_at  timestamptz NOT NULL,
+  CONSTRAINT sessions_token_or_hash_check CHECK (token IS NOT NULL OR token_hash IS NOT NULL)
 );
 CREATE INDEX sessions_user_idx ON sessions (user_id);
+
+-- ── Rate limits ─────────────────────────────────────────────────────────────
+CREATE TABLE rate_limits (
+  key        text        PRIMARY KEY,
+  count      int         NOT NULL DEFAULT 0,
+  reset_at   timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX rate_limits_reset_idx ON rate_limits (reset_at);
 
 -- ── One-time codes (phone SMS OTP) ───────────────────────────────────────────
 CREATE TABLE otp_codes (

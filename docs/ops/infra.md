@@ -52,7 +52,7 @@ ssh ubuntu@baobao.click 'docker run -d --name yon-pg --restart unless-stopped \
 | `yon-prod` | 用户照片 | **私有**（public dev-url 已禁用） | `S3_*` in `/etc/yum-api/.env` |
 | `yon-db-backups` | 数据库备份 | **私有** | 独立 token in `/etc/yum-api/backup.env`（仅此 bucket） |
 
-照片读取使用 **presigned S3 GET URL**（24h TTL）。`resolvePhotoUrl` 是异步函数。
+照片读取使用 **presigned S3 GET URL**（1h TTL）。`resolvePhotoUrl` 是异步函数。
 
 ⚠️ `storage.ts` 中 S3 SDK 必须使用**静态 import**。Next.js standalone bundler (nft) 不追踪动态 `await import()`，会导致运行时找不到模块。
 
@@ -64,9 +64,20 @@ ssh ubuntu@baobao.click 'docker run -d --name yon-pg --restart unless-stopped \
 | Cron | `/etc/cron.d/yon-pg-backup` — 每天 03:30 UTC |
 | 日志 | `/var/log/yon-pg-backup.log` |
 | 保留 | R2 lifecycle `expire-14d` — 14 天后自动删除 |
-| 大小 | ~19KB（`pg_dump -Fc` custom format） |
+| 加密 | `age` 客户端加密后上传；服务器只保存公钥 |
+| 大小 | ~19KB（`pg_dump -Fc` custom format，随数据增长） |
 
-工作原理：`docker exec yon-pg pg_dump` 管道到 `amazon/aws-cli` 容器 `s3 cp`，不写本地文件。
+工作原理：`docker exec yon-pg pg_dump` 管道到 `age` 加密，再管道到 `amazon/aws-cli` 容器 `s3 cp`。R2 中只保存加密后的 dump。
+
+`/etc/yum-api/backup.env` 应包含：
+
+| 变量 | 说明 |
+|---|---|
+| `BACKUP_S3_ACCESS_KEY_ID` | 仅 `yon-db-backups` bucket 权限 |
+| `BACKUP_S3_SECRET_ACCESS_KEY` | 同上 |
+| `BACKUP_ENDPOINT` | R2 S3 endpoint |
+| `BACKUP_BUCKET` | `yon-db-backups` |
+| `BACKUP_AGE_RECIPIENT` | age 公钥 recipient，服务器只持有公钥 |
 
 手动备份：`sudo /usr/local/bin/yon-pg-backup.sh`
 
@@ -78,14 +89,19 @@ ssh ubuntu@baobao.click
 eval $(sudo grep -v '^#' /etc/yum-api/backup.env | xargs -I{} echo 'export {}')
 eval $(sudo grep -v '^#' /etc/yum-api/pg.env | xargs -I{} echo 'export {}')
 
-# 下载 dump
+# 下载加密 dump
 docker volume create yon-restore-tmp
 docker run --rm \
   -e AWS_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_ACCESS_KEY} \
   -v yon-restore-tmp:/data \
-  amazon/aws-cli s3 cp s3://${BACKUP_BUCKET}/<DUMP_FILE> /data/restore.dump \
+  amazon/aws-cli s3 cp s3://${BACKUP_BUCKET}/<DUMP_FILE>.age /data/restore.dump.age \
     --endpoint-url ${BACKUP_ENDPOINT} --region auto
+
+# 离线或受控环境解密；AGE_IDENTITY_FILE 指向私钥文件
+age -d -i ${AGE_IDENTITY_FILE} \
+  -o /var/lib/docker/volumes/yon-restore-tmp/_data/restore.dump \
+  /var/lib/docker/volumes/yon-restore-tmp/_data/restore.dump.age
 
 # 恢复（scratch DB 验证，或恢复到 yon 主库）
 docker run --rm --network yon-net \

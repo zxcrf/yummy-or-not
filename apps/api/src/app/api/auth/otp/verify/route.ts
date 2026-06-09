@@ -11,6 +11,7 @@ import {
   establishSession,
 } from '@/lib/auth';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { clientIp, enforceRateLimits, rateLimitedResponse } from '@/lib/rate-limit';
 import type { OtpVerifyInput } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
@@ -25,6 +26,11 @@ export async function POST(req: NextRequest) {
     if (!isValidPhone(phone) || !/^[0-9]{6}$/.test(code ?? '')) {
       return withCors(NextResponse.json({ error: 'invalid_input' }, { status: 400 }), origin);
     }
+    const limited = await enforceRateLimits([
+      { scope: 'auth:otp-verify:ip', identifier: clientIp(req), limit: 30, windowMs: 10 * 60 * 1000 },
+      { scope: 'auth:otp-verify:phone', identifier: phone, limit: 5, windowMs: 10 * 60 * 1000 },
+    ]);
+    if (limited.limited) return rateLimitedResponse(origin, limited.retryAfterSeconds);
 
     const ok = await consumeOtp(phone, hashCode(code));
     if (!ok) {

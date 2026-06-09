@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { findUserByEmailWithHash } from '@/lib/db';
 import { verifyPassword, normalizeEmail, establishSession } from '@/lib/auth';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { clientIp, enforceRateLimits, rateLimitedResponse } from '@/lib/rate-limit';
 import type { LoginInput } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
   try {
     const { email: rawEmail, password } = (await req.json()) as LoginInput;
     const email = normalizeEmail(rawEmail ?? '');
+    const limited = await enforceRateLimits([
+      { scope: 'auth:login:ip', identifier: clientIp(req), limit: 20, windowMs: 10 * 60 * 1000 },
+      { scope: 'auth:login:email', identifier: email, limit: 8, windowMs: 15 * 60 * 1000 },
+    ]);
+    if (limited.limited) return rateLimitedResponse(origin, limited.retryAfterSeconds);
 
     const found = await findUserByEmailWithHash(email);
     // Verify even on miss-ish paths to keep timing roughly uniform.

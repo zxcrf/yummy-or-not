@@ -16,6 +16,7 @@ import {
   OTP_TTL_MS,
 } from '@/lib/auth';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { clientIp, enforceRateLimits, rateLimitedResponse } from '@/lib/rate-limit';
 import type { OtpRequestInput } from '@yon/shared';
 
 async function deliver(phone: string, code: string): Promise<void> {
@@ -44,6 +45,11 @@ export async function POST(req: NextRequest) {
     if (!isValidPhone(phone)) {
       return withCors(NextResponse.json({ error: 'invalid_phone' }, { status: 400 }), origin);
     }
+    const limited = await enforceRateLimits([
+      { scope: 'auth:otp-request:ip', identifier: clientIp(req), limit: 20, windowMs: 60 * 60 * 1000 },
+      { scope: 'auth:otp-request:phone', identifier: phone, limit: 3, windowMs: 10 * 60 * 1000 },
+    ]);
+    if (limited.limited) return rateLimitedResponse(origin, limited.retryAfterSeconds);
 
     const code = generateOtp();
     await saveOtp(phone, hashCode(code), new Date(Date.now() + OTP_TTL_MS));

@@ -7,7 +7,7 @@
    after refresh(), and (c) clear it on sign-out.
 
    Token persistence is Platform-gated exactly like I18nProvider so the
-   web bundle never pulls the AsyncStorage native module and native never
+   web bundle never pulls the SecureStore native module and native never
    touches `window`. Storage key: `yon_token`.
    ============================================================ */
 
@@ -58,16 +58,14 @@ const AuthContext = createContext<AuthContextValue>({
 
 const STORAGE_KEY = 'yon_token'
 
-/** Read the persisted token (or null). Async to accommodate AsyncStorage. */
+/** Read the persisted token (or null). Async to accommodate native secure storage. */
 async function readStoredToken(): Promise<string | null> {
   try {
     if (Platform.OS === 'web') {
       return globalThis.localStorage?.getItem(STORAGE_KEY) ?? null
     }
-    const AsyncStorage = (
-      await import('@react-native-async-storage/async-storage')
-    ).default
-    return await AsyncStorage.getItem(STORAGE_KEY)
+    const SecureStore = await import('expo-secure-store')
+    return await SecureStore.getItemAsync(STORAGE_KEY)
   } catch {
     return null
   }
@@ -81,12 +79,11 @@ function writeStoredToken(token: string | null): void {
       else globalThis.localStorage?.removeItem(STORAGE_KEY)
       return
     }
-    void import('@react-native-async-storage/async-storage').then(
-      ({ default: AsyncStorage }) =>
-        token
-          ? AsyncStorage.setItem(STORAGE_KEY, token)
-          : AsyncStorage.removeItem(STORAGE_KEY),
-    )
+    void import('expo-secure-store').then((SecureStore) => {
+      return token
+        ? SecureStore.setItemAsync(STORAGE_KEY, token)
+        : SecureStore.deleteItemAsync(STORAGE_KEY)
+    })
   } catch {
     // ignore — persistence is best-effort.
   }
