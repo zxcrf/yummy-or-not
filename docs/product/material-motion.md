@@ -51,6 +51,21 @@ Tamagui animation driver (`@tamagui/animations-react-native`) provides spring-ba
 | LangSwitcher dropdown (native) | FadeIn 150ms | FadeOut 100ms |
 | AddModal error message | FadeIn 200ms | FadeOut 150ms |
 | AuthScreen error banner | FadeIn 200ms | FadeOut 150ms |
+| Tab page body (`Screen` frame) | FadeIn 260ms | — |
+
+### Tab transition (cross-tab navigation)
+
+The four content tabs (Library / Recall / Stats / You) transition on every
+switch instead of hard-cutting.
+
+| Layer | Mechanism | Detail |
+|---|---|---|
+| Cross-tab scene | bottom-tabs `animation: 'shift'` | subtle slide + crossfade between tab scenes on every switch (`app/(tabs)/_layout.tsx`) |
+| First-focus content | reanimated `FadeIn` 260ms | each tab body fades through on first mount via the shared `Screen` frame (`app/(tabs)/_screen.tsx`) |
+
+Rationale: the navigator owns per-switch positional motion; the `Screen`
+frame owns the content fade. Kept deliberately restrained — a soft fade-through,
+not a heavy slide-up — so it reads as polish, not spectacle.
 
 ### Container Transform
 
