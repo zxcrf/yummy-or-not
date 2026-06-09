@@ -15,7 +15,7 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { KeyboardAvoidingView, Platform } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import AddModal from '../AddModal'
 
 const mockCreateTaste = jest.fn()
@@ -142,23 +142,52 @@ describe('AddModal', () => {
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
   })
 
-  it('does not use KeyboardAvoidingView behavior="height" on Android', () => {
-    // Regression: the modal flickered on open — the body repeatedly collapsed
-    // to a sliver (clipped title, zero-height ScrollView, only the header
-    // border + close button left). Cause: under Expo SDK 54+ edge-to-edge the
-    // Android window already resizes for the keyboard; `behavior="height"`
-    // double-resized and squeezed this flex body during the open animation.
-    // Android must therefore use NO behavior (the window handles avoidance).
+  it('insets the keyboard with padding (never "height", never none) so bottom inputs stay reachable', () => {
+    // Two regressions guarded at once:
+    //  - behavior="height" animated the container height and collapsed this
+    //    flex body to a sliver during the open transition (the flicker).
+    //  - NO behavior left the keyboard floating over the content under Expo
+    //    SDK 54+ edge-to-edge, hiding the custom-tag / notes / save row.
+    // "padding" only grows the bottom inset: no collapse, and the scroll
+    // viewport ends above the keyboard so the bottom fields are reachable.
     const renderer = renderAddModal()
     const kav = renderer.root.findByType(KeyboardAvoidingView)
-    expect(kav.props.behavior).toBeUndefined()
+    expect(kav.props.behavior).toBe('padding')
+    expect(kav.props.behavior).not.toBe('height')
   })
 
-  it('keeps KeyboardAvoidingView behavior="padding" on iOS', () => {
+  it('keeps behavior="padding" on iOS too', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' })
     const renderer = renderAddModal()
     const kav = renderer.root.findByType(KeyboardAvoidingView)
     expect(kav.props.behavior).toBe('padding')
+  })
+
+  it('scrolls the form to the end when a bottom field (notes) is focused so it clears the keyboard', () => {
+    // Padding alone shrinks the viewport but does not move the focused field
+    // into it. Focusing a below-the-fold field must scroll the form up so it
+    // sits above the keyboard — like every other app.
+    jest.useFakeTimers()
+    const scrollToEnd = jest
+      .spyOn(ScrollView.prototype, 'scrollToEnd')
+      .mockImplementation(() => {})
+    try {
+      const renderer = renderAddModal()
+      const notes = renderer.root.findByProps({
+        placeholder: 'Too sweet, but the texture was perfect…',
+      })
+      act(() => {
+        notes.props.onFocus?.({})
+      })
+      act(() => {
+        jest.advanceTimersByTime(200)
+      })
+
+      expect(scrollToEnd).toHaveBeenCalled()
+    } finally {
+      scrollToEnd.mockRestore()
+      jest.useRealTimers()
+    }
   })
 
   it('saves a newly added custom tag with the taste payload', async () => {

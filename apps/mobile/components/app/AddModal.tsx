@@ -15,12 +15,16 @@
    ============================================================ */
 
 import { useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform } from 'react-native'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView as RNScrollView,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
-import { ScrollView, Text, View } from 'tamagui'
+import { Text, View } from 'tamagui'
 import { TAG_CHOICES, createTaste, type PhotoInput, type Verdict } from '@yon/shared'
 
 import {
@@ -91,6 +95,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const { t } = useI18n()
   const insets = useSafeAreaInsets()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const scrollRef = useRef<RNScrollView>(null)
+
+  // Under Expo SDK 54+ edge-to-edge the keyboard floats over the content, so
+  // KeyboardAvoidingView (padding) shrinks the scroll viewport to end above the
+  // keyboard — but the focused field still has to be scrolled into that smaller
+  // viewport. The bottom fields (custom tag + notes) sit below the fold, so
+  // bring the end of the form (those fields + the save row) up on focus. The
+  // delay lets the keyboard-driven padding settle before we measure/scroll.
+  const revealBottomFields = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120)
+  }
 
   const [name, setName] = useState('')
   const [place, setPlace] = useState('')
@@ -182,15 +197,16 @@ export default function AddModal({ onClose, onSaved }: Props) {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      // iOS: pad the bottom so inputs clear the keyboard.
-      // Android: NO behavior. Under Expo SDK 54+ edge-to-edge (always on) the
-      // window is already `adjustResize`, so it resizes for the keyboard on its
-      // own. Layering `behavior="height"` on top double-resizes and, while the
-      // modal opens, intermittently collapses this flex body to a sliver —
-      // clipping the title and zeroing the ScrollView, leaving only the header
-      // border + close button. That was the AddModal "闪烁/空白" flicker. The
-      // ScrollView (keyboardShouldPersistTaps) handles scroll-to-field instead.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // `padding` on both platforms. Under Expo SDK 54+ edge-to-edge (always
+      // on) the keyboard floats OVER the content — the window no longer resizes
+      // — so the modal must inset for it or the bottom fields (custom tag,
+      // notes, save row) stay hidden behind the keyboard. `padding` pads the
+      // bottom by the keyboard height, shrinking the scroll viewport to end
+      // above the keyboard. We deliberately avoid `height`: it animates the
+      // container height and, during the open transition, collapsed this flex
+      // body to a sliver (the AddModal "闪烁/空白" flicker). `padding` only
+      // grows bottom inset, so it never zeroes the body.
+      behavior="padding"
     >
     <View flex={1} backgroundColor="$background">
       {/* sticky header */}
@@ -213,7 +229,13 @@ export default function AddModal({ onClose, onSaved }: Props) {
       </View>
 
       {/* scrollable body */}
-      <ScrollView flex={1} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 20 }}>
+      <RNScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 40 }}
+      >
         {/* photo + basic fields */}
         <View gap="$4">
           {/* photo dropzone */}
@@ -322,6 +344,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 value={customTag}
                 onChangeText={setCustomTag}
                 onSubmitEditing={addCustomTag}
+                onFocus={revealBottomFields}
                 returnKeyType="done"
               />
             </View>
@@ -338,6 +361,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
           numberOfLines={3}
           value={notes}
           onChangeText={setNotes}
+          onFocus={revealBottomFields}
         />
 
         {error ? (
@@ -367,7 +391,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
             {t('save_taste_web')}
           </Button>
         </View>
-      </ScrollView>
+      </RNScrollView>
     </View>
     </KeyboardAvoidingView>
   )
