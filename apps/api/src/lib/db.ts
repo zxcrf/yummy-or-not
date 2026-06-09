@@ -518,6 +518,19 @@ export async function redeemPromoCode(userId: string, rawCode: string): Promise<
       await client.query('ROLLBACK');
       return { ok: false, error: 'code_expired' };
     }
+    // A user who already redeemed this code gets `already_redeemed` regardless of
+    // whether the code is now exhausted — their own prior redemption takes
+    // precedence over the global uses-left check (which only gates NEW redeemers).
+    // Without this, a single-use code self-redeemed twice would surface the
+    // misleading `code_exhausted`.
+    const existing = await client.query(
+      'SELECT 1 FROM promo_redemptions WHERE code = $1 AND user_id = $2',
+      [code, userId]
+    );
+    if (existing.rows.length) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'already_redeemed' };
+    }
     if (!promoHasUsesLeft(promo)) {
       await client.query('ROLLBACK');
       return { ok: false, error: 'code_exhausted' };
@@ -529,6 +542,7 @@ export async function redeemPromoCode(userId: string, rawCode: string): Promise<
       [code, userId]
     );
     if (!ins.rows.length) {
+      // Lost a race to a concurrent redeem by the same user — still idempotent.
       await client.query('ROLLBACK');
       return { ok: false, error: 'already_redeemed' };
     }
