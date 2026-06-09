@@ -182,7 +182,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // iOS: pad the bottom so inputs clear the keyboard.
+      // Android: NO behavior. Under Expo SDK 54+ edge-to-edge (always on) the
+      // window is already `adjustResize`, so it resizes for the keyboard on its
+      // own. Layering `behavior="height"` on top double-resizes and, while the
+      // modal opens, intermittently collapses this flex body to a sliver —
+      // clipping the title and zeroing the ScrollView, leaving only the header
+      // border + close button. That was the AddModal "闪烁/空白" flicker. The
+      // ScrollView (keyboardShouldPersistTaps) handles scroll-to-field instead.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
     <View flex={1} backgroundColor="$background">
       {/* sticky header */}

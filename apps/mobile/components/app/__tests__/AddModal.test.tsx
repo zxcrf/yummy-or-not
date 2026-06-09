@@ -15,7 +15,7 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { Platform } from 'react-native'
+import { KeyboardAvoidingView, Platform } from 'react-native'
 import AddModal from '../AddModal'
 
 const mockCreateTaste = jest.fn()
@@ -140,6 +140,25 @@ describe('AddModal', () => {
     expect(textNodes(renderer, 'Add a photo')).toHaveLength(1)
     expect(textNodes(renderer, 'Photo access is needed to choose a picture.')).toHaveLength(1)
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
+  })
+
+  it('does not use KeyboardAvoidingView behavior="height" on Android', () => {
+    // Regression: the modal flickered on open — the body repeatedly collapsed
+    // to a sliver (clipped title, zero-height ScrollView, only the header
+    // border + close button left). Cause: under Expo SDK 54+ edge-to-edge the
+    // Android window already resizes for the keyboard; `behavior="height"`
+    // double-resized and squeezed this flex body during the open animation.
+    // Android must therefore use NO behavior (the window handles avoidance).
+    const renderer = renderAddModal()
+    const kav = renderer.root.findByType(KeyboardAvoidingView)
+    expect(kav.props.behavior).toBeUndefined()
+  })
+
+  it('keeps KeyboardAvoidingView behavior="padding" on iOS', () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' })
+    const renderer = renderAddModal()
+    const kav = renderer.root.findByType(KeyboardAvoidingView)
+    expect(kav.props.behavior).toBe('padding')
   })
 
   it('saves a newly added custom tag with the taste payload', async () => {
