@@ -62,7 +62,6 @@ jobs:
         run: |
           cat >> apps/mobile/android/gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
-          org.gradle.parallel=true
           org.gradle.caching=true
           EOF
 
@@ -71,7 +70,7 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease --build-cache --parallel
+        run: ./gradlew :app:assembleRelease --build-cache
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
           NODE_OPTIONS: --max-old-space-size=4096
