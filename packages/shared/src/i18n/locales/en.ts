@@ -38,4 +38,11 @@ export const en: Record<string, string> = {
   auth_err_invalid_credentials: "Wrong email or password.",
   auth_err_provider_unavailable: "{p} sign-in isn’t set up yet.",
   auth_err_generic: "Something went wrong. Please try again.",
+  auth_promo_label: "Promo code (optional)", auth_promo_ph: "Have a code? Paste it",
+  auth_err_invalid_code: "That promo code isn’t valid.",
+  auth_err_code_expired: "That promo code has expired.",
+  auth_err_code_exhausted: "That promo code has been fully used.",
+  auth_err_already_redeemed: "You’ve already redeemed that code.",
+  auth_promo_not_applied: "Account created — but the promo code couldn’t be applied. You can redeem it later in your profile.",
+  taste_limit_reached: "You’ve reached the free plan’s 100-taste limit. Upgrade to Pro for unlimited.",
 };

@@ -38,4 +38,11 @@ export const ja: Record<string, string> = {
   auth_err_invalid_credentials: "メールアドレスまたはパスワードが違います。",
   auth_err_provider_unavailable: "{p}ログインはまだ設定されていません。",
   auth_err_generic: "問題が発生しました。もう一度お試しください。",
+  auth_promo_label: "プロモコード（任意）", auth_promo_ph: "コードをお持ちですか？貼り付けてください",
+  auth_err_invalid_code: "このプロモコードは無効です。",
+  auth_err_code_expired: "このプロモコードは期限切れです。",
+  auth_err_code_exhausted: "このプロモコードは使い切られています。",
+  auth_err_already_redeemed: "このコードはすでに使用済みです。",
+  auth_promo_not_applied: "アカウントを作成しました。ただしプロモコードは適用できませんでした。後でプロフィールから引き換えできます。",
+  taste_limit_reached: "無料プランの100件の上限に達しました。Proにアップグレードすると無制限です。",
 };

@@ -38,4 +38,11 @@ export const zh: Record<string, string> = {
   auth_err_invalid_credentials: "邮箱或密码错误。",
   auth_err_provider_unavailable: "{p} 登录尚未配置。",
   auth_err_generic: "出错了，请稍后重试。",
+  auth_promo_label: "优惠码（选填）", auth_promo_ph: "有优惠码？粘贴到这里",
+  auth_err_invalid_code: "优惠码无效。",
+  auth_err_code_expired: "优惠码已过期。",
+  auth_err_code_exhausted: "优惠码已被用完。",
+  auth_err_already_redeemed: "你已经兑换过这个优惠码了。",
+  auth_promo_not_applied: "账号已创建——但优惠码未能应用。你可以稍后在个人资料里兑换。",
+  taste_limit_reached: "已达免费版 100 条记录上限，升级 Pro 即可无限记录。",
 };

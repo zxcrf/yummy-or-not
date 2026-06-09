@@ -3,11 +3,11 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listTastes, createTaste } from '@/lib/db';
+import { listTastes, createTaste, countTastes } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
 import { uploadPhoto } from '@/lib/storage';
-import type { CreateTasteInput, Verdict } from '@yon/shared';
+import { FREE_TASTE_CAP, type CreateTasteInput, type Verdict } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -34,6 +34,16 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get('origin');
   const user = await getUserFromRequest(req);
   if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
+
+  // Free-tier record cap (issue #2). Pro is unlimited. Checked before parsing the
+  // body so we never upload a photo we're about to reject.
+  if (user.plan !== 'pro') {
+    const count = await countTastes(user.id);
+    if (count >= FREE_TASTE_CAP) {
+      return withCors(NextResponse.json({ error: 'taste_limit_reached' }, { status: 403 }), origin);
+    }
+  }
+
   try {
     const contentType = req.headers.get('content-type') ?? '';
 

@@ -2,7 +2,8 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { findUserByEmailWithHash, createUser } from '@/lib/db';
+import { findUserByEmailWithHash, createUser, getPromoCode, redeemPromoCode } from '@/lib/db';
+import { isPromoExpired, promoHasUsesLeft } from '@/lib/promo';
 import {
   hashPassword,
   normalizeEmail,
@@ -10,7 +11,7 @@ import {
   establishSession,
 } from '@/lib/auth';
 import { withCors, corsPreflight } from '@/lib/cors';
-import type { RegisterInput } from '@yon/shared';
+import type { RegisterInput, AuthResponse } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -19,7 +20,7 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const origin = req.headers.get('origin');
   try {
-    const { email: rawEmail, password, displayName } = (await req.json()) as RegisterInput;
+    const { email: rawEmail, password, displayName, promoCode } = (await req.json()) as RegisterInput;
     const email = normalizeEmail(rawEmail ?? '');
 
     if (!isValidEmail(email)) {
@@ -32,12 +33,47 @@ export async function POST(req: NextRequest) {
       return withCors(NextResponse.json({ error: 'email_taken' }, { status: 409 }), origin);
     }
 
-    const user = await createUser({
+    // If a promo code was supplied, validate it BEFORE creating the account so a
+    // bad code doesn't leave behind an orphaned free user (which would then make
+    // a retry fail with email_taken).
+    const wantsPromo = !!promoCode?.trim();
+    if (wantsPromo) {
+      const promo = await getPromoCode(promoCode!);
+      if (!promo) {
+        return withCors(NextResponse.json({ error: 'invalid_code' }, { status: 400 }), origin);
+      }
+      if (isPromoExpired(promo)) {
+        return withCors(NextResponse.json({ error: 'code_expired' }, { status: 400 }), origin);
+      }
+      if (!promoHasUsesLeft(promo)) {
+        return withCors(NextResponse.json({ error: 'code_exhausted' }, { status: 400 }), origin);
+      }
+    }
+
+    let user = await createUser({
       email,
       passwordHash: hashPassword(password),
       displayName: displayName?.trim() || email.split('@')[0],
     });
-    return establishSession(req, user);
+
+    // Redeem the (pre-validated) code to upgrade the fresh account. A rare race
+    // (code exhausted/expired between check and redeem) leaves the user on free
+    // — we don't block sign-up, but we DO report the failure in the response
+    // (`promo.ok=false`) so the client can tell the user and offer a retry via
+    // POST /api/promo/redeem, rather than silently dropping them to free.
+    let promo: AuthResponse['promo'];
+    if (wantsPromo) {
+      const outcome = await redeemPromoCode(user.id, promoCode!);
+      if (outcome.ok) {
+        user = outcome.user;
+        promo = { ok: true };
+      } else {
+        promo = { ok: false, error: outcome.error };
+        console.warn(`register: promo redeem for ${user.id} failed late: ${outcome.error}`);
+      }
+    }
+
+    return establishSession(req, user, promo ? { promo } : undefined);
   } catch (err) {
     console.error('POST /api/auth/register error:', err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);

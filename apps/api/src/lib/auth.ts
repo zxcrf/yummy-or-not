@@ -129,13 +129,19 @@ export async function getUserFromRequest(req: NextRequest): Promise<User | null>
 /**
  * Create a fresh server-side session for `user` and return a CORS-wrapped JSON
  * response carrying { user, token } (bearer) with the session cookie attached.
- * Used by every endpoint that signs a user in.
+ * `extra` lets a caller merge additional top-level fields into the body (e.g.
+ * register attaches the promo-redemption outcome) without changing the session
+ * mechanics. Used by every endpoint that signs a user in.
  */
-export async function establishSession(req: NextRequest, user: User): Promise<NextResponse> {
+export async function establishSession(
+  req: NextRequest,
+  user: User,
+  extra?: Record<string, unknown>
+): Promise<NextResponse> {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   await createSession(token, user.id, expiresAt, req.headers.get('user-agent') ?? '');
-  const res = NextResponse.json({ user, token });
+  const res = NextResponse.json({ user, token, ...extra });
   setSessionCookie(res, token);
   return withCors(res, req.headers.get('origin'));
 }

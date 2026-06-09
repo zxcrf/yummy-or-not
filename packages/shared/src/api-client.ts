@@ -24,6 +24,7 @@ import type {
   AuthResponse,
   RegisterInput,
   LoginInput,
+  RedeemResponse,
 } from "./types";
 
 /** React Native multipart file descriptor (no `File` in RN). */
@@ -177,6 +178,13 @@ export async function registerEmail(input: RegisterInput): Promise<AuthResponse>
 
 export async function loginEmail(input: LoginInput): Promise<AuthResponse> {
   return authPost<AuthResponse>("/api/auth/login", input);
+}
+
+/** Redeem a promo code on the signed-in account. Throws an Error whose message
+ *  is the server's code (e.g. "invalid_code", "already_redeemed") for the UI to
+ *  localize. On success returns the updated user (new plan). */
+export async function redeemPromo(code: string): Promise<RedeemResponse> {
+  return authPost<RedeemResponse>("/api/promo/redeem", { code });
 }
 
 /** Revoke the server session and clear the in-memory token. */

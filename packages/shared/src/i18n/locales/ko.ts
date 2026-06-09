@@ -38,4 +38,11 @@ export const ko: Record<string, string> = {
   auth_err_invalid_credentials: "이메일 또는 비밀번호가 올바르지 않습니다.",
   auth_err_provider_unavailable: "{p} 로그인이 아직 설정되지 않았습니다.",
   auth_err_generic: "문제가 발생했습니다. 다시 시도해 주세요.",
+  auth_promo_label: "프로모션 코드 (선택)", auth_promo_ph: "코드가 있나요? 붙여넣으세요",
+  auth_err_invalid_code: "유효하지 않은 프로모션 코드입니다.",
+  auth_err_code_expired: "만료된 프로모션 코드입니다.",
+  auth_err_code_exhausted: "이미 모두 사용된 코드입니다.",
+  auth_err_already_redeemed: "이미 사용한 코드입니다.",
+  auth_promo_not_applied: "계정이 생성되었습니다. 다만 프로모션 코드를 적용하지 못했습니다. 나중에 프로필에서 사용할 수 있습니다.",
+  taste_limit_reached: "무료 플랜의 100개 기록 한도에 도달했습니다. Pro로 업그레이드하면 무제한입니다.",
 };

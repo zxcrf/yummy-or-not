@@ -8,6 +8,13 @@
 /** The three sacred verdicts. */
 export type Verdict = "yum" | "meh" | "nah";
 
+/** Subscription tiers. "pro" is the highest tier (see issue #2 pricing). */
+export type Plan = "free" | "pro";
+
+/** Free-tier record cap (issue #2: Free ≈ 100 records). Enforced server-side
+ *  in POST /api/tastes; surfaced to the client so the UI can warn early. */
+export const FREE_TASTE_CAP = 100;
+
 /** A logged taste — one food/drink the user recorded a verdict on.
  *  Mirrors the `tastes` table (see db/schema.sql) in camelCase. */
 export interface Taste {
@@ -80,7 +87,7 @@ export interface User {
   email: string;
   avatar: string;
   locale: string;
-  plan: "free" | "pro";
+  plan: Plan;
   createdAt: string;
 }
 
@@ -96,11 +103,14 @@ export interface OtpVerifyInput {
   phone: string;
   code: string;
 }
-/** POST /api/auth/register — email sign-up (international habit). */
+/** POST /api/auth/register — email sign-up (international habit).
+ *  `promoCode` is optional: when present and valid, the new account is
+ *  upgraded to the plan the code grants (e.g. pro) on sign-up. */
 export interface RegisterInput {
   email: string;
   password: string;
   displayName?: string;
+  promoCode?: string;
 }
 /** POST /api/auth/login — email sign-in. */
 export interface LoginInput {
@@ -112,6 +122,37 @@ export interface LoginInput {
 export interface AuthResponse {
   user: User;
   token: string;
+  /** Present only when a sign-up supplied `RegisterInput.promoCode`: the outcome
+   *  of applying that code to the new account. `ok:false` means the account was
+   *  created but the code could NOT be applied (e.g. it was exhausted in a race
+   *  between validation and redemption) — the client must surface this rather
+   *  than silently leaving the user on free, and can offer a retry via
+   *  POST /api/promo/redeem. */
+  promo?: { ok: true } | { ok: false; error: RedeemError };
+}
+
+/* ----------------------------------------------------------------
+   PROMO CODES — a code grants a plan (e.g. pro) when redeemed.
+   Used two ways:
+     • at sign-up   — RegisterInput.promoCode
+     • after login  — POST /api/promo/redeem (RedeemInput)
+   ---------------------------------------------------------------- */
+
+/** POST /api/promo/redeem — redeem a code on the signed-in account. */
+export interface RedeemInput {
+  code: string;
+}
+
+/** Machine-readable failure reasons for a redemption (localized by the UI). */
+export type RedeemError =
+  | "invalid_code"
+  | "code_expired"
+  | "code_exhausted"
+  | "already_redeemed";
+
+/** POST /api/promo/redeem success → the updated account (new plan). */
+export interface RedeemResponse {
+  user: User;
 }
 
 /** Secret-free social-login availability summary (drives which buttons show). */
