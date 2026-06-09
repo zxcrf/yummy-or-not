@@ -10,7 +10,7 @@
    ============================================================ */
 
 import { useState } from 'react'
-import { KeyboardAvoidingView, Platform } from 'react-native'
+import { Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { ScrollView, Text, View } from 'tamagui'
 import {
@@ -20,7 +20,9 @@ import {
   registerEmail,
   requestOtp,
   verifyOtp,
+  type AuthResponse,
   type ProviderStatus,
+  type RedeemError,
 } from '@yon/shared'
 
 import { Button, Icon, Input, LangSwitcher } from '@/components/ds'
@@ -46,6 +48,17 @@ function errKey(code: string): string {
     already_redeemed: 'auth_err_already_redeemed',
   }
   return map[code] ?? 'auth_err_generic'
+}
+
+/**
+ * When a sign-up supplied a promo code that the server could NOT redeem (e.g. it
+ * was exhausted in the validate→redeem race), the account is still created on
+ * free. Return the error to notify the user about; null when there's nothing to
+ * surface (code applied, or no code given). The caller must act on a non-null
+ * result — silently dropping the user to free is the bug this guards against.
+ */
+export function promoNotice(res: AuthResponse): RedeemError | null {
+  return res.promo && !res.promo.ok ? res.promo.error : null
 }
 
 /** Open an OAuth start URL: in-app browser on native, navigation on web. */
@@ -319,7 +332,12 @@ function EmailForm({
     setBusy(true)
     try {
       if (mode === 'register') {
-        await registerEmail({ email, password, displayName: name, promoCode: promo.trim() || undefined })
+        const res = await registerEmail({ email, password, displayName: name, promoCode: promo.trim() || undefined })
+        // Sign-up succeeded; if the promo code couldn't be applied, tell the
+        // user (they keep the new free account and can redeem later) rather
+        // than silently landing them on free.
+        const notice = promoNotice(res)
+        if (notice) Alert.alert(t('auth_promo_not_applied'), t(errKey(notice)))
       } else {
         await loginEmail({ email, password })
       }

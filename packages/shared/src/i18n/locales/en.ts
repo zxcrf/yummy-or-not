@@ -43,5 +43,6 @@ export const en: Record<string, string> = {
   auth_err_code_expired: "That promo code has expired.",
   auth_err_code_exhausted: "That promo code has been fully used.",
   auth_err_already_redeemed: "You’ve already redeemed that code.",
+  auth_promo_not_applied: "Account created — but the promo code couldn’t be applied. You can redeem it later in your profile.",
   taste_limit_reached: "You’ve reached the free plan’s 100-taste limit. Upgrade to Pro for unlimited.",
 };

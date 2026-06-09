@@ -43,5 +43,6 @@ export const ja: Record<string, string> = {
   auth_err_code_expired: "このプロモコードは期限切れです。",
   auth_err_code_exhausted: "このプロモコードは使い切られています。",
   auth_err_already_redeemed: "このコードはすでに使用済みです。",
+  auth_promo_not_applied: "アカウントを作成しました。ただしプロモコードは適用できませんでした。後でプロフィールから引き換えできます。",
   taste_limit_reached: "無料プランの100件の上限に達しました。Proにアップグレードすると無制限です。",
 };
