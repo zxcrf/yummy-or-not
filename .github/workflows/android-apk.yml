@@ -60,17 +60,15 @@ jobs:
 
       - name: Configure Gradle properties
         run: |
-          cat >> apps/mobile/android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
-          org.gradle.caching=true
-          EOF
+          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
+            >> apps/mobile/android/gradle.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease --build-cache
+        run: ./gradlew :app:assembleRelease
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
           NODE_OPTIONS: --max-old-space-size=4096
