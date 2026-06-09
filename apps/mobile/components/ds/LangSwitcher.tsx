@@ -10,8 +10,8 @@
    ============================================================ */
 
 import { useEffect, useRef, useState } from 'react'
-import { Platform } from 'react-native'
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
+import { Dimensions, Modal, Platform, TouchableWithoutFeedback, View as RNView } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { Icon } from './Icon'
 import { quick } from './animation'
@@ -96,6 +96,7 @@ export function LangSwitcher({
 }: LangSwitcherProps) {
   const [open, setOpen] = useState(false)
   const [menuStyle, setMenuStyle] = useState<Record<string, number>>({})
+  const [nativePos, setNativePos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 })
   const triggerRef = useRef<any>(null)
   const wrapperRef = useRef<any>(null)
   const current = languages.find((l) => l.code === value) ||
@@ -110,8 +111,18 @@ export function LangSwitcher({
           ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
           : { top: rect.bottom + 4, left: rect.left }
       )
+      setOpen((o) => !o)
+    } else if (Platform.OS !== 'web') {
+      triggerRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
+        const { width: screenWidth } = Dimensions.get('window')
+        setNativePos(
+          align === 'right'
+            ? { top: y + h + 4, right: screenWidth - x - w }
+            : { top: y + h + 4, left: x }
+        )
+        setOpen(true)
+      })
     }
-    setOpen((o) => !o)
   }
 
   // Close on outside click (web only)
@@ -199,17 +210,19 @@ export function LangSwitcher({
         </Trigger>
       </View>
 
-      {/* Native: absolute positioned within wrapper */}
-      {open && Platform.OS !== 'web' ? (
-        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)}>
-          <Menu
-            top="100%"
-            marginTop="$1"
-            {...(align === 'right' ? { right: 0 } : { left: 0 })}
-          >
-            {menuItems}
-          </Menu>
-        </Animated.View>
+      {/* Native: Modal so menu floats above ScrollView and all sibling content */}
+      {Platform.OS !== 'web' && open ? (
+        <Modal transparent visible animationType="none" onRequestClose={() => setOpen(false)}>
+          <TouchableWithoutFeedback onPress={() => setOpen(false)}>
+            <RNView style={{ flex: 1 }}>
+              <Animated.View entering={FadeIn.duration(150)} style={{ position: 'absolute', ...nativePos }}>
+                <Menu position="relative">
+                  {menuItems}
+                </Menu>
+              </Animated.View>
+            </RNView>
+          </TouchableWithoutFeedback>
+        </Modal>
       ) : null}
 
       {webMenu}
