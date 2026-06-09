@@ -11,10 +11,14 @@
     "./api-client": "./src/api-client.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.7.3"
   }
 }

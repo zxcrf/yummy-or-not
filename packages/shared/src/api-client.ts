@@ -112,10 +112,11 @@ export async function createTaste(
 ): Promise<Taste> {
   if (photo) {
     const fd = new FormData();
-    // Web `File` appends directly; RN file appends as a {uri,name,type} object.
     if (isRNFile(photo)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fd.append("photo", { uri: photo.uri, name: photo.name, type: photo.type } as any);
+      // Expo 56+ fetch requires Blob/File entries — the legacy RN {uri,name,type}
+      // convention triggers "Unsupported FormDataPart implementation".
+      const blob = await fetch(photo.uri).then((r) => r.blob());
+      fd.append("photo", new File([blob], photo.name, { type: photo.type }));
     } else {
       fd.append("photo", photo);
     }
