@@ -72,12 +72,15 @@ renders and that no raw `img` element appears in the tree.
 | 层 | 地址 / 位置 | 说明 |
 |---|---|---|
 | API (Next.js) | `https://yon.baobao.click` | 自托管，baobao.click 服务器，Docker + Caddy TLS |
-| 数据库 | Neon (外部) | `DATABASE_URL` in `/etc/yum-api/.env` |
-| 对象存储 | Cloudflare R2 (外部) | S3_* 变量同上 |
+| 数据库 | `yon-pg` (PostgreSQL 17) | 自托管 Docker，`yon-net` 内部访问；宿主仅绑定 `127.0.0.1:5432` |
+| 对象存储 | Cloudflare R2 (外部) | 用户照片 bucket 私有；读取走短期 presigned URL |
+| 备份 | Cloudflare R2 `yon-db-backups` | 私有 bucket，独立 token；dump 上传前应客户端加密 |
 | Docker 镜像 | `ghcr.io/zxcrf/yum-api:latest` | GHA (`docker-api.yml`) push main 自动构建 |
 | Web SPA | `https://yon.baobao.click/web` | 嵌入 Next.js public/，同一容器服务 |
 
 **更新 API 流程**：push main → GHA 构建推镜像 → 服务器 `docker pull ghcr.io/zxcrf/yum-api:latest && docker restart yum-api`。
+
+**生产安全边界**：公网入口应只有 Caddy HTTPS 和 SSH。Postgres 不公网暴露；`DATABASE_URL`、`pg.env`、R2 tokens 均在服务器 `/etc/yum-api/*`，mode 600。SSH 是主要高风险入口，必须 key-only、禁用密码登录，并配合防火墙/fail2ban。
 
 **⚠️ EXPO_PUBLIC_API_URL 烧入构建**：`eas.json` 所有 profile 已指向 `https://yon.baobao.click`。
 修改 API host → 必须重新构建 APK/AAB，否则旧包仍打旧地址。

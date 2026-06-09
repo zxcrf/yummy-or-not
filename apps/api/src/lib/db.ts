@@ -1,5 +1,6 @@
 // DB client singleton + typed query helpers for Yummy or Not.
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
+import { createHash } from 'crypto';
 import { Pool } from 'pg';
 import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
@@ -24,6 +25,10 @@ function getPool(): Pool {
 }
 
 const pool = getPool();
+
+function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -414,8 +419,9 @@ export async function createSession(
   userAgent = ''
 ): Promise<void> {
   await pool.query(
-    'INSERT INTO sessions (token, user_id, expires_at, user_agent) VALUES ($1, $2, $3, $4)',
-    [token, userId, expiresAt, userAgent]
+    `INSERT INTO sessions (token_hash, user_id, expires_at, user_agent)
+     VALUES ($1, $2, $3, $4)`,
+    [hashSessionToken(token), userId, expiresAt, userAgent]
   );
 }
 
@@ -424,14 +430,51 @@ export async function getSessionUser(token: string): Promise<User | null> {
   const { rows } = await pool.query(
     `SELECT u.* FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token = $1 AND s.expires_at > now()`,
-    [token]
+      WHERE (s.token_hash = $1 OR s.token = $2) AND s.expires_at > now()
+      ORDER BY s.created_at DESC
+      LIMIT 1`,
+    [hashSessionToken(token), token]
   );
   return rows.length ? rowToUser(rows[0]) : null;
 }
 
 export async function deleteSession(token: string): Promise<void> {
-  await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+  await pool.query('DELETE FROM sessions WHERE token_hash = $1 OR token = $2', [
+    hashSessionToken(token),
+    token,
+  ]);
+}
+
+// ── Rate limiting ────────────────────────────────────────────────────────────
+
+export async function hitRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ limited: boolean; retryAfterSeconds: number }> {
+  const resetAt = new Date(Date.now() + windowMs);
+  const { rows } = await pool.query(
+    `INSERT INTO rate_limits (key, count, reset_at)
+     VALUES ($1, 1, $2)
+     ON CONFLICT (key) DO UPDATE SET
+       count = CASE
+         WHEN rate_limits.reset_at <= now() THEN 1
+         ELSE rate_limits.count + 1
+       END,
+       reset_at = CASE
+         WHEN rate_limits.reset_at <= now() THEN EXCLUDED.reset_at
+         ELSE rate_limits.reset_at
+       END,
+       updated_at = now()
+     RETURNING count, reset_at`,
+    [key, resetAt]
+  );
+  const row = rows[0];
+  const retryAfterSeconds = Math.max(
+    1,
+    Math.ceil((new Date(row.reset_at).getTime() - Date.now()) / 1000)
+  );
+  return { limited: Number(row.count) > limit, retryAfterSeconds };
 }
 
 // ── One-time codes (phone OTP) ───────────────────────────────────────────────
