@@ -69,6 +69,7 @@ Report: "Already up to date (digest `<sha256 short>`). No restart needed." and s
 ssh ubuntu@baobao.click "docker stop yum-api && docker rm yum-api && docker run -d \
   --name yum-api \
   --restart unless-stopped \
+  --network yon-net \
   -p 127.0.0.1:3100:3000 \
   --env-file /etc/yum-api/.env \
   ghcr.io/zxcrf/yum-api:latest"
@@ -116,3 +117,8 @@ Report final summary:
 - **health check fails**: run `ssh ubuntu@baobao.click "docker logs yum-api --tail=50"` to diagnose.
   Roll back with: `ssh ubuntu@baobao.click "docker stop yum-api && docker rm yum-api && docker run -d --name yum-api --restart unless-stopped -p 127.0.0.1:3100:3000 --env-file /etc/yum-api/.env ghcr.io/zxcrf/yum-api:<previous-sha-tag>"`
 - **CI gate fails (no matching headSha)**: check `gh run list --workflow=docker-api.yml --limit=5` to see build status.
+- **API up but DB calls fail (`ENOTFOUND yon-pg`)**: yum-api not on `yon-net`, OR `DATABASE_URL` has literal quotes. See `docs/ops/infra.md`.
+
+## Related docs
+
+Database, R2 buckets, backup, env vars, restore procedures → `docs/ops/infra.md`.
