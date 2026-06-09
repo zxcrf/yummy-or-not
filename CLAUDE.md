@@ -1,5 +1,11 @@
 # Yummy or Not — repo conventions
 
+## ⛔ main 分支保护
+
+**未经用户书面同意，禁止在 `main` 分支上做任何修改**（包括直接 commit、push、force-push、merge、rebase、cherry-pick）。
+
+所有变更必须通过 feature/fix 分支 + PR 流程进行。违反此规则视为高危操作，必须立即停止并告知用户。
+
 ## Unit tests are required for user-level feedback
 
 Any fix that addresses **user-level feedback** (a bug report, crash, or
