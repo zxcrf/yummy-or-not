@@ -61,6 +61,16 @@ export function promoNotice(res: AuthResponse): RedeemError | null {
   return res.promo && !res.promo.ok ? res.promo.error : null
 }
 
+/**
+ * Surface a failed sign-up promo to the user via an Alert; no-op when the code
+ * applied or none was supplied. Split out from submit() so the side effect (the
+ * Alert call + message wiring) is unit-testable, not just the decision.
+ */
+export function notifyPromo(res: AuthResponse, t: (k: string) => string): void {
+  const notice = promoNotice(res)
+  if (notice) Alert.alert(t('auth_promo_not_applied'), t(errKey(notice)))
+}
+
 /** Open an OAuth start URL: in-app browser on native, navigation on web. */
 function openOAuth(url: string): void {
   if (Platform.OS === 'web') {
@@ -336,8 +346,7 @@ function EmailForm({
         // Sign-up succeeded; if the promo code couldn't be applied, tell the
         // user (they keep the new free account and can redeem later) rather
         // than silently landing them on free.
-        const notice = promoNotice(res)
-        if (notice) Alert.alert(t('auth_promo_not_applied'), t(errKey(notice)))
+        notifyPromo(res, t)
       } else {
         await loginEmail({ email, password })
       }

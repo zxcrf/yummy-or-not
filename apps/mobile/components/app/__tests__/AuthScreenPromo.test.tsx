@@ -13,8 +13,9 @@
    swallowed.
    ============================================================ */
 
+import { Alert } from 'react-native'
 import type { AuthResponse } from '@yon/shared'
-import { promoNotice } from '../AuthScreen'
+import { promoNotice, notifyPromo } from '../AuthScreen'
 
 const base: AuthResponse = {
   user: {
@@ -42,5 +43,34 @@ describe('promoNotice', () => {
 
   it('returns null for a plain sign-up with no promo code', () => {
     expect(promoNotice(base)).toBeNull()
+  })
+})
+
+describe('notifyPromo (the side effect submit() runs)', () => {
+  const t = (k: string) => k // identity: assert on i18n keys
+
+  let alertSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    alertSpy.mockRestore()
+  })
+
+  it('alerts with the not-applied message + the specific reason when the promo failed', () => {
+    notifyPromo({ ...base, promo: { ok: false, error: 'code_exhausted' } }, t)
+    expect(alertSpy).toHaveBeenCalledTimes(1)
+    expect(alertSpy).toHaveBeenCalledWith('auth_promo_not_applied', 'auth_err_code_exhausted')
+  })
+
+  it('does NOT alert when the promo was applied', () => {
+    notifyPromo({ ...base, promo: { ok: true } }, t)
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  it('does NOT alert for a plain sign-up with no promo code', () => {
+    notifyPromo(base, t)
+    expect(alertSpy).not.toHaveBeenCalled()
   })
 })
