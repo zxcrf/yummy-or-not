@@ -65,11 +65,9 @@ it('preserves filename on the Blob entry', async () => {
 
   const fd = lastFetchArgs!.init?.body as FormData;
   const photoEntry = fd.get('photo');
-  // File extends Blob — if appended with a filename, it should be a File
-  expect(photoEntry).toBeInstanceOf(Blob);
-  if (photoEntry instanceof File) {
-    expect(photoEntry.name).toBe('yummy.jpg');
-  }
+  expect(photoEntry).toBeInstanceOf(File);
+  expect((photoEntry as File).name).toBe('yummy.jpg');
+  expect((photoEntry as File).type).toBe('image/jpeg');
 });
 
 it('still appends text fields correctly', async () => {

@@ -116,7 +116,7 @@ export async function createTaste(
       // Expo 56+ fetch requires Blob/File entries — the legacy RN {uri,name,type}
       // convention triggers "Unsupported FormDataPart implementation".
       const blob = await fetch(photo.uri).then((r) => r.blob());
-      fd.append("photo", blob, photo.name);
+      fd.append("photo", new File([blob], photo.name, { type: photo.type }));
     } else {
       fd.append("photo", photo);
     }
