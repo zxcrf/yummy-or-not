@@ -5,7 +5,17 @@
    that slides 1 → 27px. Controlled via `checked` + `onChange`.
    ============================================================ */
 
+import { useEffect } from 'react'
 import { type GetProps, styled, View } from 'tamagui'
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated'
+
+const KNOB_OFF = 1
+const KNOB_ON = 27
+const SPRING = { damping: 15, stiffness: 200 }
 
 const Track = styled(View, {
   name: 'Switch',
@@ -29,35 +39,23 @@ const Track = styled(View, {
   } as const,
 })
 
-const Knob = styled(View, {
-  name: 'SwitchKnob',
-  position: 'absolute',
-  top: 1,
-  width: 22,
-  height: 22,
-  backgroundColor: '$white',
-  borderWidth: 2,
-  borderColor: '$ink900',
-  borderRadius: '$pill',
-
-  variants: {
-    checked: {
-      true: { left: 27 },
-      false: { left: 1 },
-    },
-  } as const,
-})
-
 export type SwitchProps = Omit<GetProps<typeof Track>, 'checked' | 'onChange'> & {
-  /** On/off state (controlled). */
   checked?: boolean
-  /** Called with the next boolean when toggled. */
   onChange?: (next: boolean) => void
   disabled?: boolean
 }
 
-/** Pixel toggle switch; green when on. */
 export function Switch({ checked = false, onChange, disabled = false, ...rest }: SwitchProps) {
+  const knobX = useSharedValue(checked ? KNOB_ON : KNOB_OFF)
+
+  useEffect(() => {
+    knobX.value = withSpring(checked ? KNOB_ON : KNOB_OFF, SPRING)
+  }, [checked, knobX])
+
+  const knobStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: knobX.value }],
+  }))
+
   return (
     <Track
       checked={checked}
@@ -69,7 +67,22 @@ export function Switch({ checked = false, onChange, disabled = false, ...rest }:
       }}
       {...rest}
     >
-      <Knob checked={checked} />
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 1,
+            left: 0,
+            width: 22,
+            height: 22,
+            backgroundColor: '#ffffff',
+            borderWidth: 2,
+            borderColor: '#191017',
+            borderRadius: 999,
+          },
+          knobStyle,
+        ]}
+      />
     </Track>
   )
 }

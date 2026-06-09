@@ -7,6 +7,7 @@
    ============================================================ */
 
 import { type GetProps, View, styled, Text } from 'tamagui'
+import { bouncy } from './animation'
 import type { Verdict } from '@yon/shared'
 
 const OPTS: { key: Verdict; face: string; label: string }[] = [
@@ -29,6 +30,9 @@ const Opt = styled(View, {
   borderRadius: '$md',
   backgroundColor: '$white',
   cursor: 'pointer',
+  pressStyle: {
+    scale: 0.95,
+  },
   shadowColor: '$ink900',
   shadowOffset: { width: 0, height: 0 },
   shadowOpacity: 0,
@@ -79,6 +83,7 @@ export function VerdictPicker({ value, onChange, labels, ...rest }: VerdictPicke
         return (
           <Opt
             key={o.key}
+            {...bouncy}
             selected={on ? o.key : 'none'}
             accessibilityRole="radio"
             aria-checked={on}

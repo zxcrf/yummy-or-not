@@ -16,6 +16,7 @@
 
 import { useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform } from 'react-native'
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { ScrollView, Text, View } from 'tamagui'
@@ -154,7 +155,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const ready = !!name && !!verdict
 
   const handleSave = async () => {
-    if (!ready || !verdict) return
+    if (!ready || !verdict || saving) return
     setSaving(true)
     setError(null)
     try {
@@ -329,9 +330,11 @@ export default function AddModal({ onClose, onSaved }: Props) {
         />
 
         {error ? (
-          <Text color="$verdictNah2" fontSize={14}>
-            {error}
-          </Text>
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
+            <Text color="$verdictNah2" fontSize={14}>
+              {error}
+            </Text>
+          </Animated.View>
         ) : null}
 
         {/* actions */}

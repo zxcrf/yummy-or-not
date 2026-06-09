@@ -19,6 +19,7 @@ module.exports = {
     // non-UI logic or exported constants.
     '^tamagui$': '<rootDir>/__mocks__/tamagui.js',
     '^@tamagui/(.*)$': '<rootDir>/__mocks__/tamagui.js',
+    '^react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.js',
   },
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
 }

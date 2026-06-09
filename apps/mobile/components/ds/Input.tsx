@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { Platform, TextInput as RNTextInput, type TextInputProps } from 'react-native'
 import { Input as TInput, type GetProps, styled, Text, View } from 'tamagui'
+import { quick } from './animation'
 
 // Exported for testing: '#191017' must be a concrete hex, not a Tamagui token ($ink900
 // doesn't reach Android TextInput's text color — typed characters become invisible).
@@ -126,7 +127,7 @@ export function Input({ label, hint, error, secureTextEntry, ...rest }: InputPro
           {...(rest as unknown as TextInputProps)}
         />
       ) : (
-        <Field error={!!error} {...passwordProps} {...rest} />
+        <Field {...quick} error={!!error} {...passwordProps} {...rest} />
       )}
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>

@@ -16,14 +16,21 @@
    clears the sidebar gutter.
    ============================================================ */
 
-import { type ComponentProps } from 'react'
+import { type ComponentProps, useCallback, useEffect, useRef } from 'react'
+import { Pressable, type View as RNView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated'
 import { Text, View, useMedia } from 'tamagui'
 import { LANGS } from '@yon/shared'
 
-import { Tabs } from 'expo-router'
+import { router, Tabs } from 'expo-router'
 import { Avatar, Button, Icon, LangSwitcher } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
+import { useAddTransition } from '@/providers/AddTransitionProvider'
 
 // The render-prop param type, derived from <Tabs> so we never depend on a
 // deep @react-navigation internal path.
@@ -31,8 +38,6 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>
 
 // Width of the desktop sidebar — matches the web AppShell aside (236px).
 const SIDEBAR_W = 236
-// The "add" route is presented as a FAB / CTA, never as a plain nav item.
-const ADD_ROUTE = 'add'
 
 interface NavMeta {
   /** route name as registered in (tabs)/_layout */
@@ -76,6 +81,7 @@ function Sidebar({ props }: { props: TabBarProps }) {
   const { t, lang, setLang } = useI18n()
   const { activeRoute, go } = useNav(props)
   const insets = useSafeAreaInsets()
+  const { fabLayout } = useAddTransition()
   const showGlobalLangSwitcher = activeRoute !== 'you'
 
   return (
@@ -155,7 +161,7 @@ function Sidebar({ props }: { props: TabBarProps }) {
       <Button
         variant="primary"
         block
-        onPress={() => go(ADD_ROUTE)}
+        onPress={() => { fabLayout.value = null; router.push('/add') }}
         iconLeft={<Icon name="plus" size={18} color="#fff" />}
       >
         {t('log_taste')}
@@ -187,6 +193,132 @@ function Sidebar({ props }: { props: TabBarProps }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Animated tab icon (scale bounce on active change)                   */
+/* ------------------------------------------------------------------ */
+const TAB_SPRING = { damping: 12, stiffness: 180 }
+
+function AnimatedTab({
+  active,
+  icon,
+  label,
+  onPress,
+}: {
+  active: boolean
+  icon: string
+  label: string
+  onPress: () => void
+}) {
+  const scale = useSharedValue(1)
+
+  useEffect(() => {
+    if (active) {
+      scale.value = withSpring(1.18, TAB_SPRING)
+    } else {
+      scale.value = withSpring(1, TAB_SPRING)
+    }
+  }, [active, scale])
+
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }))
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{ flex: 1, alignItems: 'center', gap: 3, paddingVertical: 6 }}
+    >
+      <Animated.View style={iconStyle}>
+        <Icon name={icon} size={24} color={active ? '#ff5da2' : '#9a8e96'} />
+      </Animated.View>
+      <Text
+        fontSize={9}
+        letterSpacing={0.5}
+        textTransform="uppercase"
+        color={active ? '$candyPink' : '$ink400'}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Animated FAB (press scale)                                          */
+/* ------------------------------------------------------------------ */
+const FAB_SPRING = { damping: 10, stiffness: 250 }
+
+function AnimatedFab({ label }: { label: string }) {
+  const scale = useSharedValue(1)
+  const fabRef = useRef<Animated.View & RNView>(null)
+  const inflight = useRef(false)
+  const { fabLayout } = useAddTransition()
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }))
+
+  const navigate = useCallback(() => {
+    if (inflight.current) return
+    inflight.current = true
+    setTimeout(() => { inflight.current = false }, 600)
+    router.push('/add')
+  }, [])
+
+  const handlePress = useCallback(() => {
+    if (inflight.current) return
+    if (!fabRef.current) {
+      navigate()
+      return
+    }
+    fabRef.current.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        fabLayout.value = { x, y, width, height }
+      }
+      navigate()
+    })
+  }, [fabLayout, navigate])
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPressIn={() => {
+        scale.value = withSpring(0.85, FAB_SPRING)
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, FAB_SPRING)
+      }}
+      onPress={handlePress}
+    >
+      <Animated.View
+        ref={fabRef}
+        style={[
+          {
+            width: 58,
+            height: 58,
+            marginTop: -34,
+            borderRadius: 999,
+            backgroundColor: '#ff2e88',
+            borderWidth: 3,
+            borderColor: '#191017',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#191017',
+            shadowOffset: { width: 5, height: 5 },
+            shadowOpacity: 1,
+            shadowRadius: 0,
+          },
+          style,
+        ]}
+      >
+        <Icon name="plus" size={28} color="#fff" />
+      </Animated.View>
+    </Pressable>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  TabBar (narrow / mobile)                                           */
 /* ------------------------------------------------------------------ */
 function TabBar({ props }: { props: TabBarProps }) {
@@ -194,31 +326,15 @@ function TabBar({ props }: { props: TabBarProps }) {
   const { activeRoute, go } = useNav(props)
   const insets = useSafeAreaInsets()
 
-  const tab = (n: NavMeta) => {
-    const on = activeRoute === n.route
-    return (
-      <View
-        key={n.route}
-        accessibilityRole="button"
-        onPress={() => go(n.route)}
-        flex={1}
-        alignItems="center"
-        gap={3}
-        paddingVertical={6}
-        cursor="pointer"
-      >
-        <Icon name={n.icon} size={24} color={on ? '#ff5da2' : '#9a8e96'} />
-        <Text
-          fontSize={9}
-          letterSpacing={0.5}
-          textTransform="uppercase"
-          color={on ? '$candyPink' : '$ink400'}
-        >
-          {t(n.labelKey)}
-        </Text>
-      </View>
-    )
-  }
+  const tab = (n: NavMeta) => (
+    <AnimatedTab
+      key={n.route}
+      active={activeRoute === n.route}
+      icon={n.icon}
+      label={t(n.labelKey)}
+      onPress={() => go(n.route)}
+    />
+  )
 
   return (
     <View
@@ -237,27 +353,7 @@ function TabBar({ props }: { props: TabBarProps }) {
 
       {/* center FAB → add route */}
       <View flex={1} alignItems="center" justifyContent="center">
-        <View
-          accessibilityRole="button"
-          aria-label={t('log_taste')}
-          onPress={() => go(ADD_ROUTE)}
-          width={58}
-          height={58}
-          marginTop={-34}
-          borderRadius="$pill"
-          backgroundColor="$candyPink"
-          borderWidth={3}
-          borderColor="$ink900"
-          alignItems="center"
-          justifyContent="center"
-          cursor="pointer"
-          shadowColor="$ink900"
-          shadowOffset={{ width: 5, height: 5 }}
-          shadowOpacity={1}
-          shadowRadius={0}
-        >
-          <Icon name="plus" size={28} color="#fff" />
-        </View>
+        <AnimatedFab label={t('log_taste')} />
       </View>
 
       {tab(NAV[2])}

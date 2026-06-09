@@ -6,6 +6,15 @@
    ============================================================ */
 
 import { createFont, createTamagui, createTokens } from 'tamagui'
+import { createAnimations } from '@tamagui/animations-react-native'
+
+const animations = createAnimations({
+  bouncy: { type: 'spring', damping: 9, stiffness: 150, mass: 0.9 },
+  quick: { type: 'spring', damping: 20, stiffness: 250 },
+  lazy: { type: 'spring', damping: 15, stiffness: 100 },
+  '100ms': { type: 'timing', duration: 100 },
+  '200ms': { type: 'timing', duration: 200 },
+})
 
 /* ---------- Raw palette (mirrors tokens/colors.css) ---------- */
 const palette = {
@@ -275,6 +284,7 @@ const verdictNahTheme = {
 }
 
 const config = createTamagui({
+  animations,
   fonts: {
     heading: displayFont,
     body: bodyFont,

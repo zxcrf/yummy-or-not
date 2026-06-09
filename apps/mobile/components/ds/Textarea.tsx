@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { Platform, TextInput as RNTextInput, type TextInputProps } from 'react-native'
 import { type GetProps, styled, TextArea as TTextArea, Text, View } from 'tamagui'
+import { quick } from './animation'
 
 const Field = styled(TTextArea, {
   name: 'Textarea',
@@ -114,7 +115,7 @@ export function Textarea({ label, hint, error, ...rest }: TextareaProps) {
       {Platform.OS === 'android' ? (
         <AndroidField error={!!error} {...(rest as unknown as TextInputProps)} />
       ) : (
-        <Field error={!!error} {...rest} />
+        <Field {...quick} error={!!error} {...rest} />
       )}
       {error || hint ? (
         <Text fontSize={12} color={error ? '$verdictNah2' : '$ink500'}>
