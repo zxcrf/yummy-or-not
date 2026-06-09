@@ -16,6 +16,7 @@
 
 import { useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
@@ -88,6 +89,7 @@ async function compressAsset(asset: ImagePicker.ImagePickerAsset): Promise<Photo
 
 export default function AddModal({ onClose, onSaved }: Props) {
   const { t } = useI18n()
+  const insets = useSafeAreaInsets()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [name, setName] = useState('')
@@ -189,7 +191,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
         alignItems="center"
         justifyContent="space-between"
         paddingHorizontal="$5"
-        paddingVertical="$4"
+        paddingTop={insets.top + 16}
+        paddingBottom="$4"
         borderBottomWidth={3}
         borderBottomColor="$ink900"
       >
@@ -304,17 +307,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 </Tag>
               ))}
           </View>
-          <View flexDirection="row" alignItems="flex-end" gap="$2">
+          <View flexDirection="row" alignItems="center" gap="$2">
             <View flex={1}>
               <Input
-                placeholder={t('tag_placeholder')}
+                placeholder={t('add_tag')}
                 value={customTag}
                 onChangeText={setCustomTag}
                 onSubmitEditing={addCustomTag}
                 returnKeyType="done"
               />
             </View>
-            <Button variant="secondary" size="sm" onPress={addCustomTag}>
+            <Button variant="secondary" size="md" onPress={addCustomTag}>
               {t('add_tag')}
             </Button>
           </View>
