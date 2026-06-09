@@ -28,7 +28,7 @@ jest.mock('@/providers/I18nProvider', () => ({
       auth_signout: 'Sign out',
       meh: 'Meh',
       nah: 'Nah',
-      pro_plan: 'Pro plan',
+      pro_plan: 'Pro',
       saved_amt: `${vars?.amt} saved`,
       saved_sub: 'by skipping repeat nah buys',
       set_location: 'Location reminders',
