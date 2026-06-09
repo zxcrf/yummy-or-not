@@ -22,6 +22,7 @@ import { TamaguiProvider, Theme } from 'tamagui'
 
 import AppGate from '@/components/app/AppGate'
 import { fontMapForLocale } from '@/constants/fonts'
+import { AddTransitionProvider } from '@/providers/AddTransitionProvider'
 import { AuthProvider } from '@/providers/AuthProvider'
 import { I18nProvider } from '@/providers/I18nProvider'
 import { tamaguiConfig } from '../tamagui.config'
@@ -69,22 +70,32 @@ export default function RootLayout() {
             <AuthProvider>
               <StatusBar style="dark" />
               <AppGate>
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: '#fff6e6' },
-                  }}
-                >
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen
-                    name="taste/[id]"
-                    options={{
-                      // Detail opens as a card over the tabs (drawer-equivalent).
-                      presentation: 'card',
+                <AddTransitionProvider>
+                  <Stack
+                    screenOptions={{
                       headerShown: false,
+                      contentStyle: { backgroundColor: '#fff6e6' },
                     }}
-                  />
-                </Stack>
+                  >
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="add"
+                      options={{
+                        presentation: 'transparentModal',
+                        headerShown: false,
+                        animation: 'none',
+                        contentStyle: { backgroundColor: 'transparent' },
+                      }}
+                    />
+                    <Stack.Screen
+                      name="taste/[id]"
+                      options={{
+                        presentation: 'card',
+                        headerShown: false,
+                      }}
+                    />
+                  </Stack>
+                </AddTransitionProvider>
               </AppGate>
             </AuthProvider>
           </I18nProvider>

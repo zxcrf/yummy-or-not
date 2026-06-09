@@ -8,6 +8,7 @@
 
 import { Image } from 'react-native'
 import { type GetProps, View, styled, Text } from 'tamagui'
+import { quick } from './animation'
 import type { Verdict } from '@yon/shared'
 import { VerdictStamp } from './VerdictStamp'
 import { Tag } from './Tag'
@@ -26,7 +27,14 @@ const CardFrame = styled(View, {
 
   variants: {
     interactive: {
-      true: { cursor: 'pointer' },
+      true: {
+        cursor: 'pointer',
+        animation: 'quick',
+        pressStyle: {
+          scale: 0.98,
+          shadowOffset: { width: 3, height: 3 },
+        },
+      },
     },
   } as const,
 })
@@ -98,7 +106,7 @@ export function FoodCard({
   const normalizedTags = normalizeTags(tags)
 
   return (
-    <CardFrame interactive={!!onPress} onPress={onPress} {...rest}>
+    <CardFrame {...(onPress ? quick : {})} interactive={!!onPress} onPress={onPress} {...rest}>
       {/* media */}
       <View position="relative" backgroundColor="$paper2" aspectRatio={4 / 3}>
         {image ? (

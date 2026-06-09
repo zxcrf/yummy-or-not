@@ -17,10 +17,6 @@ const mockLangSwitcher = jest.fn((props: Record<string, unknown>) =>
   React.createElement('LangSwitcherMock', props),
 )
 
-jest.mock('expo-router', () => ({
-  Tabs: () => null,
-}))
-
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
@@ -55,6 +51,15 @@ jest.mock('@/providers/I18nProvider', () => ({
   }),
 }))
 
+jest.mock('expo-router', () => ({
+  Tabs: () => null,
+  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
+}))
+
+jest.mock('@/providers/AddTransitionProvider', () => ({
+  useAddTransition: () => ({ fabLayout: { value: null } }),
+}))
+
 jest.mock('@/components/ds', () => {
   const React = require('react')
   return {
@@ -69,7 +74,6 @@ jest.mock('@/components/ds', () => {
 const routes = [
   { name: 'index', key: 'index-key' },
   { name: 'recall', key: 'recall-key' },
-  { name: 'add', key: 'add-key' },
   { name: 'stats', key: 'stats-key' },
   { name: 'you', key: 'you-key' },
 ]

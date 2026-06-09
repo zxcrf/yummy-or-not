@@ -11,8 +11,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Platform } from 'react-native'
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { Icon } from './Icon'
+import { quick } from './animation'
 
 export interface LangEntry {
   code: string
@@ -39,6 +41,10 @@ const Trigger = styled(View, {
   borderColor: '$ink900',
   borderRadius: '$pill',
   cursor: 'pointer',
+  pressStyle: {
+    scale: 0.95,
+    opacity: 0.85,
+  },
 })
 
 const Menu = styled(View, {
@@ -165,6 +171,7 @@ export function LangSwitcher({
     <View ref={wrapperRef} position="relative" alignSelf="flex-start" {...rest}>
       <View ref={triggerRef}>
         <Trigger
+          {...quick}
           backgroundColor={triggerMode === 'flag' ? '$white' : tone}
           accessibilityRole="button"
           aria-label={current.label || current.native}
@@ -194,13 +201,15 @@ export function LangSwitcher({
 
       {/* Native: absolute positioned within wrapper */}
       {open && Platform.OS !== 'web' ? (
-        <Menu
-          top="100%"
-          marginTop="$1"
-          {...(align === 'right' ? { right: 0 } : { left: 0 })}
-        >
-          {menuItems}
-        </Menu>
+        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)}>
+          <Menu
+            top="100%"
+            marginTop="$1"
+            {...(align === 'right' ? { right: 0 } : { left: 0 })}
+          >
+            {menuItems}
+          </Menu>
+        </Animated.View>
       ) : null}
 
       {webMenu}

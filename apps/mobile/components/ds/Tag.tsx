@@ -6,6 +6,7 @@
    ============================================================ */
 
 import { type GetProps, View, styled, Text } from 'tamagui'
+import { quick } from './animation'
 
 const Chip = styled(View, {
   name: 'Tag',
@@ -19,6 +20,11 @@ const Chip = styled(View, {
   borderColor: '$ink900',
   borderRadius: '$pill',
   backgroundColor: '$paper2',
+
+  pressStyle: {
+    scale: 0.92,
+    opacity: 0.85,
+  },
 
   variants: {
     active: {
@@ -47,6 +53,7 @@ export function Tag({ active = false, onRemove, onPress, children, ...rest }: Ta
 
   return (
     <Chip
+      {...(clickable ? quick : {})}
       active={active}
       clickable={clickable}
       onPress={onPress}

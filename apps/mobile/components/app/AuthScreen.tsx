@@ -10,7 +10,16 @@
    ============================================================ */
 
 import { useState } from 'react'
-import { Alert, KeyboardAvoidingView, Platform } from 'react-native'
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet } from 'react-native'
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated'
+
+const ReanimatedAnimatedView = Animated.View
 import * as WebBrowser from 'expo-web-browser'
 import { ScrollView, Text, View } from 'tamagui'
 import {
@@ -175,19 +184,21 @@ export default function AuthScreen() {
             )}
 
             {error ? (
-              <View
-                marginTop={14}
-                paddingVertical={10}
-                paddingHorizontal={12}
-                borderRadius="$md"
-                backgroundColor="$verdictNah"
-                borderWidth={3}
-                borderColor="$ink900"
-              >
-                <Text color="#fff" fontSize={13} fontWeight="600">
-                  {error}
-                </Text>
-              </View>
+              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
+                <View
+                  marginTop={14}
+                  paddingVertical={10}
+                  paddingHorizontal={12}
+                  borderRadius="$md"
+                  backgroundColor="$verdictNah"
+                  borderWidth={3}
+                  borderColor="$ink900"
+                >
+                  <Text color="#fff" fontSize={13} fontWeight="600">
+                    {error}
+                  </Text>
+                </View>
+              </Animated.View>
             ) : null}
 
             {/* social logins */}
@@ -204,7 +215,7 @@ export default function AuthScreen() {
   )
 }
 
-/* ── tab ─────────────────────────────────────────────────────────────────── */
+/* ── tab (Material State Layer: translucent overlay, no scale/dim) ────── */
 function MethodTab({
   active,
   onPress,
@@ -214,21 +225,37 @@ function MethodTab({
   onPress: () => void
   label: string
 }) {
+  const pressed = useSharedValue(0)
+
+  const stateLayerStyle = useAnimatedStyle(() => ({
+    opacity: pressed.value,
+  }))
+
   return (
-    <View
-      flex={1}
-      paddingVertical={9}
-      borderRadius="$sm"
-      alignItems="center"
-      backgroundColor={active ? '$candyYellow' : 'transparent'}
-      cursor="pointer"
+    <Pressable
       accessibilityRole="button"
+      onPressIn={() => { pressed.value = withTiming(0.12, { duration: 80 }) }}
+      onPressOut={() => { pressed.value = withTiming(0, { duration: 120 }) }}
       onPress={onPress}
+      style={{ flex: 1 }}
     >
-      <Text fontWeight="700" fontSize={14} color="$ink900">
-        {label}
-      </Text>
-    </View>
+      <View
+        paddingVertical={9}
+        borderRadius="$sm"
+        alignItems="center"
+        backgroundColor={active ? '$candyYellow' : 'transparent'}
+        overflow="hidden"
+        position="relative"
+      >
+        <ReanimatedAnimatedView
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: '#191017', borderRadius: 6 }, stateLayerStyle]}
+        />
+        <Text fontWeight="700" fontSize={14} color="$ink900">
+          {label}
+        </Text>
+      </View>
+    </Pressable>
   )
 }
 

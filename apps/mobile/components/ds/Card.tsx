@@ -6,6 +6,7 @@
    ============================================================ */
 
 import { type GetProps, styled, View } from 'tamagui'
+import { quick } from './animation'
 
 const Frame = styled(View, {
   name: 'Card',
@@ -81,7 +82,7 @@ export function Card({
   ...rest
 }: CardProps) {
   return (
-    <Frame variant={variant} padded={padded} interactive={interactive} {...rest}>
+    <Frame {...(interactive ? quick : {})} variant={variant} padded={padded} interactive={interactive} {...rest}>
       {children}
     </Frame>
   )

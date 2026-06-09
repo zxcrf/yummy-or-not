@@ -6,6 +6,7 @@
    ============================================================ */
 
 import { type GetProps, styled, Text, View } from 'tamagui'
+import { bouncy } from './animation'
 
 const Frame = styled(View, {
   name: 'Button',
@@ -106,6 +107,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <Frame
+      {...bouncy}
       variant={variant}
       size={size}
       block={block}
