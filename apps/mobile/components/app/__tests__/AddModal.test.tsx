@@ -7,9 +7,11 @@
      same label when permission failed.
    - Tags could only be picked from the canned list.
 
+   - On Android the sticky header title sat under the status bar.
+
    These tests pin the intended behavior: one visible photo entry point,
-   a real permission error message, and custom tags included in the
-   createTaste payload.
+   a real permission error message, custom tags included in the createTaste
+   payload, and a header inset below the safe-area (status bar).
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
@@ -19,6 +21,13 @@ import AddModal from '../AddModal'
 const mockCreateTaste = jest.fn()
 const mockLaunchImageLibraryAsync = jest.fn()
 const mockRequestMediaLibraryPermissionsAsync = jest.fn()
+
+// Non-zero top inset so the status-bar regression below is meaningful.
+const mockSafeAreaTop = 47
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: mockSafeAreaTop, bottom: 0, left: 0, right: 0 }),
+}))
 
 jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: (...args: unknown[]) =>
@@ -108,6 +117,17 @@ describe('AddModal', () => {
     expect(textNodes(renderer, 'Add a photo')).toHaveLength(1)
   })
 
+  it('insets the sticky header below the status bar so the title is not overlapped', () => {
+    const renderer = renderAddModal()
+
+    // The sticky header is the only node carrying a 3px bottom border.
+    const headers = renderer.root.findAllByProps({ borderBottomWidth: 3 })
+    expect(headers.length).toBeGreaterThan(0)
+    // Regression: header top padding must clear the safe-area top inset
+    // (status bar). The old code used a fixed paddingVertical and overlapped.
+    expect(headers.some((n) => n.props.paddingTop === mockSafeAreaTop + 16)).toBe(true)
+  })
+
   it('shows a real permission error instead of another Add a photo label', async () => {
     mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: false })
     const renderer = renderAddModal()
@@ -131,7 +151,7 @@ describe('AddModal', () => {
     })
 
     const nameField = renderer.root.findByProps({ placeholder: 'Brown sugar boba' })
-    const tagField = renderer.root.findByProps({ placeholder: 'New tag' })
+    const tagField = renderer.root.findByProps({ placeholder: 'Add tag' })
     const addTagButton = pressableByText(renderer, 'Add tag')
     const yumOption = pressableByText(renderer, 'YUM')
     const saveButton = pressableByText(renderer, 'Save taste')
