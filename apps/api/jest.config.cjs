@@ -7,4 +7,9 @@ module.exports = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { isolatedModules: true }],
   },
+  // Mirror tsconfig's "@/*" path alias so route handlers (which import
+  // "@/lib/...") resolve under ts-jest's isolatedModules.
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
 };

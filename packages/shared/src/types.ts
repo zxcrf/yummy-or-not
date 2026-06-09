@@ -122,6 +122,13 @@ export interface LoginInput {
 export interface AuthResponse {
   user: User;
   token: string;
+  /** Present only when a sign-up supplied `RegisterInput.promoCode`: the outcome
+   *  of applying that code to the new account. `ok:false` means the account was
+   *  created but the code could NOT be applied (e.g. it was exhausted in a race
+   *  between validation and redemption) — the client must surface this rather
+   *  than silently leaving the user on free, and can offer a retry via
+   *  POST /api/promo/redeem. */
+  promo?: { ok: true } | { ok: false; error: RedeemError };
 }
 
 /* ----------------------------------------------------------------

@@ -158,6 +158,11 @@ describe('redeemPromoCode', () => {
     expect(usedCount('IDEM-1')).toBe(1); // not double-bumped
   });
 
+  // NOTE: pg-mem is single-threaded, so this pins the *completed* exhaustion
+  // behaviour but does NOT exercise the `SELECT … FOR UPDATE` row lock under
+  // genuine concurrency — this test would still pass if the lock were removed.
+  // True oversell-under-race coverage needs a real Postgres with parallel
+  // connections (a CI integration job), tracked as a follow-up.
   it('cannot be oversold: a single-use code redeemed by a second user returns code_exhausted', async () => {
     seedCode({ code: 'ONE-1', maxUses: 1 });
     const a = await mkUser('e@x.com');

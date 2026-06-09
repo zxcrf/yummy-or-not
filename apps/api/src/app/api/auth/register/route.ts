@@ -11,7 +11,7 @@ import {
   establishSession,
 } from '@/lib/auth';
 import { withCors, corsPreflight } from '@/lib/cors';
-import type { RegisterInput } from '@yon/shared';
+import type { RegisterInput, AuthResponse } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -57,15 +57,23 @@ export async function POST(req: NextRequest) {
     });
 
     // Redeem the (pre-validated) code to upgrade the fresh account. A rare race
-    // (code exhausted between check and redeem) leaves the user on free — not
-    // fatal, just logged — rather than blocking sign-up.
+    // (code exhausted/expired between check and redeem) leaves the user on free
+    // — we don't block sign-up, but we DO report the failure in the response
+    // (`promo.ok=false`) so the client can tell the user and offer a retry via
+    // POST /api/promo/redeem, rather than silently dropping them to free.
+    let promo: AuthResponse['promo'];
     if (wantsPromo) {
       const outcome = await redeemPromoCode(user.id, promoCode!);
-      if (outcome.ok) user = outcome.user;
-      else console.warn(`register: promo redeem for ${user.id} failed late: ${outcome.error}`);
+      if (outcome.ok) {
+        user = outcome.user;
+        promo = { ok: true };
+      } else {
+        promo = { ok: false, error: outcome.error };
+        console.warn(`register: promo redeem for ${user.id} failed late: ${outcome.error}`);
+      }
     }
 
-    return establishSession(req, user);
+    return establishSession(req, user, promo ? { promo } : undefined);
   } catch (err) {
     console.error('POST /api/auth/register error:', err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);
