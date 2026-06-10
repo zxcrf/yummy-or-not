@@ -130,8 +130,14 @@ describe('AddModal', () => {
   const realOS = Platform.OS
 
   beforeEach(() => {
+    jest.useFakeTimers()
     jest.clearAllMocks()
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' })
+  })
+
+  afterEach(() => {
+    jest.clearAllTimers()
+    jest.useRealTimers()
   })
 
   afterAll(() => {
