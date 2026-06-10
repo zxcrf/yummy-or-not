@@ -24,6 +24,7 @@ jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
     lang: 'zh',
     setLang: mockSetLang,
+    formatMoney: (n: number) => `$${n.toFixed(2)}`,
     t: (key: string, vars?: Record<string, string | number>) => ({
       auth_signout: 'Sign out',
       meh: 'Meh',

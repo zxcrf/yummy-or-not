@@ -29,7 +29,7 @@ const KICKER = {
 } as const
 
 export default function StatsView({ items, onRefresh: refreshItems }: Props) {
-  const { t } = useI18n()
+  const { t, formatMoney } = useI18n()
   const [stats, setStats] = useState<Stats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const mounted = useRef(false)
@@ -75,7 +75,8 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
     stats ? stats[v] : items.filter((it) => it.verdict === v).length
 
   const total = stats?.total ?? items.length
-  const savedAmount = stats?.savedAmount ?? '$0.00'
+  const rawSaved = stats?.savedAmount != null ? parseFloat(stats.savedAmount.replace(/[^0-9.]/g, '')) : 0
+  const savedAmount = formatMoney(Number.isFinite(rawSaved) ? rawSaved : 0)
 
   type Color = GetProps<typeof View>['backgroundColor']
 
