@@ -19,6 +19,16 @@
 
    The storage key is namespaced by user id so switching accounts never
    shows another user's list. setTastesUser() is called by AuthProvider.
+
+   Race-safety: a monotonically increasing `epoch` counter is bumped by
+   both setTastesUser() and invalidateTastes(). Every async operation
+   (revalidate, readPersisted) captures the epoch at start; on completion
+   it discards the result if the epoch has changed. This single mechanism
+   covers three races:
+     • slow account-A fetch resolving after setTastesUser(B) — discarded.
+     • pre-mutation fetch resolving after invalidate's newer fetch — discarded.
+     • setTastesUser() now also emits [] to mounted hooks immediately so
+       they clear the previous account's items without waiting for a fetch.
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -34,6 +44,12 @@ let inFlight: Promise<Taste[]> | null = null
 let hydrated = false
 /** Current user id (or null when signed out). Scopes the storage key. */
 let userId: string | null = null
+/**
+ * Epoch counter — incremented by setTastesUser() and invalidateTastes().
+ * Every async completion must re-check the epoch it captured at start and
+ * silently discard if it no longer matches.
+ */
+let epoch = 0
 
 type Listener = (items: Taste[]) => void
 const listeners = new Set<Listener>()
@@ -61,27 +77,34 @@ async function readPersisted(): Promise<Taste[] | null> {
 }
 
 /** Best-effort persist of the list for the current user. */
-async function writePersisted(items: Taste[]): Promise<void> {
+async function writePersisted(items: Taste[], key: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(storageKey(), JSON.stringify(items))
+    await AsyncStorage.setItem(key, JSON.stringify(items))
   } catch {
     // ignore — persistence is best-effort.
   }
 }
 
-/** Fetch from the network, deduping concurrent callers. Updates cache,
- *  notifies subscribers, and writes through to AsyncStorage. */
+/**
+ * Fetch from the network, deduping concurrent callers. Updates cache,
+ * notifies subscribers, and writes through to AsyncStorage.
+ * The result is ONLY committed when the epoch at call-time still matches
+ * the current epoch, preventing stale fetches from overwriting fresh data.
+ */
 function revalidate(): Promise<Taste[]> {
   if (inFlight) return inFlight
+  const capturedEpoch = epoch
+  const capturedKey = storageKey()
   inFlight = listTastes()
     .then((data) => {
+      if (epoch !== capturedEpoch) return data // epoch changed — discard
       cache = data
       emit(data)
-      void writePersisted(data)
+      void writePersisted(data, capturedKey)
       return data
     })
     .finally(() => {
-      inFlight = null
+      if (epoch === capturedEpoch) inFlight = null
     })
   return inFlight
 }
@@ -90,24 +113,38 @@ function revalidate(): Promise<Taste[]> {
 // Public module API
 // ----------------------------------------------------------------
 
-/** Drop the cache and refetch. Call after a create/update/delete so every
- *  mounted view reflects the change. Returns the fresh list. */
+/**
+ * Drop the cache and refetch. Call after a create/update/delete so every
+ * mounted view reflects the change. Returns the fresh list.
+ * Bumps the epoch so any previously-issued in-flight fetch cannot
+ * overwrite the result of the new one.
+ */
 export function invalidateTastes(): Promise<Taste[]> {
   cache = null
   hydrated = false
+  epoch++
   inFlight = null
   return revalidate()
 }
 
-/** Point the cache at a (new) user and clear any prior in-memory state.
- *  Called by AuthProvider on sign-in / sign-out so the namespaced storage
- *  key and cache never leak across accounts. */
+/**
+ * Point the cache at a (new) user and clear any prior in-memory state.
+ * Called by AuthProvider on sign-in / sign-out so the namespaced storage
+ * key and cache never leak across accounts.
+ * Bumps the epoch so any in-flight fetch for the previous user is
+ * discarded. Immediately emits [] to all mounted subscribers so they
+ * clear the previous account's items without waiting for a fetch.
+ */
 export function setTastesUser(id: string | null): void {
   if (id === userId) return
   userId = id
   cache = null
   hydrated = false
+  epoch++
   inFlight = null
+  // Notify every mounted view to clear immediately — they must not show a
+  // prior account's data while the new account's fetch is in flight.
+  emit([])
 }
 
 /** Remove the persisted list for the current user (logout cleanup). */
@@ -115,6 +152,7 @@ export async function clearPersistedTastes(): Promise<void> {
   const key = storageKey()
   cache = null
   hydrated = false
+  epoch++
   inFlight = null
   try {
     await AsyncStorage.removeItem(key)
@@ -170,16 +208,17 @@ export function useRefreshableTastes(): RefreshableTastes {
       void revalidate()
     } else {
       // Cold start: hydrate from AsyncStorage first (once), then revalidate.
+      const capturedEpoch = epoch
       ;(async () => {
-        if (!hydrated) {
+        if (!hydrated && epoch === capturedEpoch) {
           hydrated = true
           const persisted = await readPersisted()
-          if (persisted && cache === null) {
+          // Guard: epoch may have advanced while AsyncStorage was reading.
+          if (persisted && cache === null && epoch === capturedEpoch) {
             cache = persisted
-            if (mounted.current) {
-              setItems(persisted)
-              setLoading(false)
-            }
+            // Emit to ALL subscribers so concurrent cold-start views all get
+            // the persisted snapshot, not just the hook that won the race.
+            emit(persisted)
           }
         }
         try {

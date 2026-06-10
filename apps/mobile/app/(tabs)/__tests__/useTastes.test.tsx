@@ -72,9 +72,13 @@ const flush = () => act(async () => { await Promise.resolve() })
 beforeEach(async () => {
   mockListTastes.mockReset()
   // Reset the module-level cache (setTastesUser to a sentinel then null clears
-  // cache/inFlight/hydrated) and wipe persisted storage so each test is cold.
-  setTastesUser('__reset__')
-  setTastesUser(null)
+  // cache/inFlight/hydrated/epoch) and wipe persisted storage so each test is
+  // cold. Wrap in act() because setTastesUser now emits [] to any mounted
+  // subscribers — React requires state updates to happen inside act().
+  await act(async () => {
+    setTastesUser('__reset__')
+    setTastesUser(null)
+  })
   await AsyncStorage.clear()
 })
 
@@ -210,7 +214,7 @@ describe('per-user namespacing', () => {
     await flush()
 
     // Switch accounts → cache resets, different storage key.
-    setTastesUser('bob')
+    act(() => { setTastesUser('bob') })
     mockListTastes.mockResolvedValueOnce([taste('bob-1')])
     const { seen } = mountProbe()
     await flush()
@@ -219,5 +223,149 @@ describe('per-user namespacing', () => {
     expect(seen[seen.length - 1].items.map((t) => t.id)).toEqual(['bob-1'])
     expect(await AsyncStorage.getItem('yon_tastes:alice')).toContain('alice-1')
     expect(await AsyncStorage.getItem('yon_tastes:bob')).toContain('bob-1')
+  })
+})
+
+// ── Regression: epoch-guarded race fixes ────────────────────────────────────
+
+describe('epoch guard — user-switch mid-fetch (finding 1)', () => {
+  it('discards account-A fetch that resolves after setTastesUser(B)', async () => {
+    /* Old code: slow account-A listTastes resolves after the user switches to
+       B, emits A's data, and persists it under B's storage key (cross-account
+       leak). Fix: epoch check at commit time — A's fetch epoch no longer
+       matches, so the result is silently discarded. */
+    setTastesUser('alice')
+    let resolveAlice!: (v: Taste[]) => void
+    mockListTastes.mockReturnValueOnce(
+      new Promise<Taste[]>((r) => { resolveAlice = r }),
+    )
+
+    // alice's probe is mounted while alice's (slow) fetch is in flight.
+    const { seen: aliceSeen } = mountProbe()
+    await flush()
+
+    // User switches while alice's fetch is still in-flight. A new probe
+    // mounts representing the first view rendered for bob's session.
+    mockListTastes.mockResolvedValueOnce([taste('bob-1')])
+    // Wrap in act() — setTastesUser emits [] which updates mounted hook state.
+    act(() => { setTastesUser('bob') })
+    // setTastesUser must immediately clear all mounted views.
+    expect(aliceSeen[aliceSeen.length - 1].items).toEqual([])
+
+    // Bob's first view mounts — this triggers the revalidate() for bob.
+    const { seen: bobSeen } = mountProbe()
+    await flush()
+    await flush()
+
+    // Now resolve the stale alice fetch — must be discarded (epoch mismatch).
+    await act(async () => {
+      resolveAlice([taste('alice-1')])
+      await Promise.resolve()
+    })
+    await flush()
+
+    // Bob's probe shows bob's data; alice's data must never appear anywhere.
+    expect(bobSeen[bobSeen.length - 1].items.map((t) => t.id)).toEqual(['bob-1'])
+    const allAliceIds = aliceSeen.map((s) => s.items.map((t) => t.id).join(','))
+    expect(allAliceIds).not.toContain('alice-1')
+
+    // alice's data must not be written under bob's storage key.
+    const bobRaw = await AsyncStorage.getItem('yon_tastes:bob')
+    expect(bobRaw ? JSON.parse(bobRaw).map((t: Taste) => t.id) : []).not.toContain('alice-1')
+  })
+
+  it('immediately clears mounted views when setTastesUser is called', () => {
+    /* Old code: setTastesUser only cleared module cache; already-mounted hooks
+       kept the prior account's items. Fix: setTastesUser emits [] so every
+       subscriber clears synchronously before the new fetch resolves. */
+    setTastesUser('u1')
+    // Seed warm cache so the hook starts with items.
+    // We can't easily seed via mountProbe+flush without a network mock here,
+    // so we call revalidate indirectly: provide a resolving mock then flush.
+    mockListTastes.mockResolvedValueOnce([taste('u1-item')])
+    const { seen } = mountProbe()
+    // After mounting, switch user — must clear mounted views immediately.
+    act(() => { setTastesUser('u2') })
+    // The last recorded state must be empty (emitted by setTastesUser).
+    expect(seen[seen.length - 1].items).toEqual([])
+  })
+})
+
+describe('epoch guard — invalidate during in-flight (finding 2)', () => {
+  it('stale pre-mutation fetch cannot overwrite the post-mutation refetch', async () => {
+    /* Old code: invalidateTastes() set inFlight=null but the older promise
+       still held a closure over cache/emit; whichever resolved last won —
+       the pre-mutation fetch could overwrite fresh post-mutation data. Fix:
+       epoch check — the pre-mutation fetch's epoch no longer matches after
+       invalidate bumps it, so it is discarded. */
+    setTastesUser('u1')
+
+    let resolveStale!: (v: Taste[]) => void
+    mockListTastes
+      // First call: slow, pre-mutation fetch (will be stale).
+      .mockReturnValueOnce(new Promise<Taste[]>((r) => { resolveStale = r }))
+      // Second call: fast, post-mutation fetch.
+      .mockResolvedValueOnce([taste('fresh-after-mutation')])
+
+    const { seen } = mountProbe()
+    await flush() // first fetch started
+
+    // Mutation happens — invalidate bumps epoch and starts the second fetch.
+    await act(async () => {
+      await invalidateTastes()
+    })
+    await flush()
+
+    // Post-mutation result is now on screen.
+    expect(seen[seen.length - 1].items.map((t) => t.id)).toEqual(['fresh-after-mutation'])
+
+    // Now the stale pre-mutation fetch resolves — must be discarded.
+    await act(async () => {
+      resolveStale([taste('stale-pre-mutation')])
+      await Promise.resolve()
+    })
+    await flush()
+
+    expect(seen[seen.length - 1].items.map((t) => t.id)).toEqual(['fresh-after-mutation'])
+    const ids = seen.map((s) => s.items.map((t) => t.id).join(','))
+    expect(ids).not.toContain('stale-pre-mutation')
+  })
+})
+
+describe('cold-start persisted hydration — all subscribers notified (finding 5)', () => {
+  it('all concurrent cold-start views receive the persisted snapshot', async () => {
+    /* Old code: readPersisted() only set state on the component that won the
+       hydrated=false race; other concurrent cold-start hooks waited for the
+       network. Fix: emit(persisted) broadcasts to all listeners so every
+       mounted view paints the stale-while-revalidate snapshot. */
+    setTastesUser('u1')
+    await AsyncStorage.setItem(
+      'yon_tastes:u1',
+      JSON.stringify([taste('cached')]),
+    )
+
+    // Slow network — persisted snapshot must reach all concurrent views first.
+    let resolveNet!: (v: Taste[]) => void
+    mockListTastes.mockReturnValueOnce(
+      new Promise<Taste[]>((r) => { resolveNet = r }),
+    )
+
+    // Two views mount concurrently (cold start — no warm cache yet).
+    const { seen: seen1 } = mountProbe()
+    const { seen: seen2 } = mountProbe()
+    await flush()
+    await flush()
+
+    // Both views must have painted the persisted snapshot before network.
+    expect(seen1[seen1.length - 1].items.map((t) => t.id)).toEqual(['cached'])
+    expect(seen2[seen2.length - 1].items.map((t) => t.id)).toEqual(['cached'])
+
+    // Network resolves — both update.
+    await act(async () => {
+      resolveNet([taste('network')])
+      await Promise.resolve()
+    })
+    expect(seen1[seen1.length - 1].items.map((t) => t.id)).toEqual(['network'])
+    expect(seen2[seen2.length - 1].items.map((t) => t.id)).toEqual(['network'])
   })
 })

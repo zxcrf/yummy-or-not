@@ -66,7 +66,8 @@ async function readStoredToken(): Promise<string | null> {
     if (Platform.OS === 'web') {
       return globalThis.localStorage?.getItem(STORAGE_KEY) ?? null
     }
-    const SecureStore = await import('expo-secure-store')
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store')
     return await SecureStore.getItemAsync(STORAGE_KEY)
   } catch {
     return null
@@ -81,11 +82,13 @@ function writeStoredToken(token: string | null): void {
       else globalThis.localStorage?.removeItem(STORAGE_KEY)
       return
     }
-    void import('expo-secure-store').then((SecureStore) => {
-      return token
-        ? SecureStore.setItemAsync(STORAGE_KEY, token)
-        : SecureStore.deleteItemAsync(STORAGE_KEY)
-    })
+    // Use require() so jest moduleNameMapper can intercept it (dynamic
+    // import() bypasses the mapper and requires --experimental-vm-modules).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store')
+    void (token
+      ? SecureStore.setItemAsync(STORAGE_KEY, token)
+      : SecureStore.deleteItemAsync(STORAGE_KEY))
   } catch {
     // ignore — persistence is best-effort.
   }
@@ -152,18 +155,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [refresh])
 
   const signOut = useCallback(async () => {
-    await logout()
-    writeStoredToken(null)
-    setAuthToken(null)
-    // Purge cached taste data + photos so the next account starts clean.
-    await clearPersistedTastes()
-    setTastesUser(null)
+    // Server-side revocation is best-effort: a network failure must never
+    // leave private data in local caches, so all cleanup runs in finally.
     try {
-      await Promise.all([Image.clearDiskCache(), Image.clearMemoryCache()])
+      await logout()
     } catch {
-      // best-effort — cache clearing must never block sign-out.
+      // ignore — proceed to local cleanup regardless.
+    } finally {
+      writeStoredToken(null)
+      setAuthToken(null)
+      // Purge cached taste data + photos so the next account starts clean.
+      await clearPersistedTastes()
+      setTastesUser(null)
+      try {
+        await Promise.all([Image.clearDiskCache(), Image.clearMemoryCache()])
+      } catch {
+        // best-effort — cache clearing must never block sign-out.
+      }
+      setUser(null)
     }
-    setUser(null)
   }, [])
 
   const value = useMemo<AuthContextValue>(
