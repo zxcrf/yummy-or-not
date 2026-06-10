@@ -20,7 +20,8 @@
     "next": "15.5.19",
     "pg": "^8.13.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

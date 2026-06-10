@@ -21,6 +21,10 @@ const photoPattern =
 
 const nextConfig = {
   output: 'standalone',
+  // sharp uses native binaries; tell Next.js to leave it as a server-side
+  // external rather than bundling it, so the prebuilt @img/sharp-* binary
+  // survives the standalone copy without a separate webpack loader.
+  serverExternalPackages: ['sharp'],
   async redirects() {
     return [
       { source: '/', destination: '/web', permanent: false },

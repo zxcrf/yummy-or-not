@@ -4,8 +4,9 @@ import { createHash } from 'crypto';
 import { Pool } from 'pg';
 import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
-import { getPhotoPublicBaseUrl, getPhotoStorage } from './env';
+import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
 import { getSignedPhotoUrl } from './storage';
+import { variantKeys, isVariantKey } from './image-variants';
 import { normalizePromoCode, isPromoExpired, promoHasUsesLeft, type PromoCodeRow } from './promo';
 
 // ── Pool singleton ────────────────────────────────────────────────────────────
@@ -52,43 +53,89 @@ function relativeDate(createdAt: Date): string {
   return `${diffMo} months ago`;
 }
 
-/** Resolve a stored `image` value into a ready-to-render URL.
- *  - falsy            → ''
- *  - http(s):// …     → as-is (seed rows, blob full URLs, absolute legacy URLs)
- *  - /uploads/ …      → as-is (legacy local paths)
- *  - otherwise        → bare key, rendered as `${PHOTO_PUBLIC_BASE_URL}/${key}` */
-export async function resolvePhotoUrl(image: string | null | undefined): Promise<string> {
-  if (!image) return '';
+/** Resolve a stored `image` key into the three client-facing URLs.
+ *
+ *  Cases:
+ *  - falsy              → all three ''
+ *  - legacy absolute    → http(s)://, /uploads/: pass through; same URL in all
+ *                         three fields (no variants exist for these rows)
+ *  - isVariantKey + CDN → derive thumb/display from CDN base; image = display;
+ *                         NEVER emit the orig key as a public URL
+ *  - isVariantKey + s3  → presign thumb and display keys; image = display
+ *  - isVariantKey + local → join PHOTO_PUBLIC_BASE_URL; image = display
+ */
+export async function resolvePhotoUrls(image: string | null | undefined): Promise<{
+  image: string;
+  imageThumb: string;
+  imageDisplay: string;
+}> {
+  if (!image) return { image: '', imageThumb: '', imageDisplay: '' };
+
+  // Legacy absolute URLs — no variants, pass straight through.
   if (
     image.startsWith('http://') ||
     image.startsWith('https://') ||
     image.startsWith('/uploads/')
   ) {
-    return image;
+    return { image, imageThumb: image, imageDisplay: image };
   }
+
   const key = image.replace(/^\//, '');
-  if (getPhotoStorage() === 's3') {
-    return getSignedPhotoUrl(key);
+
+  if (isVariantKey(key)) {
+    const { thumb, display } = variantKeys(key);
+    const cdn = getPhotoCdnBaseUrl();
+
+    if (cdn) {
+      const thumbUrl   = `${cdn}/${thumb}`;
+      const displayUrl = `${cdn}/${display}`;
+      return { image: displayUrl, imageThumb: thumbUrl, imageDisplay: displayUrl };
+    }
+
+    if (getPhotoStorage() === 's3') {
+      const [thumbUrl, displayUrl] = await Promise.all([
+        getSignedPhotoUrl(thumb),
+        getSignedPhotoUrl(display),
+      ]);
+      return { image: displayUrl, imageThumb: thumbUrl, imageDisplay: displayUrl };
+    }
+
+    // Local backend.
+    const base = getPhotoPublicBaseUrl();
+    const thumbUrl   = base ? `${base}/${thumb}`   : `/${thumb}`;
+    const displayUrl = base ? `${base}/${display}` : `/${display}`;
+    return { image: displayUrl, imageThumb: thumbUrl, imageDisplay: displayUrl };
   }
-  const base = getPhotoPublicBaseUrl();
-  return base ? `${base}/${key}` : `/${key}`;
+
+  // Old flat key (pre-variant, single upload) — resolve like before.
+  let resolved: string;
+  if (getPhotoStorage() === 's3') {
+    resolved = await getSignedPhotoUrl(key);
+  } else {
+    const base = getPhotoPublicBaseUrl();
+    resolved = base ? `${base}/${key}` : `/${key}`;
+  }
+  return { image: resolved, imageThumb: resolved, imageDisplay: resolved };
 }
 
 /** Map a DB row (snake_case) to a Taste (camelCase). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function rowToTaste(row: any): Promise<Taste> {
+  const urls = await resolvePhotoUrls(row.image);
   return {
-    id:         row.id,
-    name:       row.name,
-    place:      row.place ?? '',
-    price:      row.price ?? '',
-    verdict:    row.verdict,
-    tags:       (row.tags ?? []).flatMap((t: string) => normalizeTag(t)),
+    id:          row.id,
+    name:        row.name,
+    place:       row.place ?? '',
+    price:       row.price ?? '',
+    verdict:     row.verdict,
+    tags:        (row.tags ?? []).flatMap((t: string) => normalizeTag(t)),
     boughtCount: Number(row.bought_count),
-    date:       relativeDate(new Date(row.created_at)),
-    notes:      row.notes ?? '',
-    image:      await resolvePhotoUrl(row.image),
-    createdAt:  new Date(row.created_at).toISOString(),
+    date:        relativeDate(new Date(row.created_at)),
+    notes:       row.notes ?? '',
+    image:       urls.image,
+    imageThumb:  urls.imageThumb,
+    imageDisplay: urls.imageDisplay,
+    createdAt:   new Date(row.created_at).toISOString(),
   };
 }
 
@@ -210,6 +257,11 @@ export async function updateTaste(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const values: any[] = [];
 
+  // NOTE: `image` is intentionally NOT updatable here. The image column is owned
+  // by the upload pipeline (POST /api/tastes assigns server-generated keys). If a
+  // client could PATCH `image` to an arbitrary bare key, it could point at another
+  // user's object and mint a presigned original via /original (IDOR). Keep image
+  // out of the patch surface entirely.
   const fieldMap: Record<string, string> = {
     name:    'name',
     place:   'place',
@@ -217,7 +269,6 @@ export async function updateTaste(
     verdict: 'verdict',
     tags:    'tags',
     notes:   'notes',
-    image:   'image',
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {

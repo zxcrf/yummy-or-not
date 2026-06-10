@@ -83,9 +83,11 @@ export async function deletePhoto(key: string): Promise<void> {
 // ── Local backend ─────────────────────────────────────────────────────────────
 
 async function uploadToLocal(buffer: Buffer, { key }: UploadOptions): Promise<string> {
-  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-  await mkdir(uploadsDir, { recursive: true });
-  await writeFile(path.join(uploadsDir, key), buffer);
+  const filePath = path.join(process.cwd(), 'public', 'uploads', key);
+  // Keys may contain path separators (e.g. t/{uuid}/orig.jpg), so ensure
+  // the full directory tree exists before writing.
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, buffer);
   return key;
 }
 

@@ -141,6 +141,7 @@ export default function LibraryView() {
           {shown.map((it) => (
             <View key={it.id} style={isDesktop ? { width: '48%' } : undefined}>
               <FoodCard
+                imageDisplay={it.imageDisplay || undefined}
                 image={it.image || undefined}
                 name={it.name}
                 place={it.place}

@@ -9,11 +9,11 @@
    ============================================================ */
 
 import { useEffect, useState } from 'react'
-import { Alert, Image } from 'react-native'
+import { Alert, Image, Modal, Pressable, StyleSheet } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { deleteTaste, getTaste, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import {
   Badge,
   Button,
@@ -27,10 +27,12 @@ import {
   VerdictPicker,
   VerdictStamp,
 } from '@/components/ds'
+import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function DetailView() {
   const { t } = useI18n()
+  const { user } = useAuth()
   const router = useRouter()
   const params = useLocalSearchParams<{ id: string }>()
   const id = Array.isArray(params.id) ? params.id[0] : params.id
@@ -48,6 +50,10 @@ export default function DetailView() {
   const [editNotes, setEditNotes] = useState('')
   const [editVerdict, setEditVerdict] = useState<Verdict>('yum')
   const [editTags, setEditTags] = useState<string[]>([])
+
+  // Pro original viewer state.
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null)
+  const [originalLoading, setOriginalLoading] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -71,6 +77,24 @@ export default function DetailView() {
   const goBack = () => {
     if (router.canGoBack()) router.back()
     else router.replace('/')
+  }
+
+  const openOriginal = async () => {
+    if (!item) return
+    setOriginalLoading(true)
+    try {
+      const { url } = await getOriginalPhotoUrl(item.id)
+      setOriginalUrl(url)
+    } catch (err) {
+      if (err instanceof ProRequiredError) {
+        // Surface the same upgrade prompt used elsewhere in the app.
+        Alert.alert(t('pro_plan'), t('taste_limit_reached'))
+      } else {
+        Alert.alert(t('nothing_here'))
+      }
+    } finally {
+      setOriginalLoading(false)
+    }
   }
 
   const doDelete = async () => {
@@ -179,9 +203,9 @@ export default function DetailView() {
           borderColor="$ink900"
           overflow="hidden"
         >
-          {item.image ? (
+          {(item.imageDisplay || item.image) ? (
             <Image
-              source={{ uri: item.image }}
+              source={{ uri: item.imageDisplay || item.image }}
               style={{ width: '100%', height: '100%' }}
               resizeMode="cover"
             />
@@ -350,9 +374,62 @@ export default function DetailView() {
                 {t('del')}
               </Button>
             </XStack>
+
+            {/* Pro original viewer */}
+            {(item.imageDisplay || item.image) ? (
+              user?.plan === 'pro' ? (
+                <Button
+                  variant="secondary"
+                  iconLeft={<Icon name="image" size={18} />}
+                  disabled={originalLoading}
+                  onPress={openOriginal}
+                >
+                  {t('view_original')}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  iconLeft={<Icon name="image" size={18} />}
+                  onPress={() => Alert.alert(t('pro_plan'), t('taste_limit_reached'))}
+                >
+                  {t('view_original_pro')}
+                </Button>
+              )
+            ) : null}
           </>
         )}
       </YStack>
+
+      {/* Fullscreen original image modal */}
+      <Modal
+        visible={!!originalUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOriginalUrl(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setOriginalUrl(null)}>
+          {originalUrl ? (
+            <Image
+              source={{ uri: originalUrl }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </ScrollView>
   )
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+  },
+})

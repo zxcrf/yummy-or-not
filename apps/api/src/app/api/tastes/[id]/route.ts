@@ -8,6 +8,7 @@ import { getTaste, updateTaste, deleteTaste, getRawImage } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
 import { deletePhoto } from '@/lib/storage';
+import { variantKeys, isVariantKey } from '@/lib/image-variants';
 import type { UpdateTasteInput } from '@yon/shared';
 
 /** True when `image` is a bare storage key we own (not a legacy http/uploads URL). */
@@ -73,10 +74,26 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
     // request over an orphaned object. Only delete keys we own (skip legacy
     // http/uploads images, which include the unsplash seed rows).
     if (isOwnedKey(rawImage)) {
-      try {
-        await deletePhoto(rawImage);
-      } catch (cleanupErr) {
-        console.error(`DELETE /api/tastes/${id}: photo cleanup failed for "${rawImage}":`, cleanupErr);
+      if (isVariantKey(rawImage)) {
+        // Delete all three sibling keys (orig + thumb + display) in parallel.
+        const { orig, thumb, display } = variantKeys(rawImage);
+        const results = await Promise.allSettled([
+          deletePhoto(orig),
+          deletePhoto(thumb),
+          deletePhoto(display),
+        ]);
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            const key = [orig, thumb, display][i];
+            console.error(`DELETE /api/tastes/${id}: cleanup failed for "${key}":`, r.reason);
+          }
+        });
+      } else {
+        try {
+          await deletePhoto(rawImage);
+        } catch (cleanupErr) {
+          console.error(`DELETE /api/tastes/${id}: photo cleanup failed for "${rawImage}":`, cleanupErr);
+        }
       }
     }
 

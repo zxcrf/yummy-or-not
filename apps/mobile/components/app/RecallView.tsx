@@ -69,9 +69,9 @@ function RecallRow({
         overflow="hidden"
         flexShrink={0}
       >
-        {item.image ? (
+        {(item.imageThumb || item.image) ? (
           <Image
-            source={{ uri: item.image }}
+            source={{ uri: item.imageThumb || item.image }}
             style={{ width: '100%', height: '100%' }}
             resizeMode="cover"
           />

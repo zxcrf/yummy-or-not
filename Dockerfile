@@ -32,5 +32,10 @@ COPY --from=builder /app/apps/api/.next/standalone ./
 COPY --from=builder /app/apps/api/.next/static ./apps/api/.next/static
 COPY --from=builder /app/apps/api/public ./apps/api/public
 
+# sharp's prebuilt native binary is not bundled by Next.js standalone output.
+# Copy the platform-specific package so sharp can load its .node addon at runtime.
+COPY --from=builder /app/node_modules/sharp ./node_modules/sharp
+COPY --from=builder /app/node_modules/@img ./node_modules/@img
+
 EXPOSE 3000
 CMD ["node", "apps/api/server.js"]
