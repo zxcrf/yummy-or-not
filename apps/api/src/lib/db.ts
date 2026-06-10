@@ -118,6 +118,19 @@ export async function resolvePhotoUrls(image: string | null | undefined): Promis
   return { image: resolved, imageThumb: resolved, imageDisplay: resolved };
 }
 
+/** Return the stable bare storage key for a given DB image value.
+ *  Mirrors the legacy-detection logic in resolvePhotoUrls so both agree
+ *  on which values are "bare keys" vs legacy pass-through strings. */
+export function imageKeyFromRow(image: string | null | undefined): string {
+  if (!image) return '';
+  if (
+    image.startsWith('http://') ||
+    image.startsWith('https://') ||
+    image.startsWith('/uploads/')
+  ) return '';
+  return image;
+}
+
 /** Map a DB row (snake_case) to a Taste (camelCase). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function rowToTaste(row: any): Promise<Taste> {
@@ -135,6 +148,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     image:       urls.image,
     imageThumb:  urls.imageThumb,
     imageDisplay: urls.imageDisplay,
+    imageKey:    imageKeyFromRow(row.image),
     createdAt:   new Date(row.created_at).toISOString(),
   };
 }
