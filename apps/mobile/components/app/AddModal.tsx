@@ -14,7 +14,7 @@
    that's a modal route on web or a stack screen on native).
    ============================================================ */
 
-import { useRef, useState } from 'react'
+import { useRef, useMemo, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -25,7 +25,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { Text, View } from 'tamagui'
-import { TAG_CHOICES, createTaste, type PhotoInput, type Verdict } from '@yon/shared'
+import { TAG_CHOICES, createTaste, createTag, type PhotoInput, type Verdict } from '@yon/shared'
 
 import {
   Button,
@@ -39,6 +39,7 @@ import {
 
 import { useI18n } from '@/providers/I18nProvider'
 import { invalidateTastes } from '@/app/(tabs)/_useTastes'
+import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { PhotoPreview } from './PhotoPreview'
 
 interface Props {
@@ -97,6 +98,16 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const insets = useSafeAreaInsets()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<RNScrollView>(null)
+  const { tags: userTags } = useTags()
+
+  // Merge the user's tag library with the built-in TAG_CHOICES, deduped, for
+  // the chip list. Built-in choices always appear first so the UX stays stable
+  // even before the tag fetch completes (userTags starts as []).
+  const tagChoices = useMemo(() => {
+    const builtIn = TAG_CHOICES as readonly string[]
+    const extra = userTags.map((t) => t.name).filter((n) => !builtIn.includes(n))
+    return [...builtIn, ...extra]
+  }, [userTags])
 
   // Under Expo SDK 54+ edge-to-edge the keyboard floats over the content, so
   // KeyboardAvoidingView (padding) shrinks the scroll viewport to end above the
@@ -189,6 +200,19 @@ export default function AddModal({ onClose, onSaved }: Props) {
         photo,
       )
       void invalidateTastes()
+
+      // Upsert any custom tags (tags not in the built-in TAG_CHOICES) into the
+      // user's tag candidate set so they appear in LibraryView's filter chips.
+      // Fire-and-forget: a failure here must not block navigation.
+      const customTags = picked.filter(
+        (tg) => !(TAG_CHOICES as readonly string[]).includes(tg),
+      )
+      if (customTags.length > 0) {
+        void Promise.all(customTags.map((tg) => createTag({ name: tg }))).then(
+          () => invalidateTagsCache(),
+        )
+      }
+
       onSaved(created.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -322,13 +346,13 @@ export default function AddModal({ onClose, onSaved }: Props) {
         <View gap="$2">
           <Text {...KICKER}>{t('tags')}</Text>
           <View flexDirection="row" flexWrap="wrap" gap="$2">
-            {TAG_CHOICES.map((tg) => (
+            {tagChoices.map((tg) => (
               <Tag key={tg} active={picked.includes(tg)} onPress={() => toggle(tg)}>
                 {tg}
               </Tag>
             ))}
             {picked
-              .filter((tg) => !(TAG_CHOICES as readonly string[]).includes(tg))
+              .filter((tg) => !tagChoices.includes(tg))
               .map((tg) => (
                 <Tag
                   key={tg}

@@ -16,6 +16,7 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { Image } from 'expo-image'
 import { logout, getMe, setAuthToken, getAuthToken } from '@yon/shared'
 import { clearPersistedTastes, setTastesUser } from '@/app/(tabs)/_useTastes'
+import { clearTagsCache, setTagsUser } from '@/app/(tabs)/_useTags'
 import { AuthProvider, useAuth } from '../AuthProvider'
 
 // ── mocks ────────────────────────────────────────────────────────────────────
@@ -39,6 +40,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   setTastesUser: jest.fn(),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  clearTagsCache: jest.fn(),
+  setTagsUser: jest.fn(),
+}))
+
 // expo-secure-store is handled by moduleNameMapper → __mocks__/expo-secure-store.js
 // (dynamic import('expo-secure-store') in writeStoredToken must not hit native).
 
@@ -49,6 +55,8 @@ const mockedClearMem = jest.mocked(Image.clearMemoryCache)
 const mockedClearPersisted = jest.mocked(clearPersistedTastes)
 const mockedSetTastesUser = jest.mocked(setTastesUser)
 const mockedSetAuthToken = jest.mocked(setAuthToken)
+const mockedClearTagsCache = jest.mocked(clearTagsCache)
+const mockedSetTagsUser = jest.mocked(setTagsUser)
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +105,9 @@ describe('AuthProvider.signOut — server logout failure (finding 4)', () => {
     expect(mockedSetAuthToken).toHaveBeenCalledWith(null)
     expect(mockedClearPersisted).toHaveBeenCalled()
     expect(mockedSetTastesUser).toHaveBeenCalledWith(null)
+    // Regression pin (finding 2): tag cache must also be purged so previous
+    // account's tag chips never leak to the next session.
+    expect(mockedClearTagsCache).toHaveBeenCalled()
     expect(mockedClearDisk).toHaveBeenCalled()
     expect(mockedClearMem).toHaveBeenCalled()
   })
@@ -114,7 +125,23 @@ describe('AuthProvider.signOut — server logout failure (finding 4)', () => {
     expect(mockedSetAuthToken).toHaveBeenCalledWith(null)
     expect(mockedClearPersisted).toHaveBeenCalled()
     expect(mockedSetTastesUser).toHaveBeenCalledWith(null)
+    expect(mockedClearTagsCache).toHaveBeenCalled()
     expect(mockedClearDisk).toHaveBeenCalled()
     expect(mockedClearMem).toHaveBeenCalled()
+  })
+
+  it('scopes the tag cache to each account on sign-in (finding 1)', async () => {
+    // Regression: setTagsUser was never called on sign-in, so a slow pre-logout
+    // getTags() for user A could resolve after account-switch and publish A's
+    // tags. The fix calls setTagsUser(user.id) inside refresh(), which runs on
+    // every sign-in and session restore.
+    const fakeUser = { id: 'user-42', displayName: 'Test', phone: '', email: '',
+      avatar: '', locale: 'en', plan: 'free' as const, createdAt: '' }
+    mockedGetMe.mockResolvedValueOnce({ user: fakeUser, providers: [] })
+
+    renderProvider()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+
+    expect(mockedSetTagsUser).toHaveBeenCalledWith('user-42')
   })
 })
