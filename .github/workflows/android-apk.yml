@@ -65,8 +65,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            apps/mobile/node_modules/react-native-gesture-handler/android/.cxx
-            apps/mobile/node_modules/react-native-reanimated/android/.cxx
+            node_modules/react-native-gesture-handler/android/.cxx
+            node_modules/react-native-reanimated/android/.cxx
           key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
           restore-keys: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-
 
@@ -114,8 +114,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            apps/mobile/node_modules/react-native-gesture-handler/android/.cxx
-            apps/mobile/node_modules/react-native-reanimated/android/.cxx
+            node_modules/react-native-gesture-handler/android/.cxx
+            node_modules/react-native-reanimated/android/.cxx
           key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
 
       - name: Upload APK artifact
