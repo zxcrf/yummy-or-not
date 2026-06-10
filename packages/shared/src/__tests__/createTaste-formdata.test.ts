@@ -1,9 +1,16 @@
 /**
- * Regression test for #32 — "Unsupported FormDataPart implementation".
+ * Regression tests for RN photo upload in FormData.
  *
- * Expo SDK 56's custom fetch requires FormData file entries to be Blob/File,
- * not the legacy RN `{ uri, name, type }` convention. This test asserts
- * createTaste converts an RNFile to a Blob before appending to FormData.
+ * #32 — "Unsupported FormDataPart implementation": Expo SDK 56's custom fetch
+ * requires FormData file entries to be Blob/File, not the legacy RN
+ * `{ uri, name, type }` convention.
+ *
+ * Android Blob bug — "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView'
+ * are not supported": Android's React Native Blob implementation throws when
+ * new File([existingBlob], ...) or new Blob([existingBlob]) is called, because
+ * it tries to extract the data as ArrayBuffer. The fix uses the 3-arg
+ * FormData.append(name, blob, filename) which attaches the blob without
+ * constructing a new Blob from it.
  */
 
 import { createTaste, setAuthToken } from '../api-client';
@@ -83,4 +90,28 @@ it('still appends text fields correctly', async () => {
   expect(fd.get('price')).toBe('12');
   expect(fd.get('notes')).toBe('meh');
   expect(fd.getAll('tags')).toEqual(['Burger', 'Spicy']);
+});
+
+it('does not construct new File([blob]) which fails on Android with ArrayBuffer error', async () => {
+  // Simulate Android: new File([blobPart], ...) throws the known RN error when
+  // any part is a Blob (the runtime tries to read it as ArrayBuffer internally).
+  const OriginalFile = global.File;
+  global.File = class extends OriginalFile {
+    constructor(parts: BlobPart[], name: string, opts?: FilePropertyBag) {
+      if (parts.some((p) => p instanceof Blob)) {
+        throw new TypeError(
+          "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported"
+        );
+      }
+      super(parts, name, opts);
+    }
+  } as typeof File;
+
+  try {
+    const rnFile = { uri: 'file:///tmp/photo.jpg', name: 'photo.jpg', type: 'image/jpeg' };
+    const input = { name: 'Matcha', verdict: 'yum' as const, tags: [] as string[] };
+    await expect(createTaste(input, rnFile)).resolves.toBeDefined();
+  } finally {
+    global.File = OriginalFile;
+  }
 });
