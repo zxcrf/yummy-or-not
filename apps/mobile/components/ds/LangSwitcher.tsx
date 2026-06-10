@@ -195,7 +195,10 @@ export function LangSwitcher({
           onPress={handleOpen}
         >
           {triggerMode === 'flag' ? (
-            <Text fontSize={22} lineHeight={24}>
+            <Text
+              fontSize={22}
+              {...(Platform.OS === 'android' ? { style: { includeFontPadding: false } } : {})}
+            >
               {currentFlag}
             </Text>
           ) : (

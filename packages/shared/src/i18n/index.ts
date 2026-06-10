@@ -19,6 +19,14 @@ export const LANGS: { code: Lang; label: string; native: string }[] = [
   { code: "es", label: "Spanish",  native: "Español" },
 ];
 
+export const LANG_CURRENCY: Record<Lang, { symbol: string; code: string }> = {
+  zh: { symbol: '¥', code: 'CNY' },
+  en: { symbol: '$', code: 'USD' },
+  ko: { symbol: '₩', code: 'KRW' },
+  ja: { symbol: '¥', code: 'JPY' },
+  es: { symbol: '€', code: 'EUR' },
+}
+
 export const DEFAULT_LANG: Lang = "zh";
 
 const STRINGS: Record<Lang, Record<string, string>> = { zh, en, ko, ja, es };

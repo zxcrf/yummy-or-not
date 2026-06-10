@@ -20,7 +20,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Platform } from 'react-native'
-import { DEFAULT_LANG, LANGS, translate, type Lang } from '@yon/shared'
+import { DEFAULT_LANG, LANG_CURRENCY, LANGS, translate, type Lang } from '@yon/shared'
 
 // ----------------------------------------------------------------
 // Context shape
@@ -31,12 +31,14 @@ interface I18nContextValue {
   /** Accepts any string; silently ignores unknown codes. */
   setLang: (lang: string) => void
   t: (key: string, vars?: Record<string, string | number>) => string
+  formatMoney: (amount: number) => string
 }
 
 const I18nContext = createContext<I18nContextValue>({
   lang: DEFAULT_LANG,
   setLang: () => {},
   t: (key) => key,
+  formatMoney: (n) => `$${n.toFixed(2)}`,
 })
 
 // ----------------------------------------------------------------
@@ -120,6 +122,10 @@ export function I18nProvider({ children }: I18nProviderProps) {
       lang,
       setLang,
       t: (key, vars) => translate(lang, key, vars),
+      formatMoney: (n: number) => {
+        const { symbol } = LANG_CURRENCY[lang]
+        return `${symbol}${n.toFixed(2)}`
+      },
     }),
     [lang, setLang],
   )

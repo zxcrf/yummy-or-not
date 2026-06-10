@@ -50,7 +50,7 @@ function SettingRow({
 }
 
 export default function YouView({ items }: Props) {
-  const { t, lang, setLang } = useI18n()
+  const { t, lang, setLang, formatMoney } = useI18n()
   const { user, signOut } = useAuth()
 
   const displayName = user?.displayName || 'Mina Park'
@@ -64,7 +64,7 @@ export default function YouView({ items }: Props) {
       const n = parseFloat((it.price ?? '').replace(/[^0-9.]/g, ''))
       return sum + (Number.isFinite(n) ? n : 0)
     }, 0)
-  const savedAmount = `$${saved.toFixed(2)}`
+  const savedAmount = formatMoney(saved)
 
   const stat = (
     label: string,
