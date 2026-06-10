@@ -70,8 +70,8 @@ export default function AddRoute() {
     progress.value = withTiming(0, {
       duration: 350,
       easing: Easing.in(Easing.ease),
-    }, (finished) => {
-      if (finished) runOnJS(router.back)()
+    }, () => {
+      runOnJS(router.back)()
     })
   }
 
@@ -81,8 +81,8 @@ export default function AddRoute() {
     progress.value = withTiming(0, {
       duration: 300,
       easing: Easing.in(Easing.ease),
-    }, (finished) => {
-      if (finished) runOnJS(router.replace)(`/taste/${id}`)
+    }, () => {
+      runOnJS(router.replace)(`/taste/${id}`)
     })
   }
 
