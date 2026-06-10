@@ -53,6 +53,17 @@ function relativeDate(createdAt: Date): string {
   return `${diffMo} months ago`;
 }
 
+/** Return true when the stored image value is a legacy absolute URL or local
+ *  path that should be passed through unchanged (no variants, no presigning).
+ *  Single source of truth shared by resolvePhotoUrls and imageKeyFromRow. */
+function isLegacyPhotoValue(image: string): boolean {
+  return (
+    image.startsWith('http://') ||
+    image.startsWith('https://') ||
+    image.startsWith('/uploads/')
+  );
+}
+
 /** Resolve a stored `image` key into the three client-facing URLs.
  *
  *  Cases:
@@ -72,11 +83,7 @@ export async function resolvePhotoUrls(image: string | null | undefined): Promis
   if (!image) return { image: '', imageThumb: '', imageDisplay: '' };
 
   // Legacy absolute URLs — no variants, pass straight through.
-  if (
-    image.startsWith('http://') ||
-    image.startsWith('https://') ||
-    image.startsWith('/uploads/')
-  ) {
+  if (isLegacyPhotoValue(image)) {
     return { image, imageThumb: image, imageDisplay: image };
   }
 
@@ -119,15 +126,11 @@ export async function resolvePhotoUrls(image: string | null | undefined): Promis
 }
 
 /** Return the stable bare storage key for a given DB image value.
- *  Mirrors the legacy-detection logic in resolvePhotoUrls so both agree
- *  on which values are "bare keys" vs legacy pass-through strings. */
+ *  Uses isLegacyPhotoValue as the single source of truth for legacy detection,
+ *  so this stays in sync with resolvePhotoUrls automatically. */
 export function imageKeyFromRow(image: string | null | undefined): string {
   if (!image) return '';
-  if (
-    image.startsWith('http://') ||
-    image.startsWith('https://') ||
-    image.startsWith('/uploads/')
-  ) return '';
+  if (isLegacyPhotoValue(image)) return '';
   return image;
 }
 
