@@ -1,89 +1,129 @@
 /**
- * Regression tests for RN photo upload in FormData.
+ * Regression tests for the native (RN) photo upload path in createTaste.
  *
- * #32 — "Unsupported FormDataPart implementation": Expo SDK 56's custom fetch
- * requires FormData file entries to be Blob/File, not the legacy RN
- * `{ uri, name, type }` convention.
+ * The environment here simulates Expo SDK 56 on Android/iOS, where the photo
+ * upload kept breaking:
  *
- * Android Blob bug — "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView'
- * are not supported": Android's React Native Blob implementation throws when
- * new File([existingBlob], ...) or new Blob([existingBlob]) is called, because
- * it tries to extract the data as ArrayBuffer. The fix uses the 3-arg
- * FormData.append(name, blob, filename) which attaches the blob without
- * constructing a new Blob from it.
+ * - #32 — "Unsupported FormDataPart implementation": expo/fetch's
+ *   convertFormData only serializes parts that are strings, Blobs, or objects
+ *   exposing `bytes()` (expo-file-system File / ExpoBlob). The legacy RN
+ *   `{ uri, name, type }` convention is rejected.
+ *
+ * - "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not
+ *   supported": expo/fetch's `Response.blob()` is `new Blob([arrayBuffer])`
+ *   against the global RN Blob, whose constructor throws on ArrayBuffer parts.
+ *   So `fetch(uri).then((r) => r.blob())` crashes on device — the fix must
+ *   read the file via `arrayBuffer()` and never construct a Blob/File.
+ *
+ * To pin device behavior (Node's undici fetch/Blob/FormData are all
+ * spec-compliant and would mask both bugs), the mocks below make
+ * `Response.blob()` throw the RN error and use an RN-style FormData that
+ * stores appended values as-is and ignores append's third argument.
  */
 
 import { createTaste, setAuthToken } from '../api-client';
 
+const RN_BLOB_ERROR =
+  "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported";
+
+/** RN's classic FormData: append(key, value) — 3rd arg ignored, no serialization. */
+class RNLikeFormData {
+  parts: Array<[string, unknown]> = [];
+  append(name: string, value: unknown) {
+    this.parts.push([name, value]);
+  }
+  getAll(name: string): unknown[] {
+    return this.parts.filter(([n]) => n === name).map(([, v]) => v);
+  }
+  get(name: string): unknown {
+    return this.getAll(name)[0] ?? null;
+  }
+}
+
+const OriginalFormData = global.FormData;
 let lastFetchArgs: { url: string; init?: RequestInit } | null = null;
 
 beforeEach(() => {
   lastFetchArgs = null;
   setAuthToken('test-token');
+  global.FormData = RNLikeFormData as unknown as typeof FormData;
 
-  // Mock global fetch: intercept the API call, capture the body.
-  // If the code does `fetch(photo.uri)` to read the file into a Blob,
-  // respond with a fake Blob for file:// URIs.
   global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
 
-    // Local file fetch — return a fake blob
+    // Local file fetch — arrayBuffer() works, blob() throws like RN does.
     if (url.startsWith('file://')) {
-      const blob = new Blob(['fake-image-bytes'], { type: 'image/jpeg' });
-      return new Response(blob);
+      const res = new Response(new TextEncoder().encode('fake-image-bytes'), {
+        headers: { 'Content-Type': 'image/jpeg' },
+      });
+      Object.defineProperty(res, 'blob', {
+        value: () => {
+          throw new TypeError(RN_BLOB_ERROR);
+        },
+      });
+      return res;
     }
 
     // API call — capture and return success
     lastFetchArgs = { url, init };
     return new Response(JSON.stringify({
-      id: '1', name: 'test', verdict: 'yummy', tags: [],
+      id: '1', name: 'test', verdict: 'yum', tags: [],
       image: '', createdAt: new Date().toISOString(),
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as jest.Mock;
 });
 
 afterEach(() => {
+  global.FormData = OriginalFormData;
   jest.restoreAllMocks();
 });
 
-it('appends photo as Blob to FormData, not raw RN file object', async () => {
-  const rnFile = { uri: 'file:///tmp/photo.jpg', name: 'photo.jpg', type: 'image/jpeg' };
+const rnFile = { uri: 'file:///tmp/photo.jpg', name: 'photo.jpg', type: 'image/jpeg' };
+
+it('saves with a photo even though Response.blob() throws (Android RN Blob)', async () => {
   const input = { name: 'Latte', verdict: 'yum' as const, tags: ['Coffee'] };
 
-  await createTaste(input, rnFile);
-
-  expect(lastFetchArgs).not.toBeNull();
-  const body = lastFetchArgs!.init?.body;
-  expect(body).toBeInstanceOf(FormData);
-
-  const fd = body as FormData;
-  const photoEntry = fd.get('photo');
-
-  // The critical assertion: photo must be a Blob/File, NOT a plain object.
-  // Before the fix, this was { uri, name, type } which Expo 56 can't serialize.
-  expect(photoEntry).toBeInstanceOf(Blob);
+  // Before the fix this rejected with RN_BLOB_ERROR — the exact user-visible
+  // crash — because the photo was read via fetch(uri).then((r) => r.blob()).
+  await expect(createTaste(input, rnFile)).resolves.toMatchObject({ id: '1' });
 });
 
-it('preserves filename on the Blob entry', async () => {
-  const rnFile = { uri: 'file:///tmp/yummy.jpg', name: 'yummy.jpg', type: 'image/jpeg' };
-  const input = { name: 'Ramen', verdict: 'meh' as const, tags: [] as string[] };
+it('appends a bytes()-shaped part with filename and content type', async () => {
+  await createTaste({ name: 'Ramen', verdict: 'meh' as const, tags: [] }, rnFile);
 
-  await createTaste(input, rnFile);
+  expect(lastFetchArgs).not.toBeNull();
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd).toBeInstanceOf(RNLikeFormData);
 
-  const fd = lastFetchArgs!.init?.body as FormData;
-  const photoEntry = fd.get('photo');
-  expect(photoEntry).toBeInstanceOf(File);
-  expect((photoEntry as File).name).toBe('yummy.jpg');
-  expect((photoEntry as File).type).toBe('image/jpeg');
+  const photo = fd.get('photo') as {
+    uri?: string;
+    name: string;
+    type: string;
+    size: number;
+    bytes: () => Uint8Array;
+  };
+
+  // expo/fetch's convertFormData accepts string | Blob | { bytes() } entries
+  // and reads filename/content-type from the part's `name`/`type`. The legacy
+  // RN { uri } descriptor (#32) and Blob/File construction are both off-limits.
+  expect(photo).not.toBeNull();
+  expect(photo.uri).toBeUndefined();
+  expect(typeof photo.bytes).toBe('function');
+  expect(photo.name).toBe('photo.jpg');
+  expect(photo.type).toBe('image/jpeg');
+
+  const bytes = photo.bytes();
+  expect(bytes).toBeInstanceOf(Uint8Array);
+  expect(photo.size).toBe(bytes.byteLength);
+  expect(new TextDecoder().decode(bytes)).toBe('fake-image-bytes');
 });
 
 it('still appends text fields correctly', async () => {
-  const rnFile = { uri: 'file:///tmp/photo.jpg', name: 'photo.jpg', type: 'image/jpeg' };
   const input = { name: 'Burger', verdict: 'nah' as const, place: 'Downtown', price: '12', notes: 'meh', tags: ['Burger', 'Spicy'] };
 
   await createTaste(input, rnFile);
 
-  const fd = lastFetchArgs!.init?.body as FormData;
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
   expect(fd.get('name')).toBe('Burger');
   expect(fd.get('verdict')).toBe('nah');
   expect(fd.get('place')).toBe('Downtown');
@@ -92,26 +132,11 @@ it('still appends text fields correctly', async () => {
   expect(fd.getAll('tags')).toEqual(['Burger', 'Spicy']);
 });
 
-it('does not construct new File([blob]) which fails on Android with ArrayBuffer error', async () => {
-  // Simulate Android: new File([blobPart], ...) throws the known RN error when
-  // any part is a Blob (the runtime tries to read it as ArrayBuffer internally).
-  const OriginalFile = global.File;
-  global.File = class extends OriginalFile {
-    constructor(parts: BlobPart[], name: string, opts?: FilePropertyBag) {
-      if (parts.some((p) => p instanceof Blob)) {
-        throw new TypeError(
-          "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported"
-        );
-      }
-      super(parts, name, opts);
-    }
-  } as typeof File;
+it('passes a browser File straight through (web path)', async () => {
+  const file = new File(['web-bytes'], 'web.jpg', { type: 'image/jpeg' });
 
-  try {
-    const rnFile = { uri: 'file:///tmp/photo.jpg', name: 'photo.jpg', type: 'image/jpeg' };
-    const input = { name: 'Matcha', verdict: 'yum' as const, tags: [] as string[] };
-    await expect(createTaste(input, rnFile)).resolves.toBeDefined();
-  } finally {
-    global.File = OriginalFile;
-  }
+  await createTaste({ name: 'Web', verdict: 'yum' as const, tags: [] }, file);
+
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd.get('photo')).toBe(file);
 });
