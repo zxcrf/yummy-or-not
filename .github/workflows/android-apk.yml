@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +51,24 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: apps/mobile/android
-          key: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
-          restore-keys: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-
+          key: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
+          restore-keys: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-
+
+      - name: Detect Android NDK version
+        id: ndk-version
+        run: |
+          version="$(ls "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native CMake cache (.cxx)
+        id: restore-cxx
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            apps/mobile/node_modules/react-native-gesture-handler/android/.cxx
+            apps/mobile/node_modules/react-native-reanimated/android/.cxx
+          key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
+          restore-keys: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-
 
       - name: Expo prebuild (generate android/)
         working-directory: apps/mobile
@@ -91,7 +107,16 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: apps/mobile/android
-          key: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
+          key: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
+
+      - name: Save native CMake cache (.cxx)
+        if: steps.restore-cxx.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            apps/mobile/node_modules/react-native-gesture-handler/android/.cxx
+            apps/mobile/node_modules/react-native-reanimated/android/.cxx
+          key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
