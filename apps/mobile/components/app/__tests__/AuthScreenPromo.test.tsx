@@ -26,6 +26,7 @@ const base: AuthResponse = {
     avatar: '',
     locale: 'zh',
     plan: 'free',
+    warningsEnabled: false,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   token: 'tok',

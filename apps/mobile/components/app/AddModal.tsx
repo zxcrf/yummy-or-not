@@ -10,11 +10,22 @@
      - Web: a hidden <input type="file"> file picker; the browser File
        is passed straight to createTaste().
 
+   Same-name detection:
+     - Debounces 500ms after typing stops in the "What?" field.
+     - Min length: CJK ≥ 2 chars, latin ≥ 3 chars.
+     - Runs searchTastes on the user's taste library (exact/strong only).
+     - Shows an inline banner (never a modal): yellow for plain duplicate,
+       red when the matching taste has warnBeforeBuy and warningsEnabled.
+     - Tap banner to expand a list of matched records; tap row → detail.
+     - X dismisses; dismissed prefixes are remembered for the session so
+       the banner won't reshow for the same prefix.
+     - warningsEnabled=false suppresses the red variant; yellow still shows.
+
    Presented as a full-screen sheet (the route layer decides whether
    that's a modal route on web or a stack screen on native).
    ============================================================ */
 
-import { useRef, useMemo, useState } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -24,8 +35,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
-import { Text, View } from 'tamagui'
-import { TAG_CHOICES, createTaste, createTag, type PhotoInput, type Verdict } from '@yon/shared'
+import { Text, View, XStack, YStack } from 'tamagui'
+import {
+  TAG_CHOICES,
+  createTaste,
+  createTag,
+  searchTastes,
+  type PhotoInput,
+  type Taste,
+  type Verdict,
+} from '@yon/shared'
 
 import {
   Button,
@@ -35,12 +54,15 @@ import {
   Tag,
   Textarea,
   VerdictPicker,
+  VerdictStamp,
 } from '@/components/ds'
 
 import { useI18n } from '@/providers/I18nProvider'
-import { invalidateTastes } from '@/app/(tabs)/_useTastes'
+import { useAuth } from '@/providers/AuthProvider'
+import { invalidateTastes, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { PhotoPreview } from './PhotoPreview'
+import { useRouter } from 'expo-router'
 
 interface Props {
   onClose: () => void
@@ -93,12 +115,35 @@ async function compressAsset(asset: ImagePicker.ImagePickerAsset): Promise<Photo
   }
 }
 
+/**
+ * Returns true when the query is long enough to trigger same-name detection.
+ * CJK characters count as a word each; latin needs at least 3 chars total.
+ */
+function queryMeetsMinLength(q: string): boolean {
+  if (!q) return false
+  // Count CJK characters in the string.
+  const cjkCount = (q.match(/[一-鿿㐀-䶿가-힯぀-ヿ]/g) ?? []).length
+  if (cjkCount >= 2) return true
+  return q.trim().length >= 3
+}
+
+/** Stable session-scoped set of dismissed query prefixes. */
+const dismissedPrefixes = new Set<string>()
+
+/** Normalised lowercase prefix used as the dismiss key. */
+function dismissKey(q: string): string {
+  return q.trim().toLowerCase()
+}
+
 export default function AddModal({ onClose, onSaved }: Props) {
   const { t } = useI18n()
+  const { user } = useAuth()
+  const router = useRouter()
   const insets = useSafeAreaInsets()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<RNScrollView>(null)
   const { tags: userTags } = useTags()
+  const { items } = useRefreshableTastes()
 
   // Merge the user's tag library with the built-in TAG_CHOICES, deduped, for
   // the chip list. Built-in choices always appear first so the UX stays stable
@@ -133,6 +178,81 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // --- Same-name detection -----------------------------------------------
+
+  // Debounced query value used for duplicate detection. Updated 500ms after
+  // name changes stop so we don't hammer searchTastes on every keystroke.
+  const [debouncedName, setDebouncedName] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleNameChange = (text: string) => {
+    setName(text)
+    // Clear any existing banner dismissal tracking when the name changes
+    // substantially (the user is typing something new).
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedName(text)
+    }, 500)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  // Whether the banner has been dismissed for the current debouncedName prefix.
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+
+  // Reset dismissal state when the debounced query changes to a new prefix
+  // that is not covered by any session-dismissed prefix. A dismissed prefix
+  // suppresses the banner for all extensions of that prefix (e.g. dismissing
+  // "珍珠" also suppresses "珍珠奶茶").
+  useEffect(() => {
+    if (!debouncedName) {
+      setBannerDismissed(false)
+      return
+    }
+    const key = dismissKey(debouncedName)
+    const covered = Array.from(dismissedPrefixes).some((p) => key.startsWith(p))
+    setBannerDismissed(covered)
+  }, [debouncedName])
+
+  // Expanded state: whether the duplicate rows list is shown.
+  const [bannerExpanded, setBannerExpanded] = useState(false)
+
+  // Compute duplicate matches (exact/strong only) using the debounced name.
+  const dupMatches = useMemo<Taste[]>(() => {
+    if (!queryMeetsMinLength(debouncedName)) return []
+    const results = searchTastes(items, debouncedName)
+    return results
+      .filter((r) => r.strength === 'exact' || r.strength === 'strong')
+      .map((r) => r.item)
+  }, [items, debouncedName])
+
+  const warningsOn = user?.warningsEnabled ?? false
+
+  // Determine banner variant:
+  //   'warn' — at least one match has warnBeforeBuy AND warningsEnabled
+  //   'dup'  — plain duplicate (any match), no warn condition
+  //   null   — no banner
+  const bannerVariant = useMemo<'warn' | 'dup' | null>(() => {
+    if (dupMatches.length === 0) return null
+    if (warningsOn && dupMatches.some((m) => m.warnBeforeBuy)) return 'warn'
+    return 'dup'
+  }, [dupMatches, warningsOn])
+
+  const showBanner = bannerVariant !== null && !bannerDismissed
+
+  const dismissBanner = () => {
+    const key = dismissKey(debouncedName)
+    dismissedPrefixes.add(key)
+    setBannerDismissed(true)
+    setBannerExpanded(false)
+  }
+
+  // --- Tag helpers --------------------------------------------------------
 
   const toggle = (tg: string) =>
     setPicked((p) => (p.includes(tg) ? p.filter((x) => x !== tg) : [...p, tg]))
@@ -219,6 +339,11 @@ export default function AddModal({ onClose, onSaved }: Props) {
       setSaving(false)
     }
   }
+
+  // --- Banner colours ------------------------------------------------------
+  const bannerBg = bannerVariant === 'warn' ? '$verdictNah' : '$verdictMeh'
+  const bannerBorder = bannerVariant === 'warn' ? '$verdictNah2' : '$ink900'
+  const bannerIcon = bannerVariant === 'warn' ? 'alert' : 'info-box'
 
   return (
     <KeyboardAvoidingView
@@ -315,8 +440,92 @@ export default function AddModal({ onClose, onSaved }: Props) {
             label={t('f_what')}
             placeholder="Brown sugar boba"
             value={name}
-            onChangeText={setName}
+            onChangeText={handleNameChange}
           />
+
+          {/* inline same-name detection banner */}
+          {showBanner ? (
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(150)}
+            >
+              <View
+                testID="dup-banner"
+                borderWidth={2}
+                borderColor={bannerBorder}
+                borderRadius="$md"
+                backgroundColor={bannerBg}
+                overflow="hidden"
+              >
+                {/* banner header row */}
+                <XStack
+                  alignItems="center"
+                  gap="$2"
+                  padding={12}
+                  onPress={() => setBannerExpanded((e) => !e)}
+                  cursor="pointer"
+                  accessibilityRole="button"
+                >
+                  <Icon name={bannerIcon} size={18} color="#191017" />
+                  <Text flex={1} color="$ink900" fontSize={14} fontWeight="600">
+                    {t(bannerVariant === 'warn' ? 'add_warn_hint' : 'add_duplicate_hint')}
+                  </Text>
+                  <Icon
+                    name={bannerExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color="#191017"
+                  />
+                  <View
+                    onPress={dismissBanner}
+                    accessibilityRole="button"
+                    aria-label={t('cancel')}
+                    padding={4}
+                  >
+                    <Icon name="close" size={14} color="#191017" />
+                  </View>
+                </XStack>
+
+                {/* expanded match rows */}
+                {bannerExpanded ? (
+                  <YStack
+                    borderTopWidth={2}
+                    borderTopColor={bannerBorder}
+                    gap={0}
+                  >
+                    {dupMatches.map((match) => (
+                      <XStack
+                        key={match.id}
+                        alignItems="center"
+                        gap="$3"
+                        padding={12}
+                        borderTopWidth={1}
+                        borderTopColor="$ink200"
+                        onPress={() => {
+                          onClose()
+                          router.push(`/taste/${match.id}`)
+                        }}
+                        cursor="pointer"
+                        accessibilityRole="button"
+                      >
+                        <YStack flex={1} minWidth={0}>
+                          <Text color="$ink900" fontWeight="600" fontSize={14}>
+                            {match.name}
+                          </Text>
+                          {match.place ? (
+                            <Text color="$ink500" fontSize={12}>
+                              {match.place}
+                            </Text>
+                          ) : null}
+                        </YStack>
+                        <VerdictStamp verdict={match.verdict} size="sm" label={t('v_' + match.verdict)} />
+                      </XStack>
+                    ))}
+                  </YStack>
+                ) : null}
+              </View>
+            </Animated.View>
+          ) : null}
+
           <Input
             label={t('f_where')}
             placeholder="Tiger Sugar · Hongdae"

@@ -2,6 +2,7 @@
 -- Drops in dependency order so a re-run is a clean rebuild.
 DROP TABLE IF EXISTS promo_redemptions;
 DROP TABLE IF EXISTS promo_codes;
+DROP TABLE IF EXISTS taste_purchases;
 DROP TABLE IF EXISTS otp_codes;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS auth_identities;
@@ -12,15 +13,16 @@ DROP TABLE IF EXISTS users;
 -- A user is identified by a phone (domestic habit) and/or an email
 -- (international habit). Either can be null; at least one auth handle exists.
 CREATE TABLE users (
-  id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  display_name  text        NOT NULL DEFAULT '',
-  phone         text        UNIQUE,             -- E.164-ish, e.g. +8613800138000
-  email         text        UNIQUE,             -- lower-cased on write
-  password_hash text,                           -- scrypt "salt:hash"; null for OTP/OAuth-only
-  avatar        text        NOT NULL DEFAULT '',
-  locale        text        NOT NULL DEFAULT 'zh',
-  plan          text        NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
-  created_at    timestamptz NOT NULL DEFAULT now()
+  id               text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  display_name     text        NOT NULL DEFAULT '',
+  phone            text        UNIQUE,             -- E.164-ish, e.g. +8613800138000
+  email            text        UNIQUE,             -- lower-cased on write
+  password_hash    text,                           -- scrypt "salt:hash"; null for OTP/OAuth-only
+  avatar           text        NOT NULL DEFAULT '',
+  locale           text        NOT NULL DEFAULT 'zh',
+  plan             text        NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
+  warnings_enabled boolean     NOT NULL DEFAULT true,
+  created_at       timestamptz NOT NULL DEFAULT now()
 );
 
 -- ── OAuth / social identities (WeChat, Google, Apple, …) ─────────────────────
@@ -73,17 +75,18 @@ CREATE INDEX otp_codes_phone_idx ON otp_codes (phone, created_at DESC);
 
 -- ── Tastes (now owned by a user) ─────────────────────────────────────────────
 CREATE TABLE tastes (
-  id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name        text        NOT NULL,
-  place       text        NOT NULL DEFAULT '',
-  price       text        NOT NULL DEFAULT '',
-  verdict     text        NOT NULL CHECK (verdict IN ('yum', 'meh', 'nah')),
-  tags        text[]      NOT NULL DEFAULT '{}',
-  bought_count int        NOT NULL DEFAULT 1,
-  notes       text        NOT NULL DEFAULT '',
-  image       text        NOT NULL DEFAULT '',
-  created_at  timestamptz NOT NULL DEFAULT now()
+  id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id        text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name           text        NOT NULL,
+  place          text        NOT NULL DEFAULT '',
+  price          text        NOT NULL DEFAULT '',
+  verdict        text        NOT NULL CHECK (verdict IN ('yum', 'meh', 'nah')),
+  tags           text[]      NOT NULL DEFAULT '{}',
+  bought_count   int         NOT NULL DEFAULT 1,   -- legacy counter; reads use derived 1+COUNT(taste_purchases)
+  warn_before_buy boolean    NOT NULL DEFAULT false,
+  notes          text        NOT NULL DEFAULT '',
+  image          text        NOT NULL DEFAULT '',
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
 
 -- Per-user, newest-first queries (the hot path)
@@ -133,3 +136,17 @@ CREATE TABLE user_tags (
 CREATE UNIQUE INDEX user_tags_user_name_ci_key ON user_tags (user_id, lower(name));
 
 CREATE INDEX user_tags_user_idx ON user_tags (user_id, name ASC);
+
+-- ── Purchases ledger ─────────────────────────────────────────────────────────
+-- Each row is one additional purchase of a taste (beyond the original record).
+-- Derived boughtCount = 1 + COUNT(*) FROM taste_purchases WHERE taste_id = t.id.
+-- Deleting the taste cascades to delete all its purchase rows.
+CREATE TABLE taste_purchases (
+  id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  taste_id   text        NOT NULL REFERENCES tastes(id) ON DELETE CASCADE,
+  price      numeric(10,2),           -- NULL = caller did not specify; UI may display taste.price
+  place      text,                    -- NULL = caller did not specify; UI may display taste.place
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX taste_purchases_taste_idx ON taste_purchases (taste_id, created_at DESC);

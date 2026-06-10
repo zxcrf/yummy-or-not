@@ -14,7 +14,7 @@ import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import {
   Badge,
@@ -48,8 +48,12 @@ export default function DetailView() {
   idRef.current = id
   const [item, setItem] = useState<Taste | null>(() => (id ? getCachedTaste(id) ?? null : null))
   const [loading, setLoading] = useState<boolean>(() => !!id && getCachedTaste(id) == null)
-  const [remind, setRemind] = useState(true)
+  const [remind, setRemind] = useState(() => item?.warnBeforeBuy ?? false)
   const [deleting, setDeleting] = useState(false)
+  const [buySheetOpen, setBuySheetOpen] = useState(false)
+  const [buyPrice, setBuyPrice] = useState('')
+  const [buyPlace, setBuyPlace] = useState('')
+  const [buySubmitting, setBuySubmitting] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -81,6 +85,13 @@ export default function DetailView() {
     setSaveError(null)
     setOriginalUrl(null)
     setOriginalLoading(false)
+    // Reset repurchase state so taste A's open sheet / typed inputs / remind value
+    // don't bleed onto taste B before the data effect catches up.
+    setRemind(cached?.warnBeforeBuy ?? false)
+    setBuySheetOpen(false)
+    setBuyPrice('')
+    setBuyPlace('')
+    setBuySubmitting(false)
   }
 
   useEffect(() => {
@@ -92,6 +103,7 @@ export default function DetailView() {
     const cached = getCachedTaste(id)
     if (cached) {
       setItem(cached)
+      setRemind(cached.warnBeforeBuy)
       setLoading(false)
       return
     }
@@ -103,7 +115,10 @@ export default function DetailView() {
     const fetchId = id
     getTaste(id)
       .then((data) => {
-        if (alive && idRef.current === fetchId) setItem(data)
+        if (alive && idRef.current === fetchId) {
+          setItem(data)
+          setRemind(data.warnBeforeBuy)
+        }
       })
       .catch(() => {
         if (alive && idRef.current === fetchId) setItem(null)
@@ -212,6 +227,63 @@ export default function DetailView() {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       if (idRef.current === savingId) setSaving(false)
+    }
+  }
+
+  const toggleRemind = async (next: boolean) => {
+    if (!item) return
+    const prev = remind
+    const toggleId = item.id
+    setRemind(next)
+    setItem((p) => (p ? { ...p, warnBeforeBuy: next } : p))
+    try {
+      await updateTaste(item.id, { warnBeforeBuy: next })
+      // The server write happened — refresh the list regardless of route state.
+      void invalidateTastes()
+    } catch {
+      // Only revert if the route hasn't moved to a different taste; otherwise
+      // we'd clobber B's remind/item state with A's stale previous value.
+      if (idRef.current !== toggleId) return
+      setRemind(prev)
+      setItem((p) => (p ? { ...p, warnBeforeBuy: prev } : p))
+    }
+  }
+
+  const openBuySheet = () => {
+    if (!item) return
+    const lastPurchase = item.purchases[0]
+    setBuyPrice(lastPurchase?.price ?? item.price)
+    setBuyPlace(lastPurchase?.place ?? item.place)
+    setBuySheetOpen(true)
+  }
+
+  const submitBuy = async () => {
+    if (!item || buySubmitting) return
+    const submitId = item.id
+    setBuySubmitting(true)
+    // Optimistic boughtCount bump
+    setItem((prev) => prev ? { ...prev, boughtCount: prev.boughtCount + 1 } : prev)
+    try {
+      const { purchase, boughtCount } = await addPurchase(item.id, {
+        price: buyPrice || null,
+        place: buyPlace || null,
+      })
+      if (idRef.current === submitId) {
+        setItem((prev) =>
+          prev
+            ? { ...prev, boughtCount, purchases: [purchase, ...prev.purchases] }
+            : prev,
+        )
+      }
+      void invalidateTastes()
+      setBuySheetOpen(false)
+    } catch {
+      // Revert optimistic bump
+      if (idRef.current === submitId) {
+        setItem((prev) => prev ? { ...prev, boughtCount: prev.boughtCount - 1 } : prev)
+      }
+    } finally {
+      if (idRef.current === submitId) setBuySubmitting(false)
     }
   }
 
@@ -416,8 +488,28 @@ export default function DetailView() {
                   {t('warn_before')}
                 </Text>
               </XStack>
-              <Switch checked={remind} onChange={setRemind} />
+              <Switch checked={remind} onChange={toggleRemind} />
             </XStack>
+
+            {/* warn banner — shown when warnBeforeBuy is on and global warnings enabled */}
+            {remind && user?.warningsEnabled ? (
+              <XStack
+                alignItems="center"
+                gap="$2"
+                backgroundColor="$candyYellow"
+                borderWidth={2}
+                borderColor="$ink900"
+                borderRadius="$sm"
+                paddingHorizontal={12}
+                paddingVertical={10}
+                testID="warn-banner"
+              >
+                <Icon name="alert" size={16} color="#191017" />
+                <Text color="$ink900" fontSize={13} flex={1}>
+                  {t('detail_warn_banner')}
+                </Text>
+              </XStack>
+            ) : null}
 
             {/* actions */}
             <XStack gap="$3" marginTop="$1">
@@ -431,6 +523,14 @@ export default function DetailView() {
                 onPress={handleDelete}
               >
                 {t('del')}
+              </Button>
+              <Button
+                variant="secondary"
+                iconLeft={<Icon name="check" size={18} />}
+                onPress={openBuySheet}
+                testID="buy-again-btn"
+              >
+                {t('detail_buy_again')}
               </Button>
             </XStack>
 
@@ -458,6 +558,71 @@ export default function DetailView() {
           </>
         )}
       </YStack>
+
+      {/* +1 Again sheet */}
+      <Modal
+        visible={buySheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBuySheetOpen(false)}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={() => setBuySheetOpen(false)}>
+          <Pressable style={styles.sheetContent} onPress={() => {}}>
+            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
+              {t('detail_buy_again_title')}
+            </Text>
+            {item.warnBeforeBuy && user?.warningsEnabled ? (
+              <XStack
+                alignItems="center"
+                gap="$2"
+                backgroundColor="$candyYellow"
+                borderWidth={2}
+                borderColor="$ink900"
+                borderRadius="$sm"
+                paddingHorizontal={12}
+                paddingVertical={10}
+                marginBottom={12}
+                testID="buy-sheet-warn-banner"
+              >
+                <Icon name="alert" size={16} color="#191017" />
+                <Text color="$ink900" fontSize={13} flex={1}>
+                  {t('detail_warn_banner')}
+                </Text>
+              </XStack>
+            ) : null}
+            <Input
+              label={t('f_price')}
+              value={buyPrice}
+              onChangeText={setBuyPrice}
+              placeholder="5.80"
+              testID="buy-price-input"
+            />
+            <View marginTop={12}>
+              <Input
+                label={t('f_where')}
+                value={buyPlace}
+                onChangeText={setBuyPlace}
+                placeholder="Tiger Sugar · Hongdae"
+                testID="buy-place-input"
+              />
+            </View>
+            <XStack gap="$3" marginTop={20}>
+              <Button variant="ghost" onPress={() => setBuySheetOpen(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={buySubmitting}
+                iconLeft={<Icon name="check" size={18} color="#fff" />}
+                onPress={submitBuy}
+                testID="buy-confirm-btn"
+              >
+                {t('detail_buy_again_confirm')}
+              </Button>
+            </XStack>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Fullscreen original image modal */}
       <Modal
@@ -490,5 +655,17 @@ const styles = StyleSheet.create({
   modalImage: {
     width: '100%',
     height: '100%',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+    paddingBottom: 40,
   },
 })

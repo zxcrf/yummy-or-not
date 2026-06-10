@@ -46,12 +46,22 @@ jest.mock('@yon/shared', () => ({
   TAG_CHOICES: ['Boba', 'Coffee'],
   createTaste: (...args: unknown[]) => mockCreateTaste(...args),
   createTag: (...args: unknown[]) => mockCreateTag(...args),
+  searchTastes: jest.fn().mockReturnValue([]),
 }))
 
 // AddModal invalidates the shared taste cache after a successful save; that
 // hook has its own suite, so stub it to a no-op here.
 jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: jest.fn(async () => []),
+  useRefreshableTastes: () => ({ items: [], refresh: jest.fn() }),
+}))
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}))
+
+jest.mock('@/providers/AuthProvider', () => ({
+  useAuth: () => ({ user: { warningsEnabled: true } }),
 }))
 
 let mockUserTags: Array<{ id: string; name: string; createdAt: string }> = []

@@ -13,12 +13,16 @@ import YouView from '../YouView'
 const mockSetLang = jest.fn()
 const mockSignOut = jest.fn()
 const mockFormatMoney = jest.fn((n: number) => `$${n.toFixed(2)}`)
+const mockPatchUser = jest.fn()
+
+const mockUpdateUser = jest.fn()
 
 jest.mock('@yon/shared', () => ({
   LANGS: [
     { code: 'zh', label: 'Chinese', native: '中文' },
     { code: 'en', label: 'English', native: 'English' },
   ],
+  updateUser: (...args: unknown[]) => mockUpdateUser(...args),
 }))
 
 jest.mock('@/providers/I18nProvider', () => ({
@@ -49,8 +53,10 @@ jest.mock('@/providers/AuthProvider', () => ({
       avatar: '',
       displayName: 'Mina Park',
       plan: 'free',
+      warningsEnabled: false,
     },
     signOut: mockSignOut,
+    patchUser: mockPatchUser,
   }),
 }))
 
@@ -103,6 +109,8 @@ describe('YouView language switcher', () => {
               verdict: 'nah',
               tags: [],
               boughtCount: 1,
+              warnBeforeBuy: false,
+              purchases: [],
               date: 'today',
               notes: '',
               image: '',
@@ -119,6 +127,8 @@ describe('YouView language switcher', () => {
               verdict: 'yum',
               tags: [],
               boughtCount: 1,
+              warnBeforeBuy: false,
+              purchases: [],
               date: 'today',
               notes: '',
               image: '',
@@ -140,5 +150,71 @@ describe('YouView language switcher', () => {
           node.props.children === '¥4.50 saved',
       ),
     ).not.toHaveLength(0)
+  })
+})
+
+describe('YouView warnings switch', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFormatMoney.mockImplementation((n: number) => `$${n.toFixed(2)}`)
+    mockUpdateUser.mockResolvedValue({ user: { warningsEnabled: true } })
+    mockPatchUser.mockImplementation(() => {})
+  })
+
+  // The real Switch component renders a Track (styled View) with
+  // accessibilityRole="switch" and aria-checked reflecting the checked prop.
+  // Find it by accessibilityRole; there is exactly one switch in YouView (the
+  // warnings row — location/private rows have no switch yet).
+  function findSwitch(renderer: TestRenderer.ReactTestRenderer) {
+    return renderer.root.findAll(
+      (n) => n.props.accessibilityRole === 'switch',
+    )[0]
+  }
+
+  it('renders the warnings switch seeded from user.warningsEnabled=false', () => {
+    const renderer = renderYouView()
+    const sw = findSwitch(renderer)
+    expect(sw).toBeTruthy()
+    expect(sw.props['aria-checked']).toBe(false)
+  })
+
+  it('calls updateUser({ warningsEnabled: true }) when switch is pressed', async () => {
+    const renderer = renderYouView()
+    const sw = findSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockUpdateUser).toHaveBeenCalledWith({ warningsEnabled: true })
+  })
+
+  it('calls patchUser with the server response so auth context converges', async () => {
+    mockUpdateUser.mockResolvedValue({ user: { warningsEnabled: true } })
+    const renderer = renderYouView()
+    const sw = findSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockPatchUser).toHaveBeenCalledWith({ warningsEnabled: true })
+  })
+
+  it('does not call patchUser when updateUser rejects', async () => {
+    mockUpdateUser.mockRejectedValueOnce(new Error('network'))
+    const renderer = renderYouView()
+    const sw = findSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockPatchUser).not.toHaveBeenCalled()
+  })
+
+  it('reverts optimistic state when updateUser rejects', async () => {
+    mockUpdateUser.mockRejectedValueOnce(new Error('network'))
+    const renderer = renderYouView()
+    const sw = findSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    // Should revert to false (user.warningsEnabled was false)
+    expect(findSwitch(renderer).props['aria-checked']).toBe(false)
   })
 })

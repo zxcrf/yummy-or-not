@@ -16,10 +16,12 @@
 
 import type {
   Taste,
+  TastePurchase,
   CreateTasteInput,
   UpdateTasteInput,
   Stats,
   User,
+  UpdateUserInput,
   ProviderStatus,
   AuthResponse,
   RegisterInput,
@@ -270,6 +272,33 @@ export async function deleteTag(id: string): Promise<void> {
 /** PATCH /api/tags/:id — rename a tag in the candidate set. Never rewrites tastes.tags. */
 export async function renameTag(id: string, input: RenameTagInput): Promise<UserTag> {
   return apiFetch<UserTag>(`/api/tags/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/* ── Repurchase warnings & purchases ───────────────────────────────────────── */
+
+/** POST /api/tastes/:id/purchases — record an additional purchase of a taste.
+ *  Returns the new purchase row and the updated derived boughtCount. */
+export async function addPurchase(
+  tasteId: string,
+  input: { price?: string | null; place?: string | null } = {}
+): Promise<{ purchase: TastePurchase; boughtCount: number }> {
+  return apiFetch<{ purchase: TastePurchase; boughtCount: number }>(
+    `/api/tastes/${tasteId}/purchases`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+/** PATCH /api/user — update signed-in user settings (e.g. warningsEnabled). */
+export async function updateUser(input: UpdateUserInput): Promise<{ user: User }> {
+  return apiFetch<{ user: User }>("/api/user", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

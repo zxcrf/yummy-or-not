@@ -9,10 +9,11 @@
    way without hitting the stats endpoint.
    ============================================================ */
 
+import { useState } from 'react'
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
-import { LANGS, type Taste } from '@yon/shared'
+import { LANGS, updateUser, type Taste } from '@yon/shared'
 
-import { Avatar, Button, Card, Icon, LangSwitcher } from '@/components/ds'
+import { Avatar, Button, Card, Icon, LangSwitcher, Switch } from '@/components/ds'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -51,7 +52,20 @@ function SettingRow({
 
 export default function YouView({ items }: Props) {
   const { t, lang, setLang, formatMoney } = useI18n()
-  const { user, signOut } = useAuth()
+  const { user, signOut, patchUser } = useAuth()
+
+  const [warningsEnabled, setWarningsEnabled] = useState(() => user?.warningsEnabled ?? false)
+
+  const toggleWarnings = async (next: boolean) => {
+    const prev = warningsEnabled
+    setWarningsEnabled(next)
+    try {
+      const { user: updated } = await updateUser({ warningsEnabled: next })
+      patchUser({ warningsEnabled: updated.warningsEnabled })
+    } catch {
+      setWarningsEnabled(prev)
+    }
+  }
 
   const displayName = user?.displayName || 'Mina Park'
 
@@ -179,7 +193,22 @@ export default function YouView({ items }: Props) {
         >
           {t('settings')}
         </Text>
-        <SettingRow icon="alert" label={t('set_warnings')} />
+        <View
+          flexDirection="row"
+          alignItems="center"
+          gap="$3"
+          paddingVertical={14}
+          paddingHorizontal={2}
+          borderBottomWidth={2}
+          borderBottomColor="$ink200"
+          borderStyle="dotted"
+        >
+          <Icon name="alert" size={20} color="#5a4f63" />
+          <Text flex={1} color="$ink900" fontWeight="500">
+            {t('set_warnings')}
+          </Text>
+          <Switch checked={warningsEnabled} onChange={toggleWarnings} testID="warnings-switch" />
+        </View>
         <SettingRow icon="map" label={t('set_location')} />
         <SettingRow icon="lock" label={t('set_private')} last />
       </View>

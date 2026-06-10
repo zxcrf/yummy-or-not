@@ -2,7 +2,7 @@
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase } from '@yon/shared';
 import { FILTERS } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
@@ -135,25 +135,84 @@ export function imageKeyFromRow(image: string | null | undefined): string {
   return image;
 }
 
-/** Map a DB row (snake_case) to a Taste (camelCase). */
+/** Map a taste_purchases row to the client-facing TastePurchase shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToPurchase(row: any): TastePurchase {
+  let price: string | null = null;
+  if (row.price != null) {
+    const n = parseFloat(String(row.price));
+    price = isNaN(n) ? String(row.price) : n.toFixed(2);
+  }
+  return {
+    id:        row.id,
+    tasteId:   row.taste_id,
+    price,
+    place:     row.place ?? null,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+/** Fetch the purchases ledger for a taste (newest first) and count. */
+async function fetchPurchasesForTaste(
+  tasteId: string
+): Promise<{ purchases: TastePurchase[]; count: number }> {
+  const { rows } = await pool.query(
+    'SELECT * FROM taste_purchases WHERE taste_id = $1 ORDER BY created_at DESC',
+    [tasteId]
+  );
+  return { purchases: rows.map(rowToPurchase), count: rows.length };
+}
+
+/** Parse a Postgres text-array value that may arrive as a JS array (real pg)
+ *  or as a string like '{"Boba","Ramen"}' / '{}' (pg-mem). */
+function parsePgArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string') return [];
+  const s = value.trim();
+  if (s === '{}') return [];
+  // Strip outer braces, split on commas, strip surrounding quotes
+  const inner = s.replace(/^\{|\}$/g, '');
+  return inner.split(',').map((el) => el.replace(/^"|"$/g, '').trim()).filter(Boolean);
+}
+
+/** Map a DB row (snake_case) to a Taste (camelCase).
+ *  Fetches purchases from the ledger to compute the derived boughtCount. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function rowToTaste(row: any): Promise<Taste> {
   const urls = await resolvePhotoUrls(row.image);
+
+  // If the caller pre-fetched purchases (purchase_count + purchases_json on row),
+  // use them directly. Otherwise do a separate query. This keeps list queries
+  // from issuing N+1 queries when the caller passes the aggregated data.
+  let purchases: TastePurchase[];
+  let purchaseCount: number;
+
+  if (row.purchase_count != null) {
+    purchaseCount = Number(row.purchase_count);
+    purchases = Array.isArray(row.purchases_json) ? row.purchases_json.map(rowToPurchase) : [];
+  } else {
+    const fetched = await fetchPurchasesForTaste(row.id);
+    purchases = fetched.purchases;
+    purchaseCount = fetched.count;
+  }
+
   return {
-    id:          row.id,
-    name:        row.name,
-    place:       row.place ?? '',
-    price:       row.price ?? '',
-    verdict:     row.verdict,
-    tags:        (row.tags ?? []).flatMap((t: string) => normalizeTag(t)),
-    boughtCount: Number(row.bought_count),
-    date:        relativeDate(new Date(row.created_at)),
-    notes:       row.notes ?? '',
-    image:       urls.image,
-    imageThumb:  urls.imageThumb,
-    imageDisplay: urls.imageDisplay,
-    imageKey:    imageKeyFromRow(row.image),
-    createdAt:   new Date(row.created_at).toISOString(),
+    id:            row.id,
+    name:          row.name,
+    place:         row.place ?? '',
+    price:         row.price ?? '',
+    verdict:       row.verdict,
+    tags:          parsePgArray(row.tags).flatMap((t: string) => normalizeTag(t)),
+    boughtCount:   1 + purchaseCount,
+    warnBeforeBuy: Boolean(row.warn_before_buy),
+    purchases,
+    date:          relativeDate(new Date(row.created_at)),
+    notes:         row.notes ?? '',
+    image:         urls.image,
+    imageThumb:    urls.imageThumb,
+    imageDisplay:  urls.imageDisplay,
+    imageKey:      imageKeyFromRow(row.image),
+    createdAt:     new Date(row.created_at).toISOString(),
   };
 }
 
@@ -193,7 +252,8 @@ function normalizeTag(tag: string): string[] {
 
 // ── Query helpers ─────────────────────────────────────────────────────────────
 
-/** List a user's tastes, optionally filtered by a search term and/or tag. Newest first. */
+/** List a user's tastes, optionally filtered by a search term and/or tag. Newest first.
+ *  rowToTaste fetches purchases per row; acceptable for list sizes in practice. */
 export async function listTastes(
   userId: string,
   {
@@ -236,7 +296,8 @@ export async function getTaste(userId: string, id: string): Promise<Taste | null
   return rows.length ? await rowToTaste(rows[0]) : null;
 }
 
-/** Insert a new taste owned by the user, optionally overriding the image URL. */
+/** Insert a new taste owned by the user, optionally overriding the image URL.
+ *  warn_before_buy defaults to true when verdict is 'nah', false otherwise. */
 export async function createTaste(
   userId: string,
   input: CreateTasteInput,
@@ -254,14 +315,17 @@ export async function createTaste(
 
   const resolvedImage = imageUrl ?? image;
   const normalizedPrice = normalizePrice(price);
+  const warnBeforeBuy = verdict === 'nah';
 
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image, warn_before_buy)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage]
+    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage, warnBeforeBuy]
   );
-  return await rowToTaste(rows[0]);
+  // New taste has no purchases yet — pass empty aggregates directly.
+  const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
+  return await rowToTaste(row);
 }
 
 /** Patch a taste owned by the user; returns the updated Taste or null if not found. */
@@ -280,13 +344,17 @@ export async function updateTaste(
   // client could PATCH `image` to an arbitrary bare key, it could point at another
   // user's object and mint a presigned original via /original (IDOR). Keep image
   // out of the patch surface entirely.
+  // NOTE: `incrementBought` is intentionally ignored here. boughtCount is now
+  // derived from taste_purchases; use POST /api/tastes/:id/purchases to record
+  // a new purchase.
   const fieldMap: Record<string, string> = {
-    name:    'name',
-    place:   'place',
-    price:   'price',
-    verdict: 'verdict',
-    tags:    'tags',
-    notes:   'notes',
+    name:          'name',
+    place:         'place',
+    price:         'price',
+    verdict:       'verdict',
+    tags:          'tags',
+    notes:         'notes',
+    warnBeforeBuy: 'warn_before_buy',
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {
@@ -298,11 +366,6 @@ export async function updateTaste(
       values.push(val);
       setClauses.push(`${col} = $${values.length}`);
     }
-  }
-
-  if (patch.incrementBought) {
-    values.push(patch.incrementBought);
-    setClauses.push(`bought_count = bought_count + $${values.length}`);
   }
 
   if (setClauses.length === 0) {
@@ -317,7 +380,9 @@ export async function updateTaste(
   const sql = `UPDATE tastes SET ${setClauses.join(', ')} WHERE id = $${idParam} AND user_id = $${userParam} RETURNING *`;
 
   const { rows } = await pool.query(sql, values);
-  return rows.length ? await rowToTaste(rows[0]) : null;
+  if (!rows.length) return null;
+  // Re-fetch with purchases join so the returned Taste has correct derived fields.
+  return getTaste(userId, id);
 }
 
 /** Fetch the RAW stored `image` value (key or legacy URL) for a taste.
@@ -376,14 +441,15 @@ export async function getStats(userId: string): Promise<Stats> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToUser(row: any): User {
   return {
-    id:          row.id,
-    displayName: row.display_name ?? '',
-    phone:       row.phone ?? '',
-    email:       row.email ?? '',
-    avatar:      row.avatar ?? '',
-    locale:      row.locale ?? 'zh',
-    plan:        row.plan ?? 'free',
-    createdAt:   new Date(row.created_at).toISOString(),
+    id:              row.id,
+    displayName:     row.display_name ?? '',
+    phone:           row.phone ?? '',
+    email:           row.email ?? '',
+    avatar:          row.avatar ?? '',
+    locale:          row.locale ?? 'zh',
+    plan:            row.plan ?? 'free',
+    warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
+    createdAt:       new Date(row.created_at).toISOString(),
   };
 }
 
@@ -792,4 +858,68 @@ export async function redeemPromoCode(userId: string, rawCode: string): Promise<
   } finally {
     client.release();
   }
+}
+
+// ── Repurchase warning & purchases ledger ─────────────────────────────────────
+
+/** Update the warnings_enabled flag for a user. Returns the updated User. */
+export async function updateUserWarnings(
+  userId: string,
+  warningsEnabled: boolean
+): Promise<User | null> {
+  const { rows } = await pool.query(
+    'UPDATE users SET warnings_enabled = $2 WHERE id = $1 RETURNING *',
+    [userId, warningsEnabled]
+  );
+  return rows.length ? rowToUser(rows[0]) : null;
+}
+
+/** Add a purchase entry to the ledger for a taste the user owns.
+ *  Returns the new TastePurchase row. */
+export async function addTastePurchase(
+  userId: string,
+  tasteId: string,
+  input: { price?: string | null; place?: string | null }
+): Promise<TastePurchase | null> {
+  // Verify ownership first.
+  const { rows: owned } = await pool.query(
+    'SELECT id FROM tastes WHERE id = $1 AND user_id = $2',
+    [tasteId, userId]
+  );
+  if (!owned.length) return null;
+
+  const price = (() => {
+    if (input.price == null || input.price.trim() === '') return null;
+    const parsed = parseFloat(input.price.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
+  const place =
+    input.place != null && input.place.trim() !== ''
+      ? input.place.trim()
+      : null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO taste_purchases (taste_id, price, place) VALUES ($1, $2, $3) RETURNING *`,
+    [tasteId, price, place]
+  );
+  return rowToPurchase(rows[0]);
+}
+
+/** List all purchases for a taste the user owns, newest first. */
+export async function listTastePurchases(
+  userId: string,
+  tasteId: string
+): Promise<TastePurchase[] | null> {
+  // Verify ownership.
+  const { rows: owned } = await pool.query(
+    'SELECT id FROM tastes WHERE id = $1 AND user_id = $2',
+    [tasteId, userId]
+  );
+  if (!owned.length) return null;
+
+  const { rows } = await pool.query(
+    'SELECT * FROM taste_purchases WHERE taste_id = $1 ORDER BY created_at DESC',
+    [tasteId]
+  );
+  return rows.map(rowToPurchase);
 }
