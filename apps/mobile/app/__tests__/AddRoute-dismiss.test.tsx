@@ -95,7 +95,9 @@ describe('AddRoute dismissal (issue #46)', () => {
     // The transparentModal screen must never be stranded: back() must run
     // even though the animation reported finished === false.
     expect(mockBack).toHaveBeenCalledTimes(1)
-    renderer.unmount()
+    act(() => {
+      renderer.unmount()
+    })
   })
 
   it('navigates to the created taste on save even when the animation is interrupted', () => {
@@ -110,6 +112,8 @@ describe('AddRoute dismissal (issue #46)', () => {
 
     expect(mockReplace).toHaveBeenCalledTimes(1)
     expect(mockReplace).toHaveBeenCalledWith('/taste/taste-123')
-    renderer.unmount()
+    act(() => {
+      renderer.unmount()
+    })
   })
 })
