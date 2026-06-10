@@ -125,6 +125,8 @@ function taste(overrides: Partial<Taste> = {}): Taste {
     verdict: 'yum',
     tags: [],
     boughtCount: 1,
+    warnBeforeBuy: false,
+    purchases: [],
     date: '2026-06-10',
     notes: '',
     image: 'https://example.com/orig.jpg',

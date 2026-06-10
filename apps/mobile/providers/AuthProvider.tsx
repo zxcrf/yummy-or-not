@@ -45,6 +45,8 @@ interface AuthContextValue {
   refresh: () => Promise<void>
   /** Revoke the session and clear the persisted token. */
   signOut: () => Promise<void>
+  /** Optimistically merge fields into the in-memory user without a network round-trip. */
+  patchUser: (partial: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -53,6 +55,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   refresh: async () => {},
   signOut: async () => {},
+  patchUser: () => {},
 })
 
 // ----------------------------------------------------------------
@@ -156,6 +159,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [refresh])
 
+  const patchUser = useCallback((partial: Partial<User>) => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : prev))
+  }, [])
+
   const signOut = useCallback(async () => {
     // Server-side revocation is best-effort: a network failure must never
     // leave private data in local caches, so all cleanup runs in finally.
@@ -180,8 +187,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, providers, loading, refresh, signOut }),
-    [user, providers, loading, refresh, signOut],
+    () => ({ user, providers, loading, refresh, signOut, patchUser }),
+    [user, providers, loading, refresh, signOut, patchUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -47,4 +47,13 @@ export const ja: Record<string, string> = {
   taste_limit_reached: "無料プランの100件の上限に達しました。Proにアップグレードすると無制限です。",
   view_original: "元の画像を見る",
   view_original_pro: "元の画像を見る（Pro）",
+  detail_buy_again: "もう一度買う",
+  detail_buy_again_title: "購入を記録",
+  detail_buy_again_confirm: "購入を確認",
+  detail_warn_banner: "これはやめたはずでは？本当にまた買いますか？",
+  you_warn_global_off: "再購入の警告はオフです。設定からオンにできます。",
+  recall_other_matches: "他の一致",
+  recall_warn_skip: "前回 ×_× イマイチと評価しました — スキップを",
+  add_duplicate_hint: "以前に記録したことがあります",
+  add_warn_hint: "前回イマイチと言いました",
 };

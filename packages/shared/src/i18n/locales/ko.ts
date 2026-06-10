@@ -47,4 +47,13 @@ export const ko: Record<string, string> = {
   taste_limit_reached: "무료 플랜의 100개 기록 한도에 도달했습니다. Pro로 업그레이드하면 무제한입니다.",
   view_original: "원본 보기",
   view_original_pro: "원본 보기 (Pro)",
+  detail_buy_again: "+1 또 구매",
+  detail_buy_again_title: "구매 기록 추가",
+  detail_buy_again_confirm: "구매 확인",
+  detail_warn_banner: "이건 사지 말라고 했잖아요 — 정말 또 살 건가요?",
+  you_warn_global_off: "재구매 경고가 꺼져 있어요. 설정에서 켤 수 있어요.",
+  recall_other_matches: "다른 일치 항목",
+  recall_warn_skip: "지난번에 ×_× 별로라고 했어요 — 패스하세요",
+  add_duplicate_hint: "전에 기록한 적 있어요",
+  add_warn_hint: "지난번에 별로라고 했어요",
 };

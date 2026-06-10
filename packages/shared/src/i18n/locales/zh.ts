@@ -47,4 +47,13 @@ export const zh: Record<string, string> = {
   taste_limit_reached: "已达免费版 100 条记录上限，升级 Pro 即可无限记录。",
   view_original: "查看原图",
   view_original_pro: "查看原图（升级 Pro）",
+  recall_other_matches: "其他匹配",
+  recall_warn_skip: "你上次标记了“别买” ×_× — 跳过吧",
+  add_duplicate_hint: "你之前记录过这个",
+  add_warn_hint: "你上次说别买",
+  detail_buy_again: "再买一次",
+  detail_buy_again_title: "记录新一次购买",
+  detail_buy_again_confirm: "确认购买",
+  detail_warn_banner: "你说过不要买这个——确定要再买吗？",
+  you_warn_global_off: "重复购买提醒已关闭，可在设置中开启。",
 };

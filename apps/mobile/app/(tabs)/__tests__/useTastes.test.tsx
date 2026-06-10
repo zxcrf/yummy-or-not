@@ -43,6 +43,8 @@ function taste(id: string, name = id): Taste {
     verdict: 'yum',
     tags: [],
     boughtCount: 0,
+    warnBeforeBuy: false,
+    purchases: [],
     date: 'today',
     notes: '',
     image: '',

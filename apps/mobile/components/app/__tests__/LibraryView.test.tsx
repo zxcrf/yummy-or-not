@@ -23,6 +23,8 @@ function taste(overrides: Partial<Taste> & { name: string }): Taste {
     verdict: 'yum',
     tags: [],
     boughtCount: 0,
+    warnBeforeBuy: false,
+    purchases: [],
     date: 'just now',
     notes: '',
     image: '',

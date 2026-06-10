@@ -15,6 +15,18 @@ export type Plan = "free" | "pro";
  *  in POST /api/tastes; surfaced to the client so the UI can warn early. */
 export const FREE_TASTE_CAP = 100;
 
+/** One additional purchase of a taste recorded in the purchases ledger. */
+export interface TastePurchase {
+  id: string;
+  tasteId: string;
+  /** Price paid, as a numeric string (e.g. "5.80"), or null if not specified. */
+  price: string | null;
+  /** Place of purchase, or null if not specified. */
+  place: string | null;
+  /** ISO timestamp of the purchase. */
+  createdAt: string;
+}
+
 /** A logged taste — one food/drink the user recorded a verdict on.
  *  Mirrors the `tastes` table (see db/schema.sql) in camelCase. */
 export interface Taste {
@@ -25,7 +37,12 @@ export interface Taste {
   price: string;
   verdict: Verdict;
   tags: string[];
+  /** Derived: 1 + count of taste_purchases rows. Always reflects the ledger. */
   boughtCount: number;
+  /** When true the app should show a warning before logging another purchase. */
+  warnBeforeBuy: boolean;
+  /** Purchase ledger entries for this taste, newest first. */
+  purchases: TastePurchase[];
   /** Human display date, e.g. "2 weeks ago" / "just now". Derived from createdAt. */
   date: string;
   notes: string;
@@ -61,8 +78,10 @@ export interface CreateTasteInput {
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */
 export type UpdateTasteInput = Partial<CreateTasteInput> & {
-  /** Increment the bought counter by this amount (e.g. 1). */
+  /** @deprecated Use POST /api/tastes/:id/purchases instead. Ignored by server. */
   incrementBought?: number;
+  /** Whether to show a repurchase warning for this taste. */
+  warnBeforeBuy?: boolean;
 };
 
 /** GET /api/stats response. */
@@ -100,7 +119,15 @@ export interface User {
   avatar: string;
   locale: string;
   plan: Plan;
+  /** Whether the repurchase-warning feature is enabled for this account. */
+  warningsEnabled: boolean;
   createdAt: string;
+}
+
+/** PATCH /api/user — update user settings. */
+export interface UpdateUserInput {
+  /** Enable or disable repurchase warnings globally for this account. */
+  warningsEnabled?: boolean;
 }
 
 /** Social / OAuth providers we can link an account to. */

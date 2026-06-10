@@ -108,6 +108,8 @@ function taste(overrides: Partial<Taste> = {}): Taste {
     verdict: 'yum',
     tags: ['Coffee'],
     boughtCount: 1,
+    warnBeforeBuy: false,
+    purchases: [],
     date: '2026-06-10',
     notes: 'Too bitter',
     image: 'https://example.com/original.jpg',

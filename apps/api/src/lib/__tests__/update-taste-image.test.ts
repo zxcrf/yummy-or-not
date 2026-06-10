@@ -65,10 +65,20 @@ function createSchema() {
       price        text NOT NULL DEFAULT '',
       verdict      text NOT NULL CHECK (verdict IN ('yum','meh','nah')),
       tags         text[] NOT NULL DEFAULT '{}',
-      bought_count int NOT NULL DEFAULT 1,
-      notes        text NOT NULL DEFAULT '',
-      image        text NOT NULL DEFAULT '',
-      created_at   timestamptz NOT NULL DEFAULT now()
+      bought_count    int NOT NULL DEFAULT 1,
+      warn_before_buy boolean NOT NULL DEFAULT false,
+      notes           text NOT NULL DEFAULT '',
+      image           text NOT NULL DEFAULT '',
+      created_at      timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+  db.public.none(`
+    CREATE TABLE taste_purchases (
+      id         text PRIMARY KEY DEFAULT gen_random_uuid(),
+      taste_id   text NOT NULL REFERENCES tastes(id) ON DELETE CASCADE,
+      price      numeric(10,2),
+      place      text,
+      created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
 }

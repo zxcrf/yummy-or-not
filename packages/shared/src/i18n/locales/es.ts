@@ -47,4 +47,13 @@ export const es: Record<string, string> = {
   taste_limit_reached: "Alcanzaste el límite de 100 registros del plan gratis. Mejora a Pro para registros ilimitados.",
   view_original: "Ver original",
   view_original_pro: "Ver original (Pro)",
+  detail_buy_again: "+1 Otra vez",
+  detail_buy_again_title: "Registrar otra compra",
+  detail_buy_again_confirm: "Confirmar compra",
+  detail_warn_banner: "Dijiste que no lo comprarías otra vez — ¿seguro que quieres?",
+  you_warn_global_off: "Los avisos de recompra están desactivados. Actívalos en Ajustes.",
+  recall_other_matches: "Otras coincidencias",
+  recall_warn_skip: "La última vez dijiste ×_× NO — mejor pásalo",
+  add_duplicate_hint: "Ya lo registraste antes",
+  add_warn_hint: "La última vez dijiste que no",
 };

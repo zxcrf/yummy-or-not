@@ -1,20 +1,22 @@
 /* ============================================================
    YUMMY OR NOT — RecallView (Tamagui / React Native)
-   "Tasted it before?" search. Shows the verdict on file for a match
-   (big colored header + a flat row), a recently-recalled list when the
-   box is empty, or a no-record empty state that links to Add. Ported
-   from the web src/components/app/RecallView.tsx — data fetched here;
-   navigation via expo-router (taste detail + /add).
+   "Tasted it before?" search. Shows scored results from searchTastes:
+   - top match → big verdict card (with warn styling if warnBeforeBuy and
+     user.warningsEnabled)
+   - additional matches → compact "Other matches" group
+   - recently-recalled list when the box is empty
+   - no-record empty state that links to Add
    ============================================================ */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { RefreshControl } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { type Taste, type Verdict } from '@yon/shared'
+import { searchTastes, type Taste, type Verdict } from '@yon/shared'
 import { Button, Card, Icon, Input, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
+import { useAuth } from '@/providers/AuthProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 
 const ACCENT_BG = {
@@ -33,10 +35,12 @@ function RecallRow({
   item,
   onPress,
   flat,
+  warnActive,
 }: {
   item: Taste
   onPress: () => void
   flat?: boolean
+  warnActive?: boolean
 }) {
   const { t } = useI18n()
   return (
@@ -49,13 +53,13 @@ function RecallRow({
       width="100%"
       backgroundColor={flat ? 'transparent' : '$white'}
       borderWidth={flat ? 0 : 3}
-      borderColor="$ink900"
+      borderColor={warnActive ? '$verdictNah2' : '$ink900'}
       borderRadius="$md"
       padding={flat ? 0 : 10}
       {...(flat
         ? {}
         : {
-            shadowColor: '$ink900',
+            shadowColor: warnActive ? '$verdictNah2' : '$ink900',
             shadowOffset: { width: 3, height: 3 },
             shadowOpacity: 1,
             shadowRadius: 0,
@@ -100,6 +104,7 @@ function RecallRow({
 export default function RecallView() {
   const { t } = useI18n()
   const router = useRouter()
+  const { user } = useAuth()
 
   const { items, refresh } = useRefreshableTastes()
   const [q, setQ] = useState('')
@@ -114,9 +119,17 @@ export default function RecallView() {
     }
   }, [refresh])
 
-  const match = q
-    ? items.find((it) => it.name.toLowerCase().includes(q.toLowerCase()))
-    : undefined
+  // All scored results above threshold, ranked by score descending.
+  const results = useMemo(() => (q ? searchTastes(items, q) : []), [items, q])
+
+  const topMatch = results[0]?.item ?? null
+  const otherMatches = results.slice(1).map((r) => r.item)
+
+  // Warning styling applies only when the taste has the flag set and the user
+  // has warnings enabled globally. Falls back to plain display if user is null
+  // (not yet loaded) or warnings are disabled.
+  const warningsOn = user?.warningsEnabled ?? false
+  const topWarn = warningsOn && (topMatch?.warnBeforeBuy ?? false)
 
   return (
     <ScrollView
@@ -176,37 +189,85 @@ export default function RecallView() {
               />
             ))}
           </YStack>
-        ) : match ? (
-          <Card variant="raised">
-            <YStack
-              backgroundColor={ACCENT_BG[match.verdict]}
-              paddingHorizontal={22}
-              paddingTop={22}
-              paddingBottom={20}
-              borderBottomWidth={3}
-              borderColor="$ink900"
-            >
-              <Text
-                color="$ink900"
-                fontSize={11}
-                letterSpacing={1.3}
-                textTransform="uppercase"
-                opacity={0.9}
+        ) : topMatch ? (
+          <YStack gap="$3">
+            {/* top result — big verdict card */}
+            <Card variant="raised">
+              <YStack
+                backgroundColor={topWarn ? '$verdictNah' : ACCENT_BG[topMatch.verdict]}
+                paddingHorizontal={22}
+                paddingTop={22}
+                paddingBottom={20}
+                borderBottomWidth={3}
+                borderColor={topWarn ? '$verdictNah2' : '$ink900'}
               >
-                {t('verdict_on_file')}
-              </Text>
-              <Text color="$ink900" fontWeight="700" fontSize={46} marginTop="$1">
-                {t(VERDICT_KEY[match.verdict])}
-              </Text>
-            </YStack>
-            <View padding={18}>
-              <RecallRow
-                item={match}
-                onPress={() => router.push(`/taste/${match.id}`)}
-                flat
-              />
-            </View>
-          </Card>
+                {topWarn ? (
+                  <>
+                    <Text
+                      color="$ink900"
+                      fontSize={11}
+                      letterSpacing={1.3}
+                      textTransform="uppercase"
+                      opacity={0.9}
+                    >
+                      {t('verdict_on_file')}
+                    </Text>
+                    <Text color="$ink900" fontWeight="700" fontSize={28} marginTop="$1">
+                      {t('recall_warn_skip')}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      color="$ink900"
+                      fontSize={11}
+                      letterSpacing={1.3}
+                      textTransform="uppercase"
+                      opacity={0.9}
+                    >
+                      {t('verdict_on_file')}
+                    </Text>
+                    <Text color="$ink900" fontWeight="700" fontSize={46} marginTop="$1">
+                      {t(VERDICT_KEY[topMatch.verdict])}
+                    </Text>
+                  </>
+                )}
+              </YStack>
+              <View padding={18}>
+                <RecallRow
+                  item={topMatch}
+                  onPress={() => router.push(`/taste/${topMatch.id}`)}
+                  flat
+                  warnActive={topWarn}
+                />
+              </View>
+            </Card>
+
+            {/* additional matches */}
+            {otherMatches.length > 0 ? (
+              <YStack gap="$2">
+                <Text
+                  color="$ink400"
+                  fontSize={10}
+                  letterSpacing={1}
+                  textTransform="uppercase"
+                >
+                  {t('recall_other_matches')}
+                </Text>
+                {otherMatches.map((it) => {
+                  const warnRow = warningsOn && it.warnBeforeBuy
+                  return (
+                    <RecallRow
+                      key={it.id}
+                      item={it}
+                      onPress={() => router.push(`/taste/${it.id}`)}
+                      warnActive={warnRow}
+                    />
+                  )
+                })}
+              </YStack>
+            ) : null}
+          </YStack>
         ) : (
           <Card padded>
             <YStack alignItems="center" gap="$2" paddingVertical={24}>
