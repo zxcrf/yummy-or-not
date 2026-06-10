@@ -255,7 +255,7 @@ describe('RecallView', () => {
 })
 
 function rowCount(renderer: TestRenderer.ReactTestRenderer): number {
-  return renderer.root.findAll((node) => (node.type as unknown) === 'VerdictStamp').length
+  return renderer.root.findAll((node) => node.props != null && 'data-verdict' in node.props).length
 }
 
 function renderRecallViewAt(height: number): TestRenderer.ReactTestRenderer {
