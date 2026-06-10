@@ -42,18 +42,17 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @yon/shared build 2>/dev/null || true
 
-      # Cache android/ including .cxx/ CMake artifacts and compiled outputs.
-      # Per-run key with restore-key fallback ensures each run saves the post-build
-      # state (with .cxx/) so the next run gets UP-TO-DATE CMake tasks instead of
-      # recompiling. save-always: true updates the cache even on restore-key hits.
-      - name: Cache android project
+      # Restore android/ including .cxx/ CMake artifacts from most recent run.
+      # Per-run key + restore-key fallback: always gets the latest post-build state.
+      # A separate save step below uploads the updated android/ (with .cxx/) after
+      # the build so the next run's CMake tasks are UP-TO-DATE and skipped entirely.
+      - name: Restore android project cache
         id: cache-android
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: apps/mobile/android
           key: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
           restore-keys: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-
-          save-always: true
 
       - name: Expo prebuild (generate android/)
         working-directory: apps/mobile
@@ -87,6 +86,12 @@ jobs:
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
           NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Save android project cache
+        uses: actions/cache/save@v4
+        with:
+          path: apps/mobile/android
+          key: android-v2-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
