@@ -22,9 +22,11 @@ RUN pnpm --filter @yon/api exec next build
 # Dereference all of sharp's runtime deps (sharp + @img/* + detect-libc + semver)
 # from the .pnpm virtual store into /tmp/sharp-deps so the runner COPY gets real files.
 # sharp is not hoisted to root in pnpm workspace — it lives in apps/api/node_modules.
-RUN SHARP_PNPM=$(realpath /app/apps/api/node_modules/sharp | sed 's|/node_modules/sharp$||') && \
+RUN SHARP_PNPM=$(readlink -f /app/apps/api/node_modules/sharp | sed 's|/node_modules/sharp$||') && \
+    test -d "$SHARP_PNPM" || (echo "ERROR: sharp pnpm store not found at $SHARP_PNPM" && exit 1) && \
     mkdir -p /tmp/sharp-deps && \
-    cp -rL "$SHARP_PNPM/node_modules/." /tmp/sharp-deps/
+    cp -rL "$SHARP_PNPM/node_modules/." /tmp/sharp-deps/ && \
+    NODE_PATH=/tmp/sharp-deps node -e "require('/tmp/sharp-deps/sharp')"
 
 # ── runner ────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
