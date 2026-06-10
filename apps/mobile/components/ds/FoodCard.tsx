@@ -2,11 +2,12 @@
    YUMMY OR NOT — FoodCard (Tamagui / React Native)
    A single logged taste: photo, name, place, price, verdict, tags.
    Ported from the web DS. Props are compatible with the Taste shape
-   from @yon/shared. The photo is a remote URL (Taste.image) rendered
-   with React Native's built-in Image (no extra image dep needed).
+   from @yon/shared. The photo is a remote URL rendered with expo-image
+   so a stable cacheKey (Taste.imageKey) survives the per-request signed
+   query and serves from the on-disk cache.
    ============================================================ */
 
-import { Image } from 'react-native'
+import { Image } from 'expo-image'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { quick } from './animation'
 import type { Verdict } from '@yon/shared'
@@ -40,10 +41,13 @@ const CardFrame = styled(View, {
 })
 
 export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
-  /** Display-quality image URL (≤1200 px). Falls back to `image` for old records. */
-  imageDisplay?: string
-  /** Legacy image URL — used as fallback when imageDisplay is absent. */
+  /** Thumbnail image URL (≤300 px). Falls back to `image` for old records. */
+  imageThumb?: string
+  /** Legacy image URL — used as fallback when imageThumb is absent. */
   image?: string
+  /** Stable storage key of the photo. When present, used to derive a cache key
+   *  (`${imageKey}:thumb`) so the disk cache survives the signed-URL rotation. */
+  imageKey?: string
   /** Food or drink name. */
   name?: string
   /** Place/vendor name. */
@@ -93,8 +97,9 @@ function normalizeTags(tags: string[]): string[] {
  * FoodCard — a single logged taste: photo, name, place, price, verdict, tags.
  */
 export function FoodCard({
-  imageDisplay,
+  imageThumb,
   image,
+  imageKey,
   name,
   place,
   price,
@@ -112,8 +117,17 @@ export function FoodCard({
     <CardFrame {...(onPress ? quick : {})} interactive={!!onPress} onPress={onPress} {...rest}>
       {/* media */}
       <View position="relative" backgroundColor="$paper2" aspectRatio={4 / 3}>
-        {(imageDisplay || image) ? (
-          <Image source={{ uri: imageDisplay || image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        {(imageThumb || image) ? (
+          <Image
+            source={{
+              uri: imageThumb || image,
+              ...(imageKey ? { cacheKey: `${imageKey}:thumb` } : {}),
+            }}
+            cachePolicy="disk"
+            transition={150}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+          />
         ) : null}
         <VerdictStamp
           verdict={verdict}

@@ -1,22 +1,25 @@
 /* ============================================================
-   Regression tests — image variant fields in RecallView + DetailView.
+   Regression tests — image variant fields + disk-cache keys in
+   RecallView + DetailView.
 
-   New behavior (task 4):
+   Behavior under test:
    - RecallView thumbnail must use imageThumb (54 px slot), not imageDisplay
      or image. Legacy rows where only `image` is set fall back to image.
    - DetailView hero must use imageDisplay (240 px slot), not image directly.
      Legacy fallback same: if imageDisplay absent, use image.
+   - Both thumbnail and hero render via expo-image (not RN Image) and derive a
+     stable disk cacheKey from Taste.imageKey: `${imageKey}:thumb` for the
+     thumbnail, `${imageKey}:display` for the hero. When imageKey is empty the
+     source carries NO cacheKey (URL becomes the de-facto key).
    - DetailView "view original": pro users see a button that calls
      getOriginalPhotoUrl; free users see a ghost CTA that shows an upgrade
      alert instead.
-
-   Each test must FAIL against old behavior (flat `image` field everywhere)
-   and pass against the new implementation.
    ============================================================ */
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
 import { Alert, Image } from 'react-native'
+import { Image as ExpoImage } from 'expo-image'
 import { getOriginalPhotoUrl, getTaste, ProRequiredError, type Taste } from '@yon/shared'
 
 // ── shared mocks ────────────────────────────────────────────────────────────
@@ -87,6 +90,19 @@ jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'u1', plan: mockPlan } }),
 }))
 
+// Shared taste hook — RecallView reads its list from here; feed items directly
+// so these tests exercise rendering, not the SWR/AsyncStorage plumbing (which
+// has its own suite). invalidateTastes is a no-op spy for DetailView writes.
+let mockItems: Taste[] = []
+jest.mock('@/app/(tabs)/_useTastes', () => ({
+  useRefreshableTastes: () => ({
+    items: mockItems,
+    loading: false,
+    refresh: jest.fn(async () => {}),
+  }),
+  invalidateTastes: jest.fn(async () => mockItems),
+}))
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function taste(overrides: Partial<Taste> = {}): Taste {
@@ -101,6 +117,9 @@ function taste(overrides: Partial<Taste> = {}): Taste {
     date: '2026-06-10',
     notes: '',
     image: 'https://example.com/orig.jpg',
+    imageThumb: '',
+    imageDisplay: '',
+    imageKey: '',
     createdAt: '2026-06-08T00:00:00.000Z',
     ...overrides,
   }
@@ -121,8 +140,7 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
 async function renderRecall(
   items: Taste[],
 ): Promise<TestRenderer.ReactTestRenderer> {
-  const { listTastes } = require('@yon/shared')
-  ;(listTastes as jest.Mock).mockResolvedValueOnce(items)
+  mockItems = items
   let renderer!: TestRenderer.ReactTestRenderer
   await act(async () => {
     renderer = TestRenderer.create(
@@ -132,8 +150,14 @@ async function renderRecall(
   return renderer
 }
 
+/** RN Image hosts (used only by the fullscreen "view original" modal now). */
 function findImages(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAllByType(Image)
+}
+
+/** expo-image hosts (the thumbnail + hero slots render through these). */
+function findExpoImages(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.findAllByType(ExpoImage)
 }
 
 function findButtons(renderer: TestRenderer.ReactTestRenderer) {
@@ -148,29 +172,48 @@ const mockedGetOriginalPhotoUrl = jest.mocked(getOriginalPhotoUrl)
 describe('RecallView thumbnail source', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it('uses imageThumb for the 54 px thumbnail, not image or imageDisplay', async () => {
-    /* Regression: old code used item.image everywhere. After task-4 the row
-       must pass imageThumb as the Image source so the small slot serves a
-       lightweight variant, not the full-size original. */
+  it('uses imageThumb for the 54 px thumbnail with a stable :thumb cacheKey', async () => {
+    /* The row must pass imageThumb as the expo-image source so the small slot
+       serves a lightweight variant — and a cacheKey derived from imageKey so
+       the disk cache survives the per-request signed-URL rotation. */
     const item = taste({
-      imageThumb: 'https://cdn.example.com/t/uuid/thumb.webp',
+      imageThumb: 'https://cdn.example.com/t/uuid/thumb.webp?sig=a',
       imageDisplay: 'https://cdn.example.com/t/uuid/display.webp',
       image: 'https://example.com/orig.jpg',
+      imageKey: 'tastes/u1/uuid',
     })
     const renderer = await renderRecall([item])
 
-    const images = findImages(renderer)
+    const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
 
     const thumbImg = images[0]
     expect(thumbImg.props.source).toEqual({
-      uri: 'https://cdn.example.com/t/uuid/thumb.webp',
+      uri: 'https://cdn.example.com/t/uuid/thumb.webp?sig=a',
+      cacheKey: 'tastes/u1/uuid:thumb',
     })
+    expect(thumbImg.props.cachePolicy).toBe('disk')
     // Must NOT be the full original or display variant.
     expect(thumbImg.props.source.uri).not.toBe('https://example.com/orig.jpg')
     expect(thumbImg.props.source.uri).not.toBe(
       'https://cdn.example.com/t/uuid/display.webp',
     )
+  })
+
+  it('omits cacheKey when imageKey is empty (legacy URL becomes the key)', async () => {
+    /* Old/legacy rows have no stable storage key. We must NOT invent one — the
+       source carries only the uri so expo-image keys by URL. */
+    const item = taste({
+      imageThumb: 'https://cdn.example.com/t/uuid/thumb.webp',
+      imageKey: '',
+    })
+    const renderer = await renderRecall([item])
+
+    const thumbImg = findExpoImages(renderer)[0]
+    expect(thumbImg.props.source).toEqual({
+      uri: 'https://cdn.example.com/t/uuid/thumb.webp',
+    })
+    expect(thumbImg.props.source.cacheKey).toBeUndefined()
   })
 
   it('falls back to image when imageThumb is absent (legacy row)', async () => {
@@ -180,10 +223,11 @@ describe('RecallView thumbnail source', () => {
       imageThumb: undefined,
       imageDisplay: undefined,
       image: 'https://example.com/legacy.jpg',
+      imageKey: '',
     })
     const renderer = await renderRecall([item])
 
-    const images = findImages(renderer)
+    const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
     expect(images[0].props.source).toEqual({ uri: 'https://example.com/legacy.jpg' })
   })
@@ -197,37 +241,56 @@ describe('DetailView hero image source', () => {
     mockPlan = 'free'
   })
 
-  it('uses imageDisplay for the 240 px hero, not the raw image field', async () => {
-    /* Regression: old code used item.image for the hero. After task-4 the
-       hero must use imageDisplay so the hero slot serves a 1280-px variant
-       rather than the full original. */
+  it('uses imageDisplay for the 240 px hero with a stable :display cacheKey', async () => {
+    /* The hero must use imageDisplay (a 1200-px variant) via expo-image and
+       derive a `${imageKey}:display` disk cacheKey so a rotated signed URL
+       still hits the on-disk cache. */
     mockedGetTaste.mockResolvedValueOnce(
       taste({
-        imageDisplay: 'https://cdn.example.com/t/uuid/display.webp',
+        imageDisplay: 'https://cdn.example.com/t/uuid/display.webp?sig=a',
         imageThumb: 'https://cdn.example.com/t/uuid/thumb.webp',
         image: 'https://example.com/orig.jpg',
+        imageKey: 'tastes/u1/uuid',
       }),
     )
     const renderer = await renderDetail()
 
-    const images = findImages(renderer)
+    const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
 
-    // The first Image in the tree is the hero slot.
+    // The hero is the only expo-image in the tree (the modal uses RN Image).
     const heroImg = images[0]
+    expect(heroImg.props.source).toEqual({
+      uri: 'https://cdn.example.com/t/uuid/display.webp?sig=a',
+      cacheKey: 'tastes/u1/uuid:display',
+    })
+    expect(heroImg.props.cachePolicy).toBe('disk')
+    expect(heroImg.props.source.uri).not.toBe('https://example.com/orig.jpg')
+  })
+
+  it('omits the hero cacheKey when imageKey is empty (legacy row)', async () => {
+    mockedGetTaste.mockResolvedValueOnce(
+      taste({
+        imageDisplay: 'https://cdn.example.com/t/uuid/display.webp',
+        imageKey: '',
+      }),
+    )
+    const renderer = await renderDetail()
+
+    const heroImg = findExpoImages(renderer)[0]
     expect(heroImg.props.source).toEqual({
       uri: 'https://cdn.example.com/t/uuid/display.webp',
     })
-    expect(heroImg.props.source.uri).not.toBe('https://example.com/orig.jpg')
+    expect(heroImg.props.source.cacheKey).toBeUndefined()
   })
 
   it('falls back to image when imageDisplay is absent (legacy row)', async () => {
     mockedGetTaste.mockResolvedValueOnce(
-      taste({ imageDisplay: undefined, imageThumb: undefined }),
+      taste({ imageDisplay: undefined, imageThumb: undefined, imageKey: '' }),
     )
     const renderer = await renderDetail()
 
-    const images = findImages(renderer)
+    const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
     expect(images[0].props.source).toEqual({ uri: 'https://example.com/orig.jpg' })
   })

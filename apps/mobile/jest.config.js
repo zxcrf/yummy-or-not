@@ -5,6 +5,8 @@
  */
 module.exports = {
   preset: 'jest-expo',
+  // Register the AsyncStorage mock (shared taste-cache hook reads/writes it).
+  setupFiles: ['<rootDir>/jest.setup.js'],
   // Map the `@/*` path alias used across the app (mirrors tsconfig paths).
   moduleNameMapper: {
     // Dedupe React to a single instance. Under pnpm the app and
@@ -20,6 +22,10 @@ module.exports = {
     '^tamagui$': '<rootDir>/__mocks__/tamagui.js',
     '^@tamagui/(.*)$': '<rootDir>/__mocks__/tamagui.js',
     '^react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.js',
+    // Redirect dynamic import('expo-secure-store') to our CJS stub so
+    // writeStoredToken in AuthProvider works under Jest without
+    // --experimental-vm-modules.
+    '^expo-secure-store$': '<rootDir>/__mocks__/expo-secure-store.js',
     // Map workspace package to its TypeScript source — no build step needed.
     '^@yon/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@yon/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1.ts',

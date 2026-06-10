@@ -19,6 +19,12 @@ jest.mock('@yon/shared', () => ({
   updateTaste: jest.fn(),
 }))
 
+// DetailView invalidates the shared taste cache after save/delete; that hook
+// has its own suite, so stub it to a no-op here.
+jest.mock('@/app/(tabs)/_useTastes', () => ({
+  invalidateTastes: jest.fn(async () => []),
+}))
+
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'taste-1' }),
   useRouter: () => ({
@@ -78,6 +84,9 @@ function taste(overrides: Partial<Taste> = {}): Taste {
     date: 'today',
     notes: 'Too bitter',
     image: '',
+    imageThumb: '',
+    imageDisplay: '',
+    imageKey: '',
     createdAt: '2026-06-08T00:00:00.000Z',
     ...overrides,
   }

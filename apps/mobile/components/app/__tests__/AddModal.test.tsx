@@ -45,6 +45,12 @@ jest.mock('@yon/shared', () => ({
   createTaste: (...args: unknown[]) => mockCreateTaste(...args),
 }))
 
+// AddModal invalidates the shared taste cache after a successful save; that
+// hook has its own suite, so stub it to a no-op here.
+jest.mock('@/app/(tabs)/_useTastes', () => ({
+  invalidateTastes: jest.fn(async () => []),
+}))
+
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
     t: (key: string) => ({

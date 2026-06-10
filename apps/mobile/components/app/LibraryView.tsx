@@ -7,13 +7,14 @@
    navigation uses expo-router instead of an onOpen callback.
    ============================================================ */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { FILTERS, listTastes, type Taste } from '@yon/shared'
+import { FILTERS } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
+import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 
 export default function LibraryView() {
   const { t } = useI18n()
@@ -21,41 +22,19 @@ export default function LibraryView() {
   const { width } = useWindowDimensions()
   const isDesktop = width >= 768
 
-  const [items, setItems] = useState<Taste[]>([])
-  const [loading, setLoading] = useState(true)
+  const { items, loading, refresh } = useRefreshableTastes()
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
-  const mounted = useRef(false)
-
-  const load = useCallback(async () => {
-    try {
-      const data = await listTastes()
-      if (mounted.current) setItems(data)
-    } catch {
-      if (mounted.current) setItems([])
-    }
-  }, [])
-
-  useEffect(() => {
-    mounted.current = true
-    setLoading(true)
-    void load().finally(() => {
-      if (mounted.current) setLoading(false)
-    })
-    return () => {
-      mounted.current = false
-    }
-  }, [load])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await load()
+      await refresh()
     } finally {
-      if (mounted.current) setRefreshing(false)
+      setRefreshing(false)
     }
-  }, [load])
+  }, [refresh])
 
   const shown = useMemo(
     () =>
@@ -141,8 +120,9 @@ export default function LibraryView() {
           {shown.map((it) => (
             <View key={it.id} style={isDesktop ? { width: '48%' } : undefined}>
               <FoodCard
-                imageDisplay={it.imageDisplay || undefined}
+                imageThumb={it.imageThumb || undefined}
                 image={it.image || undefined}
+                imageKey={it.imageKey || undefined}
                 name={it.name}
                 place={it.place}
                 price={it.price}

@@ -38,6 +38,7 @@ import {
 } from '@/components/ds'
 
 import { useI18n } from '@/providers/I18nProvider'
+import { invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { PhotoPreview } from './PhotoPreview'
 
 interface Props {
@@ -187,6 +188,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
         },
         photo,
       )
+      void invalidateTastes()
       onSaved(created.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
