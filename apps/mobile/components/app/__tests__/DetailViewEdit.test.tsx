@@ -23,6 +23,8 @@ jest.mock('@yon/shared', () => ({
 // has its own suite, so stub it to a no-op here.
 jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: jest.fn(async () => []),
+  // Edit flow exercises the cache-MISS path (item loads via getTaste mock).
+  getCachedTaste: jest.fn(() => undefined),
 }))
 
 jest.mock('expo-router', () => ({

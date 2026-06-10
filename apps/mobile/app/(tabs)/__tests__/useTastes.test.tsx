@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Taste } from '@yon/shared'
 import {
   clearPersistedTastes,
+  getCachedTaste,
   invalidateTastes,
   setTastesUser,
   useRefreshableTastes,
@@ -149,6 +150,45 @@ describe('invalidateTastes', () => {
 
     expect(mockListTastes).toHaveBeenCalledTimes(2)
     expect(seen[seen.length - 1].items.map((t) => t.id)).toEqual(['second'])
+  })
+})
+
+describe('getCachedTaste', () => {
+  it('returns the cached taste object for a matching id without refetching', async () => {
+    const cached = taste('cached-hit')
+    setTastesUser('u1')
+    mockListTastes.mockResolvedValueOnce([cached])
+
+    await act(async () => {
+      await invalidateTastes()
+    })
+
+    // Why this matters: detail screens can synchronously seed from the shared
+    // list cache and avoid a redundant getTaste request on list-hit opens.
+    expect(getCachedTaste('cached-hit')).toBe(cached)
+    expect(mockListTastes).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns undefined when the id does not match or the cache is empty', async () => {
+    setTastesUser('u1')
+    mockListTastes.mockResolvedValueOnce([taste('cached-only')])
+
+    await act(async () => {
+      await invalidateTastes()
+    })
+
+    // Why this matters: deep-links must fall back cleanly when the shared list
+    // does not contain the requested taste.
+    expect(getCachedTaste('missing-id')).toBeUndefined()
+
+    await act(async () => {
+      setTastesUser('__clear__')
+      setTastesUser('u2')
+    })
+
+    // Why this matters: cold starts begin with an empty cache, so the reader
+    // must not manufacture stale data.
+    expect(getCachedTaste('cached-only')).toBeUndefined()
   })
 })
 

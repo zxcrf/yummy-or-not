@@ -8,14 +8,14 @@
    chrome is dropped; this renders as a routed screen body.
    ============================================================ */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Image, Modal, Pressable, StyleSheet } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
-import { invalidateTastes } from '@/app/(tabs)/_useTastes'
+import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import {
   Badge,
   Button,
@@ -39,8 +39,15 @@ export default function DetailView() {
   const params = useLocalSearchParams<{ id: string }>()
   const id = Array.isArray(params.id) ? params.id[0] : params.id
 
-  const [item, setItem] = useState<Taste | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [renderedId, setRenderedId] = useState<string | undefined>(id)
+  // Latest route id, for gating async completions (save / original-photo fetch /
+  // metadata fallback) so a request started for one taste cannot commit onto
+  // another after an id swap. Mirrored during render so the guard value is
+  // commit-synchronous (a passive effect would leave a stale-ref gap).
+  const idRef = useRef(id)
+  idRef.current = id
+  const [item, setItem] = useState<Taste | null>(() => (id ? getCachedTaste(id) ?? null : null))
+  const [loading, setLoading] = useState<boolean>(() => !!id && getCachedTaste(id) == null)
   const [remind, setRemind] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -57,19 +64,52 @@ export default function DetailView() {
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   const [originalLoading, setOriginalLoading] = useState(false)
 
+  // Same-instance route `id` change: re-seed from the shared cache synchronously
+  // during render (React "adjust state on prop change" pattern) so we never paint
+  // the previous taste for a commit before the passive effect runs. The lazy
+  // useState initializers only run on first mount, so this covers id swaps.
+  if (id !== renderedId) {
+    setRenderedId(id)
+    const cached = id ? getCachedTaste(id) ?? null : null
+    setItem(cached)
+    setLoading(!!id && !cached)
+    // Drop any in-progress edit / original-photo state belonging to the previous
+    // taste, otherwise a same-instance id swap could save taste A's edited fields
+    // onto taste B (saveEdit patches the current item.id).
+    setEditing(false)
+    setSaving(false)
+    setSaveError(null)
+    setOriginalUrl(null)
+    setOriginalLoading(false)
+  }
+
   useEffect(() => {
     if (!id) return
+    // Warm list-cache hit: adopt the cached taste and stop loading. This also
+    // covers the race where render saw a miss (loading=true) but the shared
+    // list cache filled before this passive effect ran — without this we'd
+    // strand on the spinner forever (DetailView doesn't subscribe to the cache).
+    const cached = getCachedTaste(id)
+    if (cached) {
+      setItem(cached)
+      setLoading(false)
+      return
+    }
+    // Miss (deep-link / cold start): item=null, loading=true already set; fetch.
+    // Gate on both the effect-local `alive` flag and the commit-synchronous
+    // idRef so a fetch for an old id cannot paint onto a newer route in the
+    // window before this effect's cleanup runs.
     let alive = true
-    setLoading(true)
+    const fetchId = id
     getTaste(id)
       .then((data) => {
-        if (alive) setItem(data)
+        if (alive && idRef.current === fetchId) setItem(data)
       })
       .catch(() => {
-        if (alive) setItem(null)
+        if (alive && idRef.current === fetchId) setItem(null)
       })
       .finally(() => {
-        if (alive) setLoading(false)
+        if (alive && idRef.current === fetchId) setLoading(false)
       })
     return () => {
       alive = false
@@ -83,11 +123,15 @@ export default function DetailView() {
 
   const openOriginal = async () => {
     if (!item) return
+    const reqId = item.id
     setOriginalLoading(true)
     try {
       const { url } = await getOriginalPhotoUrl(item.id)
+      // Route moved to another taste mid-fetch — don't open A's original on B.
+      if (idRef.current !== reqId) return
       setOriginalUrl(url)
     } catch (err) {
+      if (idRef.current !== reqId) return
       if (err instanceof ProRequiredError) {
         // Surface the same upgrade prompt used elsewhere in the app.
         Alert.alert(t('pro_plan'), t('taste_limit_reached'))
@@ -95,7 +139,7 @@ export default function DetailView() {
         Alert.alert(t('nothing_here'))
       }
     } finally {
-      setOriginalLoading(false)
+      if (idRef.current === reqId) setOriginalLoading(false)
     }
   }
 
@@ -144,6 +188,7 @@ export default function DetailView() {
 
   const saveEdit = async () => {
     if (!item || !editName || saving) return
+    const savingId = item.id
     setSaving(true)
     setSaveError(null)
     try {
@@ -155,13 +200,18 @@ export default function DetailView() {
         tags: editTags,
         notes: editNotes,
       })
-      setItem(updated)
+      // The server write to `savingId` happened — refresh the list regardless.
       void invalidateTastes()
+      // But if the route moved to another taste mid-save, do NOT paint A's
+      // updated record onto B (and don't touch B's edit/saving state).
+      if (idRef.current !== savingId) return
+      setItem(updated)
       setEditing(false)
     } catch (err) {
+      if (idRef.current !== savingId) return
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
-      setSaving(false)
+      if (idRef.current === savingId) setSaving(false)
     }
   }
 
@@ -207,11 +257,11 @@ export default function DetailView() {
           borderColor="$ink900"
           overflow="hidden"
         >
-          {(item.imageDisplay || item.image) ? (
+          {(item.imageThumb || item.image) ? (
             <ExpoImage
               source={{
-                uri: item.imageDisplay || item.image,
-                ...(item.imageKey ? { cacheKey: `${item.imageKey}:display` } : {}),
+                uri: item.imageThumb || item.image,
+                ...(item.imageKey ? { cacheKey: `${item.imageKey}:thumb` } : {}),
               }}
               cachePolicy="disk"
               transition={150}
@@ -385,7 +435,7 @@ export default function DetailView() {
             </XStack>
 
             {/* Pro original viewer */}
-            {(item.imageDisplay || item.image) ? (
+            {(item.imageThumb || item.image) ? (
               user?.plan === 'pro' ? (
                 <Button
                   variant="secondary"
