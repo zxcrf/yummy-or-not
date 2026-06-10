@@ -45,4 +45,6 @@ export const ko: Record<string, string> = {
   auth_err_already_redeemed: "이미 사용한 코드입니다.",
   auth_promo_not_applied: "계정이 생성되었습니다. 다만 프로모션 코드를 적용하지 못했습니다. 나중에 프로필에서 사용할 수 있습니다.",
   taste_limit_reached: "무료 플랜의 100개 기록 한도에 도달했습니다. Pro로 업그레이드하면 무제한입니다.",
+  view_original: "원본 보기",
+  view_original_pro: "원본 보기 (Pro)",
 };

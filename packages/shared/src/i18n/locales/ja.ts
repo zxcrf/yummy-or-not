@@ -45,4 +45,6 @@ export const ja: Record<string, string> = {
   auth_err_already_redeemed: "このコードはすでに使用済みです。",
   auth_promo_not_applied: "アカウントを作成しました。ただしプロモコードは適用できませんでした。後でプロフィールから引き換えできます。",
   taste_limit_reached: "無料プランの100件の上限に達しました。Proにアップグレードすると無制限です。",
+  view_original: "元の画像を見る",
+  view_original_pro: "元の画像を見る（Pro）",
 };

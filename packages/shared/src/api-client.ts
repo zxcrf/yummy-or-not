@@ -25,7 +25,9 @@ import type {
   RegisterInput,
   LoginInput,
   RedeemResponse,
+  OriginalPhotoResponse,
 } from "./types";
+import { ProRequiredError } from "./types";
 
 /** React Native multipart file descriptor (no `File` in RN). */
 export interface RNFile {
@@ -213,4 +215,26 @@ export async function logout(): Promise<void> {
  *  Web-first; native deep-link return is not wired yet. */
 export function oauthStartUrl(provider: string): string {
   return `${BASE_URL}/api/auth/oauth/${provider}`;
+}
+
+/** GET /api/tastes/:id/original — fetch a short-lived presigned URL to the
+ *  full-resolution original upload. Requires the caller to be on the Pro plan.
+ *  Throws ProRequiredError (code "pro_required") on 403 so the UI can show an
+ *  upgrade prompt rather than a generic error message. */
+export async function getOriginalPhotoUrl(
+  id: string
+): Promise<OriginalPhotoResponse> {
+  const url = `${BASE_URL}/api/tastes/${id}/original`;
+  const res = await fetch(url, withAuth());
+  if (res.status === 403) {
+    const data = await res.json().catch(() => ({}));
+    if ((data as { error?: string }).error === "pro_required") {
+      throw new ProRequiredError();
+    }
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API GET ${url} → ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<OriginalPhotoResponse>;
 }

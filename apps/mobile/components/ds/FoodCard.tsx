@@ -40,7 +40,9 @@ const CardFrame = styled(View, {
 })
 
 export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
-  /** Image URL. */
+  /** Display-quality image URL (≤1200 px). Falls back to `image` for old records. */
+  imageDisplay?: string
+  /** Legacy image URL — used as fallback when imageDisplay is absent. */
   image?: string
   /** Food or drink name. */
   name?: string
@@ -91,6 +93,7 @@ function normalizeTags(tags: string[]): string[] {
  * FoodCard — a single logged taste: photo, name, place, price, verdict, tags.
  */
 export function FoodCard({
+  imageDisplay,
   image,
   name,
   place,
@@ -109,8 +112,8 @@ export function FoodCard({
     <CardFrame {...(onPress ? quick : {})} interactive={!!onPress} onPress={onPress} {...rest}>
       {/* media */}
       <View position="relative" backgroundColor="$paper2" aspectRatio={4 / 3}>
-        {image ? (
-          <Image source={{ uri: image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        {(imageDisplay || image) ? (
+          <Image source={{ uri: imageDisplay || image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
         ) : null}
         <VerdictStamp
           verdict={verdict}

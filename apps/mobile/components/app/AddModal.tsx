@@ -72,14 +72,14 @@ function rnFileFromAsset(asset: ImagePicker.ImagePickerAsset): PhotoInput {
  */
 async function compressAsset(asset: ImagePicker.ImagePickerAsset): Promise<PhotoInput> {
   try {
-    const MAX_WIDTH = 1600
+    const MAX_WIDTH = 2560
     // Only add a resize action when the image actually exceeds the limit (never upscale).
     const actions = asset.width && asset.width > MAX_WIDTH
       ? [{ resize: { width: MAX_WIDTH } }]
       : []
     const result = await manipulateAsync(asset.uri, actions, {
       format: SaveFormat.JPEG,
-      compress: 0.7,
+      compress: 0.85,
     })
     const name = asset.fileName
       ? asset.fileName.replace(/\.[^.]+$/, '.jpg')
@@ -145,7 +145,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 1,
     })
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0]

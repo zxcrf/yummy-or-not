@@ -45,4 +45,6 @@ export const en: Record<string, string> = {
   auth_err_already_redeemed: "You’ve already redeemed that code.",
   auth_promo_not_applied: "Account created — but the promo code couldn’t be applied. You can redeem it later in your profile.",
   taste_limit_reached: "You’ve reached the free plan’s 100-taste limit. Upgrade to Pro for unlimited.",
+  view_original: "View original",
+  view_original_pro: "View original (Pro)",
 };

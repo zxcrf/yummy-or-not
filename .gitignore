@@ -45,3 +45,4 @@ apps/api/public/uploads/*
 # CodeGraph local index
 .codegraph/
 .worktrees/
+.omc/

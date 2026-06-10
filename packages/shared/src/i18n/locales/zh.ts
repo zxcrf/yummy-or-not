@@ -45,4 +45,6 @@ export const zh: Record<string, string> = {
   auth_err_already_redeemed: "你已经兑换过这个优惠码了。",
   auth_promo_not_applied: "账号已创建——但优惠码未能应用。你可以稍后在个人资料里兑换。",
   taste_limit_reached: "已达免费版 100 条记录上限，升级 Pro 即可无限记录。",
+  view_original: "查看原图",
+  view_original_pro: "查看原图（升级 Pro）",
 };

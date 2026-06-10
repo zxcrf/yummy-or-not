@@ -45,4 +45,6 @@ export const es: Record<string, string> = {
   auth_err_already_redeemed: "Ya has canjeado ese código.",
   auth_promo_not_applied: "Cuenta creada, pero no se pudo aplicar el código promocional. Puedes canjearlo más tarde en tu perfil.",
   taste_limit_reached: "Alcanzaste el límite de 100 registros del plan gratis. Mejora a Pro para registros ilimitados.",
+  view_original: "Ver original",
+  view_original_pro: "Ver original (Pro)",
 };

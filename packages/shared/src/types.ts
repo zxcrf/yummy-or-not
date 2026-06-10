@@ -29,8 +29,16 @@ export interface Taste {
   /** Human display date, e.g. "2 weeks ago" / "just now". Derived from createdAt. */
   date: string;
   notes: string;
-  /** Image URL (uploaded path under /uploads/... or a remote URL). "" if none. */
+  /** Display-quality image URL (presigned R2 or /uploads/... path). "" if none.
+   *  Kept as the legacy field name for old-APK compatibility; new code should
+   *  prefer imageDisplay for display and imageThumb for list thumbnails. */
   image: string;
+  /** Thumbnail URL (≤300 px wide, WebP). Populated after server transcoding.
+   *  Falls back to `image` on old records that pre-date variant generation. */
+  imageThumb: string;
+  /** Display-quality URL (≤1200 px wide, WebP). Same lifetime as `image`.
+   *  Falls back to `image` on old records that pre-date variant generation. */
+  imageDisplay: string;
   /** ISO timestamp from the DB. */
   createdAt: string;
 }
@@ -178,7 +186,28 @@ export interface ProviderStatus {
             body: UpdateTasteInput -> Taste
    DELETE /api/tastes/:id      -> { ok: true }
    GET    /api/stats           -> Stats
+   GET    /api/tastes/:id/original
+            -> { url: string; expiresIn: number }   (Pro users only)
+             | 403 { error: "pro_required" }         (free-tier users)
+            Returns a short-lived presigned URL to the full-resolution
+            original upload. Requires Authorization: Bearer <token>.
    ---------------------------------------------------------------- */
+
+/** Response shape for GET /api/tastes/:id/original (Pro users only). */
+export interface OriginalPhotoResponse {
+  url: string;
+  /** Seconds until the presigned URL expires. */
+  expiresIn: number;
+}
+
+/** Error thrown by getOriginalPhotoUrl when the caller is on the free plan. */
+export class ProRequiredError extends Error {
+  readonly code = "pro_required" as const;
+  constructor() {
+    super("pro_required");
+    this.name = "ProRequiredError";
+  }
+}
 
 /** Canonical filter chips shown in the library (first is the "all" sentinel). */
 export const FILTERS = [

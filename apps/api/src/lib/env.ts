@@ -48,3 +48,11 @@ export function getPhotoStorage(): PhotoStorage {
 export function getPhotoPublicBaseUrl(): string {
   return (process.env.PHOTO_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
 }
+
+/** CDN base URL for serving image variants, no trailing slash.
+ *  Set PHOTO_CDN_BASE_URL to a CDN prefix (e.g. a Cloudflare R2 custom domain)
+ *  so thumb/display variants are served from edge rather than the API origin.
+ *  Falls back to '' when unset, in which case callers should use PHOTO_PUBLIC_BASE_URL. */
+export function getPhotoCdnBaseUrl(): string {
+  return (process.env.PHOTO_CDN_BASE_URL ?? '').replace(/\/$/, '');
+}
