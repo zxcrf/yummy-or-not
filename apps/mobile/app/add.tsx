@@ -4,7 +4,7 @@
    destination content (AddModal) fades in through the same container.
    On close: reverse. */
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { StyleSheet, useWindowDimensions } from 'react-native'
 import Animated, {
   useSharedValue,
@@ -16,7 +16,7 @@ import Animated, {
   interpolate,
   interpolateColor,
 } from 'react-native-reanimated'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 
 import AddModal from '@/components/app/AddModal'
 import { Icon } from '@/components/ds'
@@ -29,11 +29,32 @@ export default function AddRoute() {
   const { fabLayout } = useAddTransition()
   const fab = fabLayout.value ?? { x: SW / 2 - 29, y: SH - 80, width: 58, height: 58 }
   const closing = useRef(false)
+  const openWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const progress = useSharedValue(0)
 
+  // Re-assert the open animation on every focus (incl. returning from the
+  // Android photo-crop activity, which can remount/strand this route). Without
+  // this, the one-shot open spring could be interrupted and leave the morph
+  // stranded at the FAB rect — the stuck-overlay bug (#55).
+  useFocusEffect(useCallback(() => {
+    if (!closing.current && progress.value < 0.999) {
+      progress.value = withSpring(1, SPRING)
+    }
+  }, [progress]))
+
   useEffect(() => {
-    progress.value = withSpring(1, SPRING)
+    openWatchdog.current = setTimeout(() => {
+      if (!closing.current && progress.value < 0.999) {
+        progress.value = withTiming(1, { duration: 120 })
+      }
+    }, 700)
+
+    return () => {
+      if (openWatchdog.current) {
+        clearTimeout(openWatchdog.current)
+      }
+    }
   }, [progress])
 
   const containerStyle = useAnimatedStyle(() => {
