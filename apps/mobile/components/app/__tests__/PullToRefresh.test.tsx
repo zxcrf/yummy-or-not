@@ -28,6 +28,13 @@ const mockFormatMoney = jest.fn((amount: number | string) => formatMoneyLikeProv
 
 jest.mock('@yon/shared', () => ({
   FILTERS: ['All', 'Coffee'],
+  LANG_CURRENCY: {
+    zh: { symbol: '¥', code: 'CNY' },
+    en: { symbol: '$', code: 'USD' },
+    ko: { symbol: '₩', code: 'KRW' },
+    ja: { symbol: '¥', code: 'JPY' },
+    es: { symbol: '€', code: 'EUR' },
+  },
   getStats: jest.fn(),
   listTastes: jest.fn(),
 }))
@@ -40,6 +47,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
+    lang: 'en',
     formatMoney: mockFormatMoney,
     t: (key: string, values?: Record<string, unknown>) => {
       if (!values) return key
@@ -185,6 +193,16 @@ describe('mobile pull-to-refresh', () => {
     expect(refreshItems).toHaveBeenCalledTimes(1)
     expect(mockedGetStats).toHaveBeenCalledTimes(2)
     expect(mockFormatMoney).toHaveBeenCalledWith(3)
-    expect(textContent(renderer)).toContain('saved_amt:$3')
+    // The saved card renders symbol and number as separate Text nodes.
+    // Pin both by testID so the assertion targets the saved card specifically.
+    const symbolNode = renderer.root.find(
+      (n) => (n.type as unknown) === 'Text' && n.props.testID === 'saved-currency-symbol',
+    )
+    expect(symbolNode.props.children).toBe('$')
+    const animNode = renderer.root.find(
+      (n) => (n.type as unknown) === 'Text' && n.props.testID === 'saved-animated-number',
+    )
+    // After refresh the animated number should display the refreshed value "3".
+    expect(animNode.props.children).toBe('3')
   })
 })
