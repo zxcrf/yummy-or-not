@@ -60,7 +60,11 @@ jobs:
 
       - name: Configure Gradle properties
         run: |
-          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
+          printf '\norg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
+            >> apps/mobile/android/gradle.properties
+          printf 'kotlin.daemon.jvmargs=-Xmx2g\n' \
+            >> apps/mobile/android/gradle.properties
+          printf 'org.gradle.caching=true\n' \
             >> apps/mobile/android/gradle.properties
 
       - name: Setup Gradle
@@ -68,7 +72,14 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease
+        # -x lintVital*: skip per-library lint analysis (no value for CI APK artifact, saves ~3-4 min)
+        # --stacktrace: surface root cause if org.gradle.caching=true triggers a node task failure
+        run: >-
+          ./gradlew :app:assembleRelease
+          -x lintVitalRelease
+          -x lintVitalAnalyzeRelease
+          -x lintVitalReportRelease
+          --stacktrace
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
           NODE_OPTIONS: --max-old-space-size=4096
