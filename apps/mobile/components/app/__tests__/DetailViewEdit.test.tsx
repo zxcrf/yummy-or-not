@@ -41,6 +41,13 @@ jest.mock('@/providers/I18nProvider', () => ({
       if (values.n != null) return `${key}:${values.n}`
       return key
     },
+    formatMoney: (amount: number | string) => {
+      const n = typeof amount === 'number'
+        ? amount
+        : Number.parseFloat(String(amount).replace(/[^0-9.]/g, ''))
+      if (!Number.isFinite(n)) return ''
+      return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
+    },
   }),
 }))
 
@@ -158,7 +165,7 @@ describe('DetailView editing', () => {
     expect(mockedUpdateTaste).toHaveBeenCalledWith('taste-1', {
       name: 'Cortado',
       place: 'Corner Cafe',
-      price: '$4.00',
+      price: '4.00',
       verdict: 'yum',
       tags: ['Coffee'],
       notes: 'Better now',

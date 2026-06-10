@@ -33,7 +33,7 @@ import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function DetailView() {
-  const { t } = useI18n()
+  const { t, formatMoney } = useI18n()
   const { user } = useAuth()
   const router = useRouter()
   const params = useLocalSearchParams<{ id: string }>()
@@ -122,7 +122,7 @@ export default function DetailView() {
     if (!item) return
     setEditName(item.name)
     setEditPlace(item.place)
-    setEditPrice(item.price)
+    setEditPrice(item.price.replace(/[^0-9.]/g, ''))
     setEditNotes(item.notes)
     setEditVerdict(item.verdict)
     setEditTags(item.tags)
@@ -327,7 +327,7 @@ export default function DetailView() {
               </YStack>
               {item.price ? (
                 <Text color="$ink900" fontWeight="700" fontSize={26}>
-                  {item.price}
+                  {formatMoney(item.price)}
                 </Text>
               ) : null}
             </XStack>

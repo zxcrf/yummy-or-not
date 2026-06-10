@@ -17,7 +17,7 @@ import { useI18n } from '@/providers/I18nProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 
 export default function LibraryView() {
-  const { t } = useI18n()
+  const { t, formatMoney } = useI18n()
   const router = useRouter()
   const { width } = useWindowDimensions()
   const isDesktop = width >= 768
@@ -125,7 +125,7 @@ export default function LibraryView() {
                 imageKey={it.imageKey || undefined}
                 name={it.name}
                 place={it.place}
-                price={it.price}
+                price={formatMoney(it.price)}
                 verdict={it.verdict}
                 tags={it.tags}
                 boughtCount={it.boughtCount}
