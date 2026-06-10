@@ -2,15 +2,17 @@
 
 ## ⛔ main 分支保护
 
-**`main` 分支永远保持不动。禁止在 `main` 分支上做任何动作或修改**（包括但不限于直接编辑文件、生成文件、commit、push、force-push、merge、rebase、cherry-pick、reset、stash apply、pull/fast-forward、安装依赖或运行会改写工作区的命令）。
+**`main` 分支禁止作为开发工作区。未经用户明确要求，禁止人为或 agent 在 `main` 上直接修改文件或执行会改写工作区/历史的操作**（包括但不限于直接编辑、生成或删除文件，commit、push、force-push、merge、rebase、cherry-pick、reset、stash apply、安装依赖，或运行会改写工作区的命令）。
 
-根目录 checkout 可以切回 `main` 作为干净锚点，但切回后只能观察状态，不能在其中继续开发、验证或整理文件。任何 issue / PR / fix / feature / refactor / docs / test / review 工作，都必须先在仓库根目录的 `.worktrees/` 下创建独立 worktree 和独立分支，例如：
+允许在用户明确要求时，通过 `git pull --ff-only origin main` 这类 fast-forward pull，把远端已经合并到 `main` 的结果同步到本地 `main`；这不属于禁止的直接开发修改。如果 pull 需要产生 merge commit 或解决冲突，必须停止并告知用户。
+
+根目录 checkout 可以切回 `main` 作为干净锚点。除用户明确要求的 fast-forward pull 外，任何 issue / PR / fix / feature / refactor / docs / test / review 工作，都必须先在仓库根目录的 `.worktrees/` 下创建独立 worktree 和独立分支，例如：
 
 ```bash
 git worktree add -b fix/some-issue .worktrees/fix-some-issue origin/main
 ```
 
-随后只允许在该 `.worktrees/<name>` 工作区内修改、测试、提交、推送和开 PR。`main` 工作区始终保留，不作为工作区使用。违反此规则视为高危操作，必须立即停止并告知用户。
+随后只允许在该 `.worktrees/<name>` 工作区内修改、测试、提交、推送和开 PR。`main` 工作区始终保留，不作为日常工作区使用。违反此规则视为高危操作，必须立即停止并告知用户。
 
 ## Unit tests are required for user-level feedback
 
