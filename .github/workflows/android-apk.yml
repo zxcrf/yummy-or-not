@@ -71,6 +71,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          cache-cleanup: never
 
       - name: Build release APK
         working-directory: apps/mobile/android
