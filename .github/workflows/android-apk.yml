@@ -59,13 +59,13 @@ jobs:
         run: test -f android/settings.gradle || pnpm exec expo prebuild --platform android --no-install
 
       - name: Configure Gradle properties
+        # Write to ~/.gradle/gradle.properties (user-level) so android/gradle.properties
+        # is never modified — keeping its content stable is critical for Gradle build
+        # cache hits (any change to the file invalidates all Kotlin task inputs).
         run: |
-          printf '\norg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
-            >> apps/mobile/android/gradle.properties
-          printf 'kotlin.daemon.jvmargs=-Xmx2g\n' \
-            >> apps/mobile/android/gradle.properties
-          printf 'org.gradle.caching=true\n' \
-            >> apps/mobile/android/gradle.properties
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\nkotlin.daemon.jvmargs=-Xmx2g\norg.gradle.caching=true\n' \
+            >> ~/.gradle/gradle.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
