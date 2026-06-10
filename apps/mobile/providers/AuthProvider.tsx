@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Platform } from 'react-native'
+import { Image } from 'expo-image'
 import {
   getAuthToken,
   getMe,
@@ -29,6 +30,7 @@ import {
   type ProviderStatus,
   type User,
 } from '@yon/shared'
+import { clearPersistedTastes, setTastesUser } from '@/app/(tabs)/_useTastes'
 
 // ----------------------------------------------------------------
 // Context shape
@@ -105,6 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const refresh = useCallback(async () => {
     try {
       const { user, providers } = await getMe()
+      // Scope the shared taste cache to this account before any view reads it.
+      setTastesUser(user?.id ?? null)
       setUser(user)
       setProviders(providers)
       // Capture the token a just-completed login put in memory.
@@ -151,6 +155,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await logout()
     writeStoredToken(null)
     setAuthToken(null)
+    // Purge cached taste data + photos so the next account starts clean.
+    await clearPersistedTastes()
+    setTastesUser(null)
+    try {
+      await Promise.all([Image.clearDiskCache(), Image.clearMemoryCache()])
+    } catch {
+      // best-effort — cache clearing must never block sign-out.
+    }
     setUser(null)
   }, [])
 
