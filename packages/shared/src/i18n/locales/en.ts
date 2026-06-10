@@ -2,7 +2,7 @@
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const en: Record<string, string> = {
   nav_tastes: "Tastes", nav_recall: "Recall", nav_saved: "Saved", nav_you: "You", nav_stats: "Stats",
-  your_tastes: "Your tastes", count_logged: "{n} logged", search_log: "Search your log…",
+  my_tastes: "My Tastes", count_logged: "{n} logged", search_log: "Search your log…",
   log_taste: "Log a taste", recall_title: "Tasted it before?",
   recall_sub: "Search before you spend. We’ll tell you what past-you thought.",
   recall_placeholder: "Try “matcha” or “boba”…", recently_recalled: "Recently recalled",

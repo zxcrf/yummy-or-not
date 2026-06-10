@@ -1,16 +1,26 @@
 /* ============================================================
-   Regression tests — RecallView multi-result search and warn styling.
-
-   Pinned behaviors:
-   - Replaces the old items.find() single-match with searchTastes multi-result.
-   - Top match gets the big verdict card; additional matches appear under
-     "Other matches" group.
-   - warnBeforeBuy + warningsEnabled → warn styling on the card header.
-   - warningsEnabled=false → no warn styling even when warnBeforeBuy=true.
+   Regression tests — RecallView multi-result search, warn styling,
+   and viewport-adaptive recent card count.
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import RecallView from '../RecallView'
+import RecallView, { recentCardCount } from '../RecallView'
+import { en } from '../../../../../packages/shared/src/i18n/locales/en'
+import { zh } from '../../../../../packages/shared/src/i18n/locales/zh'
+
+// ---- mock react-native (useWindowDimensions) ----------------------------
+
+const mockWindowDimensions = jest.fn(() => ({ width: 390, height: 744, scale: 2, fontScale: 2 }))
+
+jest.mock('react-native', () => {
+  const actual = jest.requireActual('react-native')
+  return new Proxy(actual, {
+    get(target, prop, receiver) {
+      if (prop === 'useWindowDimensions') return () => mockWindowDimensions()
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+})
 
 // ---- mock shared --------------------------------------------------------
 
@@ -241,5 +251,85 @@ describe('RecallView', () => {
     act(() => { input.props.onChangeText('boba') })
 
     expect(textNodes(renderer, 'Other matches')).toHaveLength(0)
+  })
+})
+
+function rowCount(renderer: TestRenderer.ReactTestRenderer): number {
+  return renderer.root.findAll((node) => (node.type as unknown) === 'VerdictStamp').length
+}
+
+function renderRecallViewAt(height: number): TestRenderer.ReactTestRenderer {
+  mockWindowDimensions.mockReturnValue({ width: 390, height, scale: 2, fontScale: 2 })
+  let renderer!: TestRenderer.ReactTestRenderer
+  act(() => {
+    renderer = TestRenderer.create(<RecallView />)
+  })
+  return renderer
+}
+
+describe('recentCardCount', () => {
+  it('clamps short viewports to 3 rows', () => {
+    expect(recentCardCount(480)).toBe(3)
+    expect(recentCardCount(0)).toBe(3)
+    expect(recentCardCount(-1)).toBe(3)
+    expect(recentCardCount(Number.NaN)).toBe(3)
+  })
+
+  it('returns a typical phone count around 4 to 5 rows', () => {
+    expect(recentCardCount(744)).toBe(4)
+    expect(recentCardCount(832)).toBe(5)
+  })
+
+  it('grows on tall screens and clamps at 8 rows', () => {
+    expect(recentCardCount(920)).toBe(6)
+    expect(recentCardCount(1400)).toBe(8)
+    expect(recentCardCount(Number.POSITIVE_INFINITY)).toBe(8)
+  })
+
+  it('is monotonic non-decreasing across thresholds and edge cases', () => {
+    const heights = [
+      Number.NEGATIVE_INFINITY, Number.NaN, 0, 391, 392, 479, 480, 567, 568,
+      655, 656, 743, 744, 831, 832, 919, 920, 1007, 1008, 1095, 1096, 1183,
+      1184, Number.POSITIVE_INFINITY,
+    ]
+    const counts = heights.map((height) => recentCardCount(height))
+    expect(counts).toEqual([3,3,3,3,3,3,3,3,3,3,3,3,4,4,5,5,6,6,7,7,8,8,8,8])
+    for (let index = 1; index < counts.length; index += 1) {
+      expect(counts[index]).toBeGreaterThanOrEqual(counts[index - 1]!)
+    }
+  })
+})
+
+describe('RecallView recent rows', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockUser = { warningsEnabled: true }
+    mockSearchTastes.mockReturnValue([])
+    mockItems = Array.from({ length: 10 }, (_, i) => ({
+      id: `taste-${i + 1}`,
+      name: `Taste ${i + 1}`,
+      place: `Place ${i + 1}`,
+      verdict: i % 3 === 0 ? 'nah' : i % 2 === 0 ? 'meh' : 'yum',
+      warnBeforeBuy: false,
+      date: 'today',
+      imageThumb: '', image: '', imageKey: '', notes: '',
+      tags: [], boughtCount: 1, price: '', purchases: [],
+      createdAt: '2026-06-08T00:00:00.000Z', imageDisplay: '',
+    }))
+  })
+
+  it('renders fewer recent rows on short screens and more on tall screens', () => {
+    const shortRenderer = renderRecallViewAt(480)
+    expect(rowCount(shortRenderer)).toBe(3)
+
+    const tallRenderer = renderRecallViewAt(920)
+    expect(rowCount(tallRenderer)).toBe(6)
+  })
+})
+
+describe('library title locales', () => {
+  it('keeps the renamed first-person titles in english and chinese', () => {
+    expect(en.my_tastes).toBe('My Tastes')
+    expect(zh.my_tastes).toBe('我的口味')
   })
 })

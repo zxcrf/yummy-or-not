@@ -49,7 +49,7 @@ interface NavMeta {
 
 // Ordered to match the web shell. `add` is handled separately (FAB/CTA).
 const NAV: NavMeta[] = [
-  { route: 'index', icon: 'grid', labelKey: 'your_tastes' },
+  { route: 'index', icon: 'grid', labelKey: 'my_tastes' },
   { route: 'recall', icon: 'search', labelKey: 'nav_recall' },
   { route: 'stats', icon: 'chart-bar', labelKey: 'nav_stats' },
   { route: 'you', icon: 'user', labelKey: 'nav_you' },

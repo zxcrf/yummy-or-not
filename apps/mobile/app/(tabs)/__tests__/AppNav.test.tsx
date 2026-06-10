@@ -46,7 +46,7 @@ jest.mock('@/providers/I18nProvider', () => ({
       nav_recall: 'Recall',
       nav_stats: 'Stats',
       nav_you: 'You',
-      your_tastes: 'Your tastes',
+      my_tastes: 'My Tastes',
     }[key] ?? key),
   }),
 }))

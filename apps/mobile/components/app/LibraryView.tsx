@@ -79,7 +79,7 @@ export default function LibraryView() {
       <YStack gap="$3">
         <XStack alignItems="center" justifyContent="space-between" gap="$2">
           <Text color="$color" fontWeight="700" fontSize={28}>
-            {t('your_tastes')}
+            {t('my_tastes')}
           </Text>
           <Text color="$colorMuted" fontSize={13}>
             {t('count_logged', { n: items.length })}
