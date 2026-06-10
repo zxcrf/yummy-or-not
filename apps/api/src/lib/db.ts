@@ -53,6 +53,17 @@ function relativeDate(createdAt: Date): string {
   return `${diffMo} months ago`;
 }
 
+/** Return true when the stored image value is a legacy absolute URL or local
+ *  path that should be passed through unchanged (no variants, no presigning).
+ *  Single source of truth shared by resolvePhotoUrls and imageKeyFromRow. */
+function isLegacyPhotoValue(image: string): boolean {
+  return (
+    image.startsWith('http://') ||
+    image.startsWith('https://') ||
+    image.startsWith('/uploads/')
+  );
+}
+
 /** Resolve a stored `image` key into the three client-facing URLs.
  *
  *  Cases:
@@ -72,11 +83,7 @@ export async function resolvePhotoUrls(image: string | null | undefined): Promis
   if (!image) return { image: '', imageThumb: '', imageDisplay: '' };
 
   // Legacy absolute URLs — no variants, pass straight through.
-  if (
-    image.startsWith('http://') ||
-    image.startsWith('https://') ||
-    image.startsWith('/uploads/')
-  ) {
+  if (isLegacyPhotoValue(image)) {
     return { image, imageThumb: image, imageDisplay: image };
   }
 
@@ -118,6 +125,15 @@ export async function resolvePhotoUrls(image: string | null | undefined): Promis
   return { image: resolved, imageThumb: resolved, imageDisplay: resolved };
 }
 
+/** Return the stable bare storage key for a given DB image value.
+ *  Uses isLegacyPhotoValue as the single source of truth for legacy detection,
+ *  so this stays in sync with resolvePhotoUrls automatically. */
+export function imageKeyFromRow(image: string | null | undefined): string {
+  if (!image) return '';
+  if (isLegacyPhotoValue(image)) return '';
+  return image;
+}
+
 /** Map a DB row (snake_case) to a Taste (camelCase). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function rowToTaste(row: any): Promise<Taste> {
@@ -135,6 +151,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     image:       urls.image,
     imageThumb:  urls.imageThumb,
     imageDisplay: urls.imageDisplay,
+    imageKey:    imageKeyFromRow(row.image),
     createdAt:   new Date(row.created_at).toISOString(),
   };
 }

@@ -39,6 +39,10 @@ export interface Taste {
   /** Display-quality URL (≤1200 px wide, WebP). Same lifetime as `image`.
    *  Falls back to `image` on old records that pre-date variant generation. */
   imageDisplay: string;
+  /** Stable storage key of the original photo ("" for none or legacy
+   *  http(s)/path images). Safe to use as a client cache key — changes
+   *  iff the photo itself changes. */
+  imageKey: string;
   /** ISO timestamp from the DB. */
   createdAt: string;
 }
