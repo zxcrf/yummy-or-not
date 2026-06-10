@@ -179,6 +179,11 @@ export function invalidateTastes(): Promise<Taste[]> {
   return revalidate()
 }
 
+/** Synchronous read-only lookup into the shared in-memory cache. */
+export function getCachedTaste(id: string): Taste | undefined {
+  return cache?.find((t) => t.id === id)
+}
+
 /**
  * Point the cache at a (new) user and clear any prior in-memory state.
  * Called by AuthProvider on sign-in / sign-out so the namespaced storage
