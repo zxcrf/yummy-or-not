@@ -12,6 +12,7 @@ import YouView from '../YouView'
 
 const mockSetLang = jest.fn()
 const mockSignOut = jest.fn()
+const mockFormatMoney = jest.fn((n: number) => `$${n.toFixed(2)}`)
 
 jest.mock('@yon/shared', () => ({
   LANGS: [
@@ -24,7 +25,7 @@ jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
     lang: 'zh',
     setLang: mockSetLang,
-    formatMoney: (n: number) => `$${n.toFixed(2)}`,
+    formatMoney: mockFormatMoney,
     t: (key: string, vars?: Record<string, string | number>) => ({
       auth_signout: 'Sign out',
       meh: 'Meh',
@@ -64,6 +65,7 @@ function renderYouView(): TestRenderer.ReactTestRenderer {
 describe('YouView language switcher', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockFormatMoney.mockImplementation((n: number) => `$${n.toFixed(2)}`)
   })
 
   it('renders one language switcher in flag mode', () => {
@@ -83,5 +85,54 @@ describe('YouView language switcher', () => {
         (node) => node.props.children === '中文' || node.props.children === 'English',
       ),
     ).toHaveLength(0)
+  })
+
+  it('formats saved amount through the active locale money formatter', () => {
+    mockFormatMoney.mockImplementation((n: number) => `¥${n.toFixed(2)}`)
+    let renderer!: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      renderer = TestRenderer.create(
+        <YouView
+          items={[
+            {
+              id: 'taste-1',
+              name: 'Burnt toast',
+              place: '',
+              price: '$4.50',
+              verdict: 'nah',
+              tags: [],
+              boughtCount: 1,
+              date: 'today',
+              notes: '',
+              image: '',
+              createdAt: '2026-06-08T00:00:00.000Z',
+            },
+            {
+              id: 'taste-2',
+              name: 'Coffee',
+              place: '',
+              price: '$3.25',
+              verdict: 'yum',
+              tags: [],
+              boughtCount: 1,
+              date: 'today',
+              notes: '',
+              image: '',
+              createdAt: '2026-06-08T00:00:00.000Z',
+            },
+          ]}
+        />,
+      )
+    })
+
+    expect(mockFormatMoney).toHaveBeenCalledWith(4.5)
+    expect(
+      renderer.root.findAll(
+        (node) =>
+          typeof node.props.children === 'string' &&
+          node.props.children === '¥4.50 saved',
+      ),
+    ).not.toHaveLength(0)
   })
 })

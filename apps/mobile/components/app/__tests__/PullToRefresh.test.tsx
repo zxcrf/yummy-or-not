@@ -16,6 +16,8 @@ import LibraryView from '../LibraryView'
 import RecallView from '../RecallView'
 import StatsView from '../StatsView'
 
+const mockFormatMoney = jest.fn((amount: number) => `$${amount.toFixed(2)}`)
+
 jest.mock('@yon/shared', () => ({
   FILTERS: ['All', 'Coffee'],
   getStats: jest.fn(),
@@ -30,6 +32,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
+    formatMoney: mockFormatMoney,
     t: (key: string, values?: Record<string, unknown>) => {
       if (!values) return key
       if (values.amt) return `${key}:${values.amt}`
@@ -119,6 +122,7 @@ function textContent(renderer: TestRenderer.ReactTestRenderer): string {
 describe('mobile pull-to-refresh', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockFormatMoney.mockImplementation((amount: number) => `$${amount.toFixed(2)}`)
   })
 
   it('refreshes the Your tastes library list from the API', async () => {
@@ -169,6 +173,7 @@ describe('mobile pull-to-refresh', () => {
 
     expect(refreshItems).toHaveBeenCalledTimes(1)
     expect(mockedGetStats).toHaveBeenCalledTimes(2)
+    expect(mockFormatMoney).toHaveBeenCalledWith(3)
     expect(textContent(renderer)).toContain('saved_amt:$3.00')
   })
 })
