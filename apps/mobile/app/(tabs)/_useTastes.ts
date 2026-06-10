@@ -20,15 +20,18 @@
    The storage key is namespaced by user id so switching accounts never
    shows another user's list. setTastesUser() is called by AuthProvider.
 
-   Race-safety: a monotonically increasing `epoch` counter is bumped by
-   both setTastesUser() and invalidateTastes(). Every async operation
-   (revalidate, readPersisted) captures the epoch at start; on completion
-   it discards the result if the epoch has changed. This single mechanism
-   covers three races:
-     • slow account-A fetch resolving after setTastesUser(B) — discarded.
-     • pre-mutation fetch resolving after invalidate's newer fetch — discarded.
-     • setTastesUser() now also emits [] to mounted hooks immediately so
-       they clear the previous account's items without waiting for a fetch.
+   Race-safety:
+   • Epoch counter: bumped by setTastesUser() and invalidateTastes().
+     Every async completion captures the epoch at start; if the epoch
+     has advanced by the time it resolves the result is discarded.
+     Covers: slow cross-account fetch, pre-mutation fetch overwriting
+     post-mutation data, concurrent cold-start hydration.
+   • Serialized per-key write chain: all AsyncStorage setItem/removeItem
+     calls for the same key are chained through a promise so they execute
+     in order.  A setItem re-checks epoch+key immediately before the
+     actual write and becomes a no-op if either has changed — preventing
+     a delayed setItem from resurrecting data that a removeItem already
+     erased.
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -64,6 +67,34 @@ function emit(items: Taste[]): void {
   for (const l of listeners) l(items)
 }
 
+// ----------------------------------------------------------------
+// Serialized per-key AsyncStorage write chain (finding: stale write resurrection)
+//
+// All setItem and removeItem calls for a given storage key are chained
+// through this map so they execute in arrival order.  A queued setItem
+// re-checks the epoch+key pair immediately before the actual write; if
+// either has changed (epoch advanced by invalidate/user-switch, or key
+// changed by user-switch) the write is skipped and becomes a no-op.
+// This prevents a slow setItem from resurrecting data that a subsequent
+// removeItem already erased.
+// ----------------------------------------------------------------
+
+const pendingWrites = new Map<string, Promise<void>>()
+
+/**
+ * Append work to the serialized write chain for `key`.
+ * `work` receives no arguments — capture everything it needs in its closure.
+ * The chain never throws (errors are swallowed) so every appended item runs.
+ */
+function enqueueWrite(key: string, work: () => Promise<void>): Promise<void> {
+  const prev = pendingWrites.get(key) ?? Promise.resolve()
+  const next = prev.then(work).catch(() => {
+    // best-effort — swallow so the chain never stalls.
+  })
+  pendingWrites.set(key, next)
+  return next
+}
+
 /** Best-effort read of the persisted list for the current user. */
 async function readPersisted(): Promise<Taste[] | null> {
   try {
@@ -76,13 +107,34 @@ async function readPersisted(): Promise<Taste[] | null> {
   }
 }
 
-/** Best-effort persist of the list for the current user. */
-async function writePersisted(items: Taste[], key: string): Promise<void> {
-  try {
+/**
+ * Enqueue a best-effort persist of `items` under `key`.
+ * The write is a no-op if `capturedEpoch` no longer matches the current
+ * epoch or if `key` is no longer the active storage key for this user —
+ * both checks happen immediately before the actual setItem so no stale
+ * write can land after a removeItem.
+ */
+function writePersisted(
+  items: Taste[],
+  key: string,
+  capturedEpoch: number,
+): void {
+  void enqueueWrite(key, async () => {
+    // Re-check epoch and key at write time, not at enqueue time.
+    if (epoch !== capturedEpoch || storageKey() !== key) return
     await AsyncStorage.setItem(key, JSON.stringify(items))
-  } catch {
-    // ignore — persistence is best-effort.
-  }
+  })
+}
+
+/**
+ * Enqueue a removal of `key` from AsyncStorage.
+ * Joining the same per-key chain ensures this runs after any already-queued
+ * setItem for the same key, so the removal always wins.
+ */
+function removePersistedKey(key: string): Promise<void> {
+  return enqueueWrite(key, async () => {
+    await AsyncStorage.removeItem(key)
+  })
 }
 
 /**
@@ -100,7 +152,7 @@ function revalidate(): Promise<Taste[]> {
       if (epoch !== capturedEpoch) return data // epoch changed — discard
       cache = data
       emit(data)
-      void writePersisted(data, capturedKey)
+      writePersisted(data, capturedKey, capturedEpoch)
       return data
     })
     .finally(() => {
@@ -154,11 +206,9 @@ export async function clearPersistedTastes(): Promise<void> {
   hydrated = false
   epoch++
   inFlight = null
-  try {
-    await AsyncStorage.removeItem(key)
-  } catch {
-    // ignore — best-effort.
-  }
+  // Join the per-key write chain so the removal runs after any queued
+  // setItem for this key — the removal always lands last.
+  await removePersistedKey(key)
 }
 
 // ----------------------------------------------------------------

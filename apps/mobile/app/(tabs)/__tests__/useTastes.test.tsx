@@ -369,3 +369,61 @@ describe('cold-start persisted hydration — all subscribers notified (finding 5
     expect(seen2[seen2.length - 1].items.map((t) => t.id)).toEqual(['network'])
   })
 })
+
+describe('serialized write chain — stale setItem cannot resurrect after removeItem (finding: fire-and-forget race)', () => {
+  it('clearPersistedTastes removeItem wins even when a prior setItem is still in flight', async () => {
+    /* Old code: writePersisted was fire-and-forget — if the AsyncStorage.setItem
+       call from revalidate() was still in-flight when clearPersistedTastes() ran
+       its removeItem, the setItem could complete AFTER the removeItem and
+       resurrect the key with stale (possibly cross-account) data.
+
+       Fix: all writes for a key are serialized through a per-key promise chain
+       (pendingWrites map). writePersisted re-checks epoch+key immediately before
+       the actual setItem; clearPersistedTastes joins the same chain so its
+       removeItem always runs after any queued setItem.  A stale write detects
+       the epoch mismatch and becomes a no-op; the removal is therefore the last
+       writer and the key stays absent. */
+
+    setTastesUser('u1')
+
+    // Intercept AsyncStorage.setItem so we can delay it arbitrarily.
+    let resolveSetItem!: () => void
+    const setItemGate = new Promise<void>((r) => { resolveSetItem = r })
+    const realSetItem = AsyncStorage.setItem.bind(AsyncStorage)
+    const setItemSpy = jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockImplementationOnce(async (key, value) => {
+        // Block this specific setItem until the test releases it.
+        await setItemGate
+        return realSetItem(key, value)
+      })
+
+    // Trigger revalidate so writePersisted enqueues a (blocked) setItem.
+    mockListTastes.mockResolvedValueOnce([taste('will-be-stale')])
+    mountProbe()
+    // Let revalidate() run and listTastes resolve, enqueueing the blocked setItem.
+    await flush()
+    await flush()
+
+    // Now call clearPersistedTastes — its removeItem joins the write chain and
+    // will run AFTER the setItem, but the epoch/key re-check inside writePersisted
+    // must detect the epoch bump and skip the actual write.
+    const clearPromise = act(async () => {
+      await clearPersistedTastes()
+    })
+
+    // Release the blocked setItem — it should find epoch mismatch and be a no-op.
+    resolveSetItem()
+
+    // Wait for both the blocked setItem and the removeItem to drain.
+    await clearPromise
+    await flush()
+
+    setItemSpy.mockRestore()
+
+    // The key must be absent — the stale setItem must not have written anything,
+    // and the removeItem must have run (or the no-op write means the key was
+    // never written in the first place, which is equally correct).
+    expect(await AsyncStorage.getItem('yon_tastes:u1')).toBeNull()
+  })
+})
