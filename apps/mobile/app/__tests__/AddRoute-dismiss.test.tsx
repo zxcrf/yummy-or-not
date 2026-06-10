@@ -23,12 +23,19 @@ import AddRoute from '../add'
 const mockBack = jest.fn()
 const mockReplace = jest.fn()
 
-jest.mock('expo-router', () => ({
-  router: {
-    back: (...args: unknown[]) => mockBack(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-  },
-}))
+jest.mock('expo-router', () => {
+  const React = require('react')
+  return {
+    router: {
+      back: (...args: unknown[]) => mockBack(...args),
+      replace: (...args: unknown[]) => mockReplace(...args),
+    },
+    // AddRoute re-asserts the open animation on focus; model it as a mount effect.
+    useFocusEffect: (cb: () => void | (() => void)) => {
+      React.useEffect(cb, [])
+    },
+  }
+})
 
 jest.mock('@/providers/AddTransitionProvider', () => ({
   useAddTransition: () => ({ fabLayout: { value: null } }),
