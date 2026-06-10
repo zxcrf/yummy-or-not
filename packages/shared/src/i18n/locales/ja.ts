@@ -2,7 +2,7 @@
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const ja: Record<string, string> = {
   nav_tastes: "記録", nav_recall: "検索", nav_saved: "保存", nav_you: "マイ", nav_stats: "統計",
-  your_tastes: "あなたの味", count_logged: "{n}件", search_log: "記録を検索…",
+  my_tastes: "私の味", count_logged: "{n}件", search_log: "記録を検索…",
   log_taste: "味を記録", recall_title: "前に食べた？",
   recall_sub: "買う前に検索。過去の自分の感想をお知らせします。",
   recall_placeholder: "「抒茶」や「タピオカ」で検索…", recently_recalled: "最近の検索",

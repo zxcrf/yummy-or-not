@@ -9,7 +9,7 @@
    ============================================================ */
 
 import { useCallback, useMemo, useState } from 'react'
-import { RefreshControl } from 'react-native'
+import { RefreshControl, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
@@ -29,6 +29,22 @@ const VERDICT_KEY: Record<Verdict, string> = {
   yum: 'loved_it',
   meh: 'soso',
   nah: 'skip_it',
+}
+
+const RECENT_CARD_MIN = 3
+const RECENT_CARD_MAX = 8
+const RECENT_CARD_BASE_OFFSET = 392
+const RECENT_CARD_ROW_HEIGHT = 88
+
+export function recentCardCount(windowHeight: number): number {
+  if (windowHeight === Number.POSITIVE_INFINITY) {
+    return RECENT_CARD_MAX
+  }
+
+  const safeHeight = Number.isFinite(windowHeight) ? Math.max(0, windowHeight) : 0
+  const estimatedRows = Math.floor((safeHeight - RECENT_CARD_BASE_OFFSET) / RECENT_CARD_ROW_HEIGHT)
+
+  return Math.max(RECENT_CARD_MIN, Math.min(RECENT_CARD_MAX, estimatedRows))
 }
 
 function RecallRow({
@@ -105,10 +121,12 @@ export default function RecallView() {
   const { t } = useI18n()
   const router = useRouter()
   const { user } = useAuth()
+  const { height } = useWindowDimensions()
 
   const { items, refresh } = useRefreshableTastes()
   const [q, setQ] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const visibleRecentItems = recentCardCount(height)
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -181,7 +199,7 @@ export default function RecallView() {
             >
               {t('recently_recalled')}
             </Text>
-            {items.slice(0, 4).map((it) => (
+            {items.slice(0, visibleRecentItems).map((it) => (
               <RecallRow
                 key={it.id}
                 item={it}

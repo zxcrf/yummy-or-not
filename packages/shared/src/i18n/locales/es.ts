@@ -2,7 +2,7 @@
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const es: Record<string, string> = {
   nav_tastes: "Sabores", nav_recall: "Recordar", nav_saved: "Guardado", nav_you: "Tú", nav_stats: "Datos",
-  your_tastes: "Tus sabores", count_logged: "{n} registrados", search_log: "Busca en tu registro…",
+  my_tastes: "Mis sabores", count_logged: "{n} registrados", search_log: "Busca en tu registro…",
   log_taste: "Anota un sabor", recall_title: "¿Ya lo probaste?",
   recall_sub: "Busca antes de gastar. Te decimos qué pensó tu yo del pasado.",
   recall_placeholder: "Prueba “matcha” o “boba”…", recently_recalled: "Recordados hace poco",
