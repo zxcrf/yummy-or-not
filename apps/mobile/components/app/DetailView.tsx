@@ -10,10 +10,12 @@
 
 import { useEffect, useState } from 'react'
 import { Alert, Image, Modal, Pressable, StyleSheet } from 'react-native'
+import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { invalidateTastes } from '@/app/(tabs)/_useTastes'
 import {
   Badge,
   Button,
@@ -102,6 +104,7 @@ export default function DetailView() {
     setDeleting(true)
     try {
       await deleteTaste(item.id)
+      void invalidateTastes()
       goBack()
     } catch {
       setDeleting(false)
@@ -153,6 +156,7 @@ export default function DetailView() {
         notes: editNotes,
       })
       setItem(updated)
+      void invalidateTastes()
       setEditing(false)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
@@ -204,10 +208,15 @@ export default function DetailView() {
           overflow="hidden"
         >
           {(item.imageDisplay || item.image) ? (
-            <Image
-              source={{ uri: item.imageDisplay || item.image }}
+            <ExpoImage
+              source={{
+                uri: item.imageDisplay || item.image,
+                ...(item.imageKey ? { cacheKey: `${item.imageKey}:display` } : {}),
+              }}
+              cachePolicy="disk"
+              transition={150}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              contentFit="cover"
             />
           ) : null}
         </View>

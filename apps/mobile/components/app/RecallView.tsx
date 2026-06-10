@@ -7,13 +7,15 @@
    navigation via expo-router (taste detail + /add).
    ============================================================ */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Image, RefreshControl } from 'react-native'
+import { useCallback, useState } from 'react'
+import { RefreshControl } from 'react-native'
+import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { listTastes, type Taste, type Verdict } from '@yon/shared'
+import { type Taste, type Verdict } from '@yon/shared'
 import { Button, Card, Icon, Input, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
+import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 
 const ACCENT_BG = {
   yum: '$verdictYum',
@@ -71,9 +73,14 @@ function RecallRow({
       >
         {(item.imageThumb || item.image) ? (
           <Image
-            source={{ uri: item.imageThumb || item.image }}
+            source={{
+              uri: item.imageThumb || item.image,
+              ...(item.imageKey ? { cacheKey: `${item.imageKey}:thumb` } : {}),
+            }}
+            cachePolicy="disk"
+            transition={150}
             style={{ width: '100%', height: '100%' }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         ) : null}
       </View>
@@ -94,36 +101,18 @@ export default function RecallView() {
   const { t } = useI18n()
   const router = useRouter()
 
-  const [items, setItems] = useState<Taste[]>([])
+  const { items, refresh } = useRefreshableTastes()
   const [q, setQ] = useState('')
   const [refreshing, setRefreshing] = useState(false)
-  const mounted = useRef(false)
-
-  const load = useCallback(async () => {
-    try {
-      const data = await listTastes()
-      if (mounted.current) setItems(data)
-    } catch {
-      if (mounted.current) setItems([])
-    }
-  }, [])
-
-  useEffect(() => {
-    mounted.current = true
-    void load()
-    return () => {
-      mounted.current = false
-    }
-  }, [load])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await load()
+      await refresh()
     } finally {
-      if (mounted.current) setRefreshing(false)
+      setRefreshing(false)
     }
-  }, [load])
+  }, [refresh])
 
   const match = q
     ? items.find((it) => it.name.toLowerCase().includes(q.toLowerCase()))
