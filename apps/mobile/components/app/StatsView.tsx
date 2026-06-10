@@ -1,9 +1,9 @@
 /* ============================================================
-   YUMMY OR NOT — StatsView (Tamagui / React Native + RN Web)
+   YUMMY OR NOT -- StatsView (Tamagui / React Native + RN Web)
    RN port of the web StatsView: three verdict tiles, a money-saved
    card, and a verdict-breakdown bar chart.
 
-   Loads stats from the API (getStats → Stats); falls back to counting
+   Loads stats from the API (getStats -> Stats); falls back to counting
    the passed-in `items` while the fetch resolves so the screen never
    renders empty.
    ============================================================ */
@@ -15,6 +15,7 @@ import { getStats, type Stats, type Taste } from '@yon/shared'
 
 import { Card, Icon } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
+import AnimatedNumber from '@/components/app/AnimatedNumber'
 
 interface Props {
   items: Taste[]
@@ -27,6 +28,65 @@ const KICKER = {
   letterSpacing: 1.32,
   textTransform: 'uppercase',
 } as const
+
+// Sentinel injected into the saved_amt translation template so we can split
+// the sentence at the {amt} boundary. Plain ASCII so the source file stays
+// text and git diffs work normally.
+const SPLIT_MARKER = '__AMT_SPLIT__'
+
+interface SavedAmountRowProps {
+  t: (key: string, vars?: Record<string, string | number>) => string
+  /** Characters before the digits in the formatted money string (e.g. "$", "¥"). */
+  symbolPrefix: string
+  /** Characters after the digits in the formatted money string (e.g. "€", ""). */
+  symbolSuffix: string
+  savedNumeric: number
+}
+
+function SavedAmountRow({ t, symbolPrefix, symbolSuffix, savedNumeric }: SavedAmountRowProps) {
+  // Inject the sentinel so we can split the translated sentence into the
+  // part before {amt} and the part after {amt}.
+  const template = t('saved_amt', { amt: SPLIT_MARKER })
+  const [sentencePre, sentencePost] = template.split(SPLIT_MARKER)
+  const decimals = Number.isInteger(savedNumeric) ? 0 : 2
+
+  // Rendering order: sentence-prefix . symbol-prefix . animated-number .
+  //                  symbol-suffix . sentence-suffix
+  // Handles both "$3 saved" (en) and "xia Y3" (zh) as well as
+  // hypothetical suffix-symbol locales like "3E ahorrados".
+  return (
+    <View flexDirection="row" alignItems="baseline" flexWrap="wrap">
+      {sentencePre ? (
+        <Text color="$ink900" fontWeight="700" fontSize={24}>
+          {sentencePre}
+        </Text>
+      ) : null}
+      {symbolPrefix ? (
+        <Text color="$ink900" fontWeight="700" fontSize={24} testID="saved-currency-symbol">
+          {symbolPrefix}
+        </Text>
+      ) : null}
+      <AnimatedNumber
+        value={savedNumeric}
+        decimals={decimals}
+        color="$ink900"
+        fontWeight="700"
+        fontSize={24}
+        testID="saved-animated-number"
+      />
+      {symbolSuffix ? (
+        <Text color="$ink900" fontWeight="700" fontSize={24} testID="saved-currency-symbol">
+          {symbolSuffix}
+        </Text>
+      ) : null}
+      {sentencePost ? (
+        <Text color="$ink900" fontWeight="700" fontSize={24}>
+          {sentencePost}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
 
 export default function StatsView({ items, onRefresh: refreshItems }: Props) {
   const { t, formatMoney } = useI18n()
@@ -76,7 +136,18 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
 
   const total = stats?.total ?? items.length
   const rawSaved = stats?.savedAmount != null ? parseFloat(stats.savedAmount.replace(/[^0-9.]/g, '')) : 0
-  const savedAmount = formatMoney(Number.isFinite(rawSaved) ? rawSaved : 0)
+  const savedNumeric = Number.isFinite(rawSaved) ? rawSaved : 0
+  // Route through formatMoney so the symbol honours the active locale.
+  // Split the formatted string at the numeric boundary to isolate the symbol,
+  // which may appear as a prefix ("$3") or suffix ("3E").
+  const formattedSaved = formatMoney(savedNumeric)
+  const numericMatch = formattedSaved.match(/[\d.,]+/)
+  const numericToken = numericMatch ? numericMatch[0] : ''
+  const numericIndex = numericToken ? formattedSaved.indexOf(numericToken) : -1
+  // symbolPrefix: non-digit characters before the number (e.g. "$", "Y").
+  // symbolSuffix: non-digit characters after the number (e.g. "E", "").
+  const symbolPrefix = numericIndex > 0 ? formattedSaved.slice(0, numericIndex) : ''
+  const symbolSuffix = numericIndex >= 0 ? formattedSaved.slice(numericIndex + numericToken.length) : formattedSaved
 
   type Color = GetProps<typeof View>['backgroundColor']
 
@@ -95,9 +166,13 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
       shadowOpacity={1}
       shadowRadius={0}
     >
-      <Text color="#fff" fontWeight="700" fontSize={48} lineHeight={48}>
-        {value}
-      </Text>
+      <AnimatedNumber
+        value={value}
+        color="#fff"
+        fontWeight="700"
+        fontSize={48}
+        lineHeight={48}
+      />
       <Text
         color="#fff"
         fontSize={10}
@@ -119,9 +194,7 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
           <Text color="$ink900" fontWeight="600">
             {label}
           </Text>
-          <Text color="$ink900" fontWeight="600">
-            {n}
-          </Text>
+          <AnimatedNumber value={n} color="$ink900" fontWeight="600" />
         </View>
         <View
           height={22}
@@ -174,9 +247,16 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
       >
         <Icon name="coin" size={36} color="#ff5ca8" />
         <View>
-          <Text color="$ink900" fontWeight="700" fontSize={24}>
-            {t('saved_amt', { amt: savedAmount })}
-          </Text>
+          {/* Split the translated template at the {amt} position so only
+              the numeric portion participates in the rolling animation.
+              The currency symbol stays as static sibling text outside
+              AnimatedNumber -- it must never roll. */}
+          <SavedAmountRow
+            t={t}
+            symbolPrefix={symbolPrefix}
+            symbolSuffix={symbolSuffix}
+            savedNumeric={savedNumeric}
+          />
           <Text color="$ink500" fontSize={14}>
             {t('saved_sub')}
           </Text>
