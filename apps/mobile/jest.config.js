@@ -5,6 +5,8 @@
  */
 module.exports = {
   preset: 'jest-expo',
+  // Register the AsyncStorage mock (shared taste-cache hook reads/writes it).
+  setupFiles: ['<rootDir>/jest.setup.js'],
   // Map the `@/*` path alias used across the app (mirrors tsconfig paths).
   moduleNameMapper: {
     // Dedupe React to a single instance. Under pnpm the app and

@@ -106,6 +106,9 @@ describe('YouView language switcher', () => {
               date: 'today',
               notes: '',
               image: '',
+              imageThumb: '',
+              imageDisplay: '',
+              imageKey: '',
               createdAt: '2026-06-08T00:00:00.000Z',
             },
             {
@@ -119,6 +122,9 @@ describe('YouView language switcher', () => {
               date: 'today',
               notes: '',
               image: '',
+              imageThumb: '',
+              imageDisplay: '',
+              imageKey: '',
               createdAt: '2026-06-08T00:00:00.000Z',
             },
           ]}
