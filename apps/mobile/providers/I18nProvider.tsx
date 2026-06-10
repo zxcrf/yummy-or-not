@@ -31,14 +31,14 @@ interface I18nContextValue {
   /** Accepts any string; silently ignores unknown codes. */
   setLang: (lang: string) => void
   t: (key: string, vars?: Record<string, string | number>) => string
-  formatMoney: (amount: number) => string
+  formatMoney: (amount: number | string) => string
 }
 
 const I18nContext = createContext<I18nContextValue>({
   lang: DEFAULT_LANG,
   setLang: () => {},
   t: (key) => key,
-  formatMoney: (n) => `$${n.toFixed(2)}`,
+  formatMoney: () => '',
 })
 
 // ----------------------------------------------------------------
@@ -49,6 +49,15 @@ const STORAGE_KEY = 'yon_lang'
 
 function isValidLang(code: string): code is Lang {
   return LANGS.some((l) => l.code === code)
+}
+
+function formatMoneyValue(amount: number | string, lang: Lang): string {
+  const raw = typeof amount === 'string' ? amount.replace(/[^0-9.]/g, '') : amount
+  if (raw === '') return ''
+  const value = typeof raw === 'number' ? raw : Number.parseFloat(raw)
+  if (!Number.isFinite(value)) return ''
+  const { symbol } = LANG_CURRENCY[lang]
+  return Number.isInteger(value) ? `${symbol}${value}` : `${symbol}${value.toFixed(2)}`
 }
 
 /** Read the persisted lang (or null). Async to accommodate AsyncStorage. */
@@ -122,10 +131,7 @@ export function I18nProvider({ children }: I18nProviderProps) {
       lang,
       setLang,
       t: (key, vars) => translate(lang, key, vars),
-      formatMoney: (n: number) => {
-        const { symbol } = LANG_CURRENCY[lang]
-        return `${symbol}${n.toFixed(2)}`
-      },
+      formatMoney: (amount) => formatMoneyValue(amount, lang),
     }),
     [lang, setLang],
   )

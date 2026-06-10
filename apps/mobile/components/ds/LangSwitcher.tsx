@@ -197,7 +197,16 @@ export function LangSwitcher({
           {triggerMode === 'flag' ? (
             <Text
               fontSize={22}
-              {...(Platform.OS === 'android' ? { style: { includeFontPadding: false } } : {})}
+              lineHeight={22}
+              textAlign="center"
+              {...(Platform.OS === 'android'
+                ? {
+                    style: {
+                      includeFontPadding: false,
+                      textAlignVertical: 'center',
+                    },
+                  }
+                : {})}
             >
               {currentFlag}
             </Text>

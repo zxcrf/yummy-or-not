@@ -162,15 +162,15 @@ function parsePrice(price: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-/** Normalize a price string to "$x.yy" format on write.
- *  Strips non-numeric chars; if it parses as a number returns "$n.toFixed(2)".
+/** Normalize a price string to "x.yy" format on write.
+ *  Strips non-numeric chars; if it parses as a number returns "n.toFixed(2)".
  *  Leaves non-numeric strings (e.g. "—") untouched. Empty → "". */
-function normalizePrice(raw: string): string {
+export function normalizePrice(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
   const digits = trimmed.replace(/[^0-9.]/g, '');
   const n = parseFloat(digits);
-  if (!isNaN(n)) return `$${n.toFixed(2)}`;
+  if (!isNaN(n)) return n.toFixed(2);
   return trimmed;
 }
 

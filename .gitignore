@@ -46,3 +46,4 @@ apps/api/public/uploads/*
 .codegraph/
 .worktrees/
 .omc/
+.omc/

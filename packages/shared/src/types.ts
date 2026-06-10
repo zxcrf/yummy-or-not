@@ -21,7 +21,7 @@ export interface Taste {
   id: string;
   name: string;
   place: string;
-  /** Display price string as entered, e.g. "$5.80". May be "" / "—". */
+  /** Pure numeric amount string with NO currency symbol, e.g. "5.80". May be "" / "—"; client formats display per language. */
   price: string;
   verdict: Verdict;
   tags: string[];

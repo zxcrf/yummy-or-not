@@ -58,6 +58,13 @@ jest.mock('@/providers/I18nProvider', () => ({
       if (values.q != null) return `${key}:${values.q}`
       return key
     },
+    formatMoney: (amount: number | string) => {
+      const n = typeof amount === 'number'
+        ? amount
+        : Number.parseFloat(String(amount).replace(/[^0-9.]/g, ''))
+      if (!Number.isFinite(n)) return ''
+      return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
+    },
   }),
 }))
 

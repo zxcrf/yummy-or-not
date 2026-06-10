@@ -304,6 +304,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
             placeholder="$5.80"
             value={price}
             onChangeText={setPrice}
+            keyboardType="decimal-pad"
           />
         </View>
 

@@ -16,7 +16,15 @@ import LibraryView from '../LibraryView'
 import RecallView from '../RecallView'
 import StatsView from '../StatsView'
 
-const mockFormatMoney = jest.fn((amount: number) => `$${amount.toFixed(2)}`)
+function formatMoneyLikeProvider(amount: number | string): string {
+  const raw = typeof amount === 'string' ? amount.replace(/[^0-9.]/g, '') : amount
+  if (raw === '') return ''
+  const value = typeof raw === 'number' ? raw : Number.parseFloat(raw)
+  if (!Number.isFinite(value)) return ''
+  return Number.isInteger(value) ? `$${value}` : `$${value.toFixed(2)}`
+}
+
+const mockFormatMoney = jest.fn((amount: number | string) => formatMoneyLikeProvider(amount))
 
 jest.mock('@yon/shared', () => ({
   FILTERS: ['All', 'Coffee'],
@@ -125,7 +133,7 @@ function textContent(renderer: TestRenderer.ReactTestRenderer): string {
 describe('mobile pull-to-refresh', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockFormatMoney.mockImplementation((amount: number) => `$${amount.toFixed(2)}`)
+    mockFormatMoney.mockImplementation((amount: number | string) => formatMoneyLikeProvider(amount))
   })
 
   it('refreshes the Your tastes library list from the API', async () => {
@@ -177,6 +185,6 @@ describe('mobile pull-to-refresh', () => {
     expect(refreshItems).toHaveBeenCalledTimes(1)
     expect(mockedGetStats).toHaveBeenCalledTimes(2)
     expect(mockFormatMoney).toHaveBeenCalledWith(3)
-    expect(textContent(renderer)).toContain('saved_amt:$3.00')
+    expect(textContent(renderer)).toContain('saved_amt:$3')
   })
 })
