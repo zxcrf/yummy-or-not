@@ -225,6 +225,23 @@ export const FILTERS = [
   "Spicy",
 ] as const;
 
+/** A tag in the user's candidate set (GET/POST/PATCH/DELETE /api/tags). */
+export interface UserTag {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+/** POST /api/tags body. */
+export interface CreateTagInput {
+  name: string;
+}
+
+/** PATCH /api/tags/:id body. */
+export interface RenameTagInput {
+  name: string;
+}
+
 /** Tag choices offered in the add-a-taste form. */
 export const TAG_CHOICES = [
   "Boba",

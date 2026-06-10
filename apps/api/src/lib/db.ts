@@ -2,7 +2,8 @@
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag } from '@yon/shared';
+import { FILTERS } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
 import { getSignedPhotoUrl } from './storage';
@@ -572,6 +573,123 @@ export async function consumeOtp(phone: string, codeHash: string): Promise<boole
   if (!rows.length) return false;
   await pool.query('UPDATE otp_codes SET consumed = true WHERE phone = $1', [phone]);
   return true;
+}
+
+// ── User tag candidate set ────────────────────────────────────────────────────
+
+/** Map a user_tags row to the client-facing UserTag shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUserTag(row: any): UserTag {
+  return {
+    id:        row.id,
+    name:      row.name,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+/**
+ * List all tags in the user's candidate set, sorted by name ascending.
+ * On first call (zero rows) seeds the set from FILTERS defaults (minus "All")
+ * plus any distinct tag values already present in the user's tastes.tags arrays.
+ * The seed is idempotent: INSERT … ON CONFLICT DO NOTHING on the unique key.
+ */
+export async function listUserTags(userId: string): Promise<UserTag[]> {
+  const { rows } = await pool.query(
+    'SELECT * FROM user_tags WHERE user_id = $1 ORDER BY name ASC',
+    [userId]
+  );
+
+  if (rows.length > 0) return rows.map(rowToUserTag);
+
+  // Lazy seed: defaults (FILTERS without "All") + historical taste tags, deduped case-insensitively.
+  const defaults = (FILTERS as readonly string[]).filter((f) => f !== 'All');
+
+  // Fetch all tags arrays for this user's tastes and flatten in JS.
+  // Avoids unnest()/array_length() which are not available in the pg-mem test adapter.
+  const { rows: tasteTagRows } = await pool.query(
+    `SELECT tags FROM tastes WHERE user_id = $1`,
+    [userId]
+  );
+  const historicalTags: string[] = tasteTagRows
+    .flatMap((r: { tags: string[] }) => (Array.isArray(r.tags) ? r.tags : []))
+    .filter(Boolean);
+
+  // Merge defaults + historical, dedup case-insensitively, preserve first occurrence casing.
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const t of [...defaults, ...historicalTags]) {
+    const lower = t.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      merged.push(t);
+    }
+  }
+
+  if (merged.length === 0) return [];
+
+  // Bulk upsert — idempotent on the case-insensitive unique index (user_id, lower(name)).
+  const placeholders = merged.map((_, i) => `($1, $${i + 2})`).join(', ');
+  await pool.query(
+    `INSERT INTO user_tags (user_id, name) VALUES ${placeholders} ON CONFLICT (user_id, lower(name)) DO NOTHING`,
+    [userId, ...merged]
+  );
+
+  const { rows: seeded } = await pool.query(
+    'SELECT * FROM user_tags WHERE user_id = $1 ORDER BY name ASC',
+    [userId]
+  );
+  return seeded.map(rowToUserTag);
+}
+
+/**
+ * Create (or upsert) a tag in the user's candidate set.
+ * Returns the existing row on conflict so callers always get back a UserTag.
+ */
+export async function createUserTag(userId: string, name: string): Promise<UserTag> {
+  const { rows } = await pool.query(
+    `INSERT INTO user_tags (user_id, name) VALUES ($1, $2)
+     ON CONFLICT (user_id, lower(name)) DO UPDATE SET name = EXCLUDED.name
+     RETURNING *`,
+    [userId, name]
+  );
+  return rowToUserTag(rows[0]);
+}
+
+/**
+ * Rename a tag in the user's candidate set.
+ * Returns the updated UserTag, or null if not found / not owned by the user.
+ * Never touches tastes.tags.
+ */
+export async function renameUserTag(
+  userId: string,
+  id: string,
+  name: string
+): Promise<UserTag | 'not_found' | 'name_conflict'> {
+  // Reject if another tag (different id) already occupies the same case-insensitive name.
+  const { rows: conflict } = await pool.query(
+    `SELECT 1 FROM user_tags WHERE user_id = $1 AND lower(name) = lower($2) AND id <> $3`,
+    [userId, name, id]
+  );
+  if (conflict.length) return 'name_conflict';
+
+  const { rows } = await pool.query(
+    `UPDATE user_tags SET name = $3 WHERE id = $1 AND user_id = $2 RETURNING *`,
+    [id, userId, name]
+  );
+  return rows.length ? rowToUserTag(rows[0]) : 'not_found';
+}
+
+/**
+ * Delete a tag from the user's candidate set.
+ * Returns true if a row was deleted.
+ * Never touches tastes.tags.
+ */
+export async function deleteUserTag(userId: string, id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM user_tags WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 // ── Plans & promo codes ──────────────────────────────────────────────────────

@@ -1,20 +1,19 @@
 /* ============================================================
    YUMMY OR NOT — LibraryView (Tamagui / React Native)
-   Browse logged tastes: search by name/place, filter chips, and a
-   grid/list of FoodCards. Loading + empty states. Tapping a card
-   routes to /taste/[id]. Ported from the web src/components/app/
-   LibraryView.tsx — data is fetched here (not passed as props) and
-   navigation uses expo-router instead of an onOpen callback.
+   Browse logged tastes: search by name/place/notes (ranked), filter
+   chips from the user's tag candidate set, and a grid/list of FoodCards.
+   Loading + empty states. Tapping a card routes to /taste/[id].
    ============================================================ */
 
 import { useCallback, useMemo, useState } from 'react'
 import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { FILTERS } from '@yon/shared'
+import { searchTastes } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+import { useTags } from '@/app/(tabs)/_useTags'
 
 export default function LibraryView() {
   const { t, formatMoney } = useI18n()
@@ -23,6 +22,7 @@ export default function LibraryView() {
   const isDesktop = width >= 768
 
   const { items, loading, refresh } = useRefreshableTastes()
+  const { tags } = useTags()
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
@@ -36,21 +36,30 @@ export default function LibraryView() {
     }
   }, [refresh])
 
-  const shown = useMemo(
-    () =>
-      items.filter((it) => {
-        const okFilter =
-          filter === 'All' ||
-          it.tags.includes(filter) ||
-          it.name.toLowerCase().includes(filter.toLowerCase())
-        const okQuery =
-          !query ||
-          it.name.toLowerCase().includes(query.toLowerCase()) ||
-          it.place.toLowerCase().includes(query.toLowerCase())
-        return okFilter && okQuery
-      }),
-    [items, query, filter]
+  // Filter chips: "All" sentinel always first, then the user's tag candidate set.
+  const filterChips = useMemo(
+    () => ['All', ...tags.map((tg) => tg.name)],
+    [tags],
   )
+
+  const shown = useMemo(() => {
+    // Tag/name filter first (pure boolean — no scoring needed).
+    const filtered =
+      filter === 'All'
+        ? items
+        : items.filter(
+            (it) =>
+              it.tags.includes(filter) ||
+              it.name.toLowerCase().includes(filter.toLowerCase()),
+          )
+
+    // Search: use scored searchTastes so notes are included and results are ranked.
+    // When query is empty/too-short, searchTastes returns [] — fall back to full list.
+    if (!query || query.trim().length <= 1) return filtered
+
+    const results = searchTastes(filtered, query)
+    return results.map((r) => r.item)
+  }, [items, query, filter])
 
   return (
     <ScrollView
@@ -92,9 +101,9 @@ export default function LibraryView() {
         </View>
       </YStack>
 
-      {/* filter chips */}
+      {/* filter chips — sourced from user's tag candidate set */}
       <XStack flexWrap="wrap" gap="$2">
-        {FILTERS.map((f) => (
+        {filterChips.map((f) => (
           <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
             {f === 'All' ? t('all') : f}
           </Tag>

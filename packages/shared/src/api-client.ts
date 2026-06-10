@@ -26,6 +26,9 @@ import type {
   LoginInput,
   RedeemResponse,
   OriginalPhotoResponse,
+  UserTag,
+  CreateTagInput,
+  RenameTagInput,
 } from "./types";
 import { ProRequiredError } from "./types";
 
@@ -71,8 +74,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const res = await fetch(url, withAuth(init));
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${init?.method ?? "GET"} ${url} → ${res.status}: ${text}`);
+    // Parse the JSON body to surface the server's machine-readable `error` code
+    // (e.g. "name_conflict", "not_found") — same convention as authPost so
+    // callers can reliably detect specific errors via err.message.
+    const data = await res.json().catch(() => null);
+    const code = (data as { error?: string } | null)?.error;
+    throw new Error(code ?? `http_${res.status}`);
   }
   return res.json() as Promise<T>;
 }
@@ -237,4 +244,34 @@ export async function getOriginalPhotoUrl(
     throw new Error(`API GET ${url} → ${res.status}: ${text}`);
   }
   return res.json() as Promise<OriginalPhotoResponse>;
+}
+
+/* ── Tags ──────────────────────────────────────────────────────────────────── */
+
+/** GET /api/tags — list the signed-in user's tag candidate set (lazy-seeded on first call). */
+export async function getTags(): Promise<UserTag[]> {
+  return apiFetch<UserTag[]>("/api/tags");
+}
+
+/** POST /api/tags — create or upsert a tag by name. Returns the tag row (201). */
+export async function createTag(input: CreateTagInput): Promise<UserTag> {
+  return apiFetch<UserTag>("/api/tags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** DELETE /api/tags/:id — remove a tag from the candidate set. Never rewrites tastes.tags. */
+export async function deleteTag(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/tags/${id}`, { method: "DELETE" });
+}
+
+/** PATCH /api/tags/:id — rename a tag in the candidate set. Never rewrites tastes.tags. */
+export async function renameTag(id: string, input: RenameTagInput): Promise<UserTag> {
+  return apiFetch<UserTag>(`/api/tags/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }

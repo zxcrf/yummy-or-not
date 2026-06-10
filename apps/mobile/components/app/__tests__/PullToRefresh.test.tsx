@@ -30,6 +30,16 @@ jest.mock('@yon/shared', () => ({
   FILTERS: ['All', 'Coffee'],
   getStats: jest.fn(),
   listTastes: jest.fn(),
+  getTags: jest.fn().mockResolvedValue([]),
+  searchTastes: jest.fn((items: unknown[]) => []),
+}))
+
+// LibraryView now uses useTags from _useTags; stub it so the real module-level
+// cache doesn't fire getTags concurrently with the listTastes mock.
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [], loading: false }),
+  invalidateTagsCache: jest.fn(),
+  clearTagsCache: jest.fn(),
 }))
 
 jest.mock('expo-router', () => ({

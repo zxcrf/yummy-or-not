@@ -40,15 +40,26 @@ jest.mock('expo-image-manipulator', () => ({
   SaveFormat: { JPEG: 'jpeg' },
 }))
 
+const mockCreateTag = jest.fn()
+
 jest.mock('@yon/shared', () => ({
   TAG_CHOICES: ['Boba', 'Coffee'],
   createTaste: (...args: unknown[]) => mockCreateTaste(...args),
+  createTag: (...args: unknown[]) => mockCreateTag(...args),
 }))
 
 // AddModal invalidates the shared taste cache after a successful save; that
 // hook has its own suite, so stub it to a no-op here.
 jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: jest.fn(async () => []),
+}))
+
+let mockUserTags: Array<{ id: string; name: string; createdAt: string }> = []
+const mockInvalidateTagsCache = jest.fn()
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: mockUserTags, loading: false }),
+  invalidateTagsCache: (...args: unknown[]) => mockInvalidateTagsCache(...args),
+  clearTagsCache: jest.fn(),
 }))
 
 jest.mock('@/providers/I18nProvider', () => ({
@@ -231,5 +242,80 @@ describe('AddModal', () => {
       null,
     )
     expect(onSaved).toHaveBeenCalledWith('taste-1')
+  })
+
+  it('calls createTag for each custom tag after a successful save', async () => {
+    mockCreateTaste.mockResolvedValue({ id: 'taste-2' })
+    mockCreateTag.mockResolvedValue({ id: 'tag-1', name: 'Late night', createdAt: '' })
+    mockUserTags = []
+
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
+    })
+
+    const nameField = renderer.root.findByProps({ placeholder: 'Brown sugar boba' })
+    const tagField = renderer.root.findByProps({ placeholder: 'Add tag' })
+    const addTagButton = pressableByText(renderer, 'Add tag')
+    const yumOption = pressableByText(renderer, 'YUM')
+    const saveButton = pressableByText(renderer, 'Save taste')
+
+    act(() => {
+      nameField.props.onChangeText('Mochi')
+      tagField.props.onChangeText('Late night')
+    })
+    act(() => {
+      addTagButton.props.onPress()
+      yumOption.props.onPress()
+    })
+    await act(async () => {
+      await saveButton.props.onPress()
+    })
+
+    // createTag must be called for the custom tag 'Late night' (not in TAG_CHOICES).
+    await act(async () => {
+      // Flush the fire-and-forget Promise.all chain.
+      await Promise.resolve()
+    })
+    expect(mockCreateTag).toHaveBeenCalledWith({ name: 'Late night' })
+    expect(mockCreateTag).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT call createTag for built-in TAG_CHOICES tags', async () => {
+    mockCreateTaste.mockResolvedValue({ id: 'taste-3' })
+    mockCreateTag.mockResolvedValue({ id: 'tag-2', name: 'Boba', createdAt: '' })
+    mockUserTags = []
+
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
+    })
+
+    const nameField = renderer.root.findByProps({ placeholder: 'Brown sugar boba' })
+    const bobaChip = pressableByText(renderer, 'Boba')
+    const yumOption = pressableByText(renderer, 'YUM')
+    const saveButton = pressableByText(renderer, 'Save taste')
+
+    act(() => {
+      nameField.props.onChangeText('Boba tea')
+      bobaChip.props.onPress()
+      yumOption.props.onPress()
+    })
+    await act(async () => {
+      await saveButton.props.onPress()
+    })
+    await act(async () => { await Promise.resolve() })
+
+    expect(mockCreateTag).not.toHaveBeenCalled()
+  })
+
+  it('renders a chip for a tag from the user tag library (not in TAG_CHOICES)', () => {
+    mockUserTags = [{ id: '99', name: 'Midnight Snack', createdAt: '' }]
+    const renderer = renderAddModal()
+
+    // The user tag library chip must appear alongside built-in chips.
+    expect(textNodes(renderer, 'Midnight Snack')).toHaveLength(1)
+    // Built-in chips still appear.
+    expect(textNodes(renderer, 'Boba')).toHaveLength(1)
   })
 })

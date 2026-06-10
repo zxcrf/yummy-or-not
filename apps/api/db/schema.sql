@@ -118,3 +118,18 @@ CREATE TABLE promo_redemptions (
   UNIQUE (code, user_id)
 );
 CREATE INDEX promo_redemptions_user_idx ON promo_redemptions (user_id);
+
+-- ── User tag candidate set ────────────────────────────────────────────────────
+-- Each row is one tag name a user has available to apply to future tastes.
+-- Deleting a tag here never rewrites historical tastes.tags arrays.
+CREATE TABLE user_tags (
+  id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id    text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       text        NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Case-insensitive uniqueness: `Boba` and `boba` are the same tag for the same user.
+CREATE UNIQUE INDEX user_tags_user_name_ci_key ON user_tags (user_id, lower(name));
+
+CREATE INDEX user_tags_user_idx ON user_tags (user_id, name ASC);
