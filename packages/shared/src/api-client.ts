@@ -113,10 +113,22 @@ export async function createTaste(
   if (photo) {
     const fd = new FormData();
     if (isRNFile(photo)) {
-      // Expo 56+ fetch requires Blob/File entries — the legacy RN {uri,name,type}
-      // convention triggers "Unsupported FormDataPart implementation".
-      const blob = await fetch(photo.uri).then((r) => r.blob());
-      fd.append("photo", new File([blob], photo.name, { type: photo.type }));
+      // Expo 56+ fetch serializes FormData parts that are strings, Blobs, or
+      // objects exposing bytes() (expo-file-system File / ExpoBlob); the
+      // legacy RN {uri,name,type} convention throws "Unsupported FormDataPart
+      // implementation" (#32). Response.blob() / new Blob([ArrayBuffer]) are
+      // also off-limits: RN's Blob constructor can't be built from
+      // ArrayBuffers and throws "Creating blobs from 'ArrayBuffer'..." on
+      // device. So read the file as an ArrayBuffer and append a bytes()-shaped
+      // part carrying the filename and content type expo's serializer reads.
+      const buffer = await fetch(photo.uri).then((r) => r.arrayBuffer());
+      const part = {
+        name: photo.name,
+        type: photo.type,
+        size: buffer.byteLength,
+        bytes: () => new Uint8Array(buffer),
+      };
+      fd.append("photo", part as unknown as Blob);
     } else {
       fd.append("photo", photo);
     }

@@ -21,6 +21,9 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: '#fff6e6' },
+        // Restrained cross-tab transition: Material "shift" (subtle slide +
+        // crossfade) on every tab change, so switching never hard-snaps.
+        animation: 'shift',
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Library' }} />

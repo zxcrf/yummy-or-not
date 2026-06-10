@@ -47,7 +47,7 @@ export default function AddRoute() {
       borderRadius: interpolate(p, [0, 1], [fab.width / 2, 0]),
       backgroundColor: interpolateColor(
         p,
-        [0, 0.4, 1],
+        [0, 0.5, 1],
         ['#ff2e88', '#fff0e0', '#fff6e6'],
       ),
       overflow: 'hidden' as const,
@@ -61,7 +61,7 @@ export default function AddRoute() {
 
   const destStyle = useAnimatedStyle(() => ({
     flex: 1,
-    opacity: interpolate(progress.value, [0.4, 0.75], [0, 1], 'clamp'),
+    opacity: interpolate(progress.value, [0.25, 0.65], [0, 1], 'clamp'),
   }))
 
   const handleClose = () => {
@@ -70,8 +70,8 @@ export default function AddRoute() {
     progress.value = withTiming(0, {
       duration: 350,
       easing: Easing.in(Easing.ease),
-    }, (finished) => {
-      if (finished) runOnJS(router.back)()
+    }, () => {
+      runOnJS(router.back)()
     })
   }
 
@@ -81,8 +81,8 @@ export default function AddRoute() {
     progress.value = withTiming(0, {
       duration: 300,
       easing: Easing.in(Easing.ease),
-    }, (finished) => {
-      if (finished) runOnJS(router.replace)(`/taste/${id}`)
+    }, () => {
+      runOnJS(router.replace)(`/taste/${id}`)
     })
   }
 

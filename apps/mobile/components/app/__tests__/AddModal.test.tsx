@@ -7,18 +7,27 @@
      same label when permission failed.
    - Tags could only be picked from the canned list.
 
+   - On Android the sticky header title sat under the status bar.
+
    These tests pin the intended behavior: one visible photo entry point,
-   a real permission error message, and custom tags included in the
-   createTaste payload.
+   a real permission error message, custom tags included in the createTaste
+   payload, and a header inset below the safe-area (status bar).
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { Platform } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
 import AddModal from '../AddModal'
 
 const mockCreateTaste = jest.fn()
 const mockLaunchImageLibraryAsync = jest.fn()
 const mockRequestMediaLibraryPermissionsAsync = jest.fn()
+
+// Non-zero top inset so the status-bar regression below is meaningful.
+const mockSafeAreaTop = 47
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: mockSafeAreaTop, bottom: 0, left: 0, right: 0 }),
+}))
 
 jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: (...args: unknown[]) =>
@@ -108,6 +117,17 @@ describe('AddModal', () => {
     expect(textNodes(renderer, 'Add a photo')).toHaveLength(1)
   })
 
+  it('insets the sticky header below the status bar so the title is not overlapped', () => {
+    const renderer = renderAddModal()
+
+    // The sticky header is the only node carrying a 3px bottom border.
+    const headers = renderer.root.findAllByProps({ borderBottomWidth: 3 })
+    expect(headers.length).toBeGreaterThan(0)
+    // Regression: header top padding must clear the safe-area top inset
+    // (status bar). The old code used a fixed paddingVertical and overlapped.
+    expect(headers.some((n) => n.props.paddingTop === mockSafeAreaTop + 16)).toBe(true)
+  })
+
   it('shows a real permission error instead of another Add a photo label', async () => {
     mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: false })
     const renderer = renderAddModal()
@@ -122,6 +142,54 @@ describe('AddModal', () => {
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
   })
 
+  it('insets the keyboard with padding (never "height", never none) so bottom inputs stay reachable', () => {
+    // Two regressions guarded at once:
+    //  - behavior="height" animated the container height and collapsed this
+    //    flex body to a sliver during the open transition (the flicker).
+    //  - NO behavior left the keyboard floating over the content under Expo
+    //    SDK 54+ edge-to-edge, hiding the custom-tag / notes / save row.
+    // "padding" only grows the bottom inset: no collapse, and the scroll
+    // viewport ends above the keyboard so the bottom fields are reachable.
+    const renderer = renderAddModal()
+    const kav = renderer.root.findByType(KeyboardAvoidingView)
+    expect(kav.props.behavior).toBe('padding')
+    expect(kav.props.behavior).not.toBe('height')
+  })
+
+  it('keeps behavior="padding" on iOS too', () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' })
+    const renderer = renderAddModal()
+    const kav = renderer.root.findByType(KeyboardAvoidingView)
+    expect(kav.props.behavior).toBe('padding')
+  })
+
+  it('scrolls the form to the end when a bottom field (notes) is focused so it clears the keyboard', () => {
+    // Padding alone shrinks the viewport but does not move the focused field
+    // into it. Focusing a below-the-fold field must scroll the form up so it
+    // sits above the keyboard — like every other app.
+    jest.useFakeTimers()
+    const scrollToEnd = jest
+      .spyOn(ScrollView.prototype, 'scrollToEnd')
+      .mockImplementation(() => {})
+    try {
+      const renderer = renderAddModal()
+      const notes = renderer.root.findByProps({
+        placeholder: 'Too sweet, but the texture was perfect…',
+      })
+      act(() => {
+        notes.props.onFocus?.({})
+      })
+      act(() => {
+        jest.advanceTimersByTime(200)
+      })
+
+      expect(scrollToEnd).toHaveBeenCalled()
+    } finally {
+      scrollToEnd.mockRestore()
+      jest.useRealTimers()
+    }
+  })
+
   it('saves a newly added custom tag with the taste payload', async () => {
     mockCreateTaste.mockResolvedValue({ id: 'taste-1' })
     const onSaved = jest.fn()
@@ -131,7 +199,7 @@ describe('AddModal', () => {
     })
 
     const nameField = renderer.root.findByProps({ placeholder: 'Brown sugar boba' })
-    const tagField = renderer.root.findByProps({ placeholder: 'New tag' })
+    const tagField = renderer.root.findByProps({ placeholder: 'Add tag' })
     const addTagButton = pressableByText(renderer, 'Add tag')
     const yumOption = pressableByText(renderer, 'YUM')
     const saveButton = pressableByText(renderer, 'Save taste')
