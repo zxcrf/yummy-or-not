@@ -61,6 +61,7 @@ jest.mock('@yon/shared', () => ({
   deleteTaste: (...args: unknown[]) => mockDeleteTaste(...args),
   addPurchase: (...args: unknown[]) => mockAddPurchase(...args),
   getOriginalPhotoUrl: (...args: unknown[]) => mockGetOriginalPhotoUrl(...args),
+  getTags: jest.fn().mockResolvedValue([]),
   ProRequiredError: class ProRequiredError extends Error {
     constructor() { super('pro_required'); this.name = 'ProRequiredError' }
   },
