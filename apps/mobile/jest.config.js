@@ -26,6 +26,8 @@ module.exports = {
     // writeStoredToken in AuthProvider works under Jest without
     // --experimental-vm-modules.
     '^expo-secure-store$': '<rootDir>/__mocks__/expo-secure-store.js',
+    '^react-native-view-shot$': '<rootDir>/__mocks__/react-native-view-shot.js',
+    '^expo-sharing$': '<rootDir>/__mocks__/expo-sharing.js',
     // Map workspace package to its TypeScript source — no build step needed.
     '^@yon/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@yon/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1.ts',

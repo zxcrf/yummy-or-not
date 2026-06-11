@@ -60,4 +60,8 @@ export const zh: Record<string, string> = {
   detail_buy_again_confirm: "确认购买",
   detail_warn_banner: "你说过不要买这个——确定要再买吗？",
   you_warn_global_off: "重复购买提醒已关闭，可在设置中开启。",
+  // A1
+  share: "分享",
+  share_failed: "分享失败，请重试",
+  share_brand_tag: "记录于 Yummy or Not · yon.baobao.click",
 };

@@ -60,4 +60,8 @@ export const ja: Record<string, string> = {
   recall_warn_skip: "前回 ×_× イマイチと評価しました — スキップを",
   add_duplicate_hint: "以前に記録したことがあります",
   add_warn_hint: "前回イマイチと言いました",
+  // A1
+  share: "共有",
+  share_failed: "共有できませんでした。再試行してください",
+  share_brand_tag: "Yummy or Not に記録 · yon.baobao.click",
 };
