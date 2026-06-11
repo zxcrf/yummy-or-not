@@ -15,8 +15,8 @@
 Library / Recall / Add 同名检测共用同一套搜索函数。
 📄 [plans/unified-search-and-tags.md](plans/unified-search-and-tags.md)
 
-### [~] 用户自定义 Tag 库
-AddModal 已支持输入自定义 tag，库持久化、Library chips 改读用户 tag 库已完成。缺：You 页管理入口（rename/delete）、DetailView 编辑态 chips 改读 tag 库。
+### [x] 用户自定义 Tag 库
+AddModal 自定义 tag、库持久化、Library chips、You 页管理入口（rename/delete）、DetailView 编辑态 chips 均已完成。
 📄 [plans/unified-search-and-tags.md](plans/unified-search-and-tags.md)
 
 ### [x] 小项清理
@@ -57,11 +57,11 @@ L3（geofencing + push 主动提醒）已决议**永久砍掉**。
 
 ## P3 — 分享与圈子（分三期，每期独立可发布）
 
-### [~] S1 卡片图片分享
+### [x] S1 卡片图片分享
 taste 卡片客户端渲染成图 → 系统分享面板（用户自选微信）。
 微信 SDK 直连等上架后再接（需开放平台注册 + 审核）。
 
-### [~] S2 to-taste（想吃清单）
+### [x] S2 to-taste（想吃清单）
 tastes 加 status（tasted / todo），todo 无 verdict，吃完转正。
 单机即有价值，且是 S3 导入功能的落点。
 
