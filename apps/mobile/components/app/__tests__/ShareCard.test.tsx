@@ -15,6 +15,7 @@ const BASE_TASTE: Taste = {
   name: 'Brown Sugar Boba',
   place: 'Tiger Sugar · Hongdae',
   price: '5.80',
+  status: 'tasted',
   verdict: 'yum',
   warnBeforeBuy: false,
   boughtCount: 1,

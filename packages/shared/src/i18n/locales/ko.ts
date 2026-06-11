@@ -74,4 +74,15 @@ export const ko: Record<string, string> = {
   tag_delete_confirm: "태그를 삭제할까요? 기록에 이미 있는 태그는 영향 받지 않습니다.",
   tag_name_conflict: "같은 이름의 태그가 이미 있습니다",
   tag_empty: "아직 태그가 없습니다",
+  // A2/A3
+  add_mode_tasted: "먹어봤어요",
+  add_mode_todo: "먹고 싶어요",
+  lib_tab_tasted: "먹어본",
+  lib_tab_todo: "먹고 싶은",
+  todo_badge: "먹고 싶은",
+  promote_cta: "먹었나요? 평가하기",
+  promote_title: "어땠나요?",
+  promote_confirm: "평가 저장",
+  recall_in_todo: "먹고 싶은 목록에 있어요",
+  nearby_todo: "근처에서 먹고 싶은",
 };

@@ -40,6 +40,7 @@ function taste(id: string, name = id): Taste {
     name,
     place: '',
     price: '',
+    status: 'tasted',
     verdict: 'yum',
     tags: [],
     boughtCount: 0,

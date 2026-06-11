@@ -143,11 +143,24 @@ function removePersistedKey(key: string): Promise<void> {
  * The result is ONLY committed when the epoch at call-time still matches
  * the current epoch, preventing stale fetches from overwriting fresh data.
  */
+/**
+ * Normalize a taste list loaded from AsyncStorage (which may pre-date the
+ * status column). Old rows lack `status`; default them to 'tasted' so every
+ * consumer can safely rely on `status` being defined and non-null.
+ * Also coerces `verdict` for tasted rows that somehow lack it (defensive).
+ */
+function normalizeHydrated(items: Taste[]): Taste[] {
+  return items.map((it) => ({
+    ...it,
+    status: it.status ?? 'tasted',
+  }))
+}
+
 function revalidate(): Promise<Taste[]> {
   if (inFlight) return inFlight
   const capturedEpoch = epoch
   const capturedKey = storageKey()
-  inFlight = listTastes()
+  inFlight = listTastes({ status: 'all' })
     .then((data) => {
       if (epoch !== capturedEpoch) return data // epoch changed — discard
       cache = data
@@ -270,10 +283,13 @@ export function useRefreshableTastes(): RefreshableTastes {
           const persisted = await readPersisted()
           // Guard: epoch may have advanced while AsyncStorage was reading.
           if (persisted && cache === null && epoch === capturedEpoch) {
-            cache = persisted
+            // Normalize old cached rows that pre-date the status column
+            // so every consumer can safely rely on status being non-null.
+            const normalized = normalizeHydrated(persisted)
+            cache = normalized
             // Emit to ALL subscribers so concurrent cold-start views all get
             // the persisted snapshot, not just the hook that won the race.
-            emit(persisted)
+            emit(normalized)
           }
         }
         try {

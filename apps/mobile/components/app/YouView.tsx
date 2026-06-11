@@ -139,10 +139,13 @@ export default function YouView({ items }: Props) {
 
   const displayName = deriveDisplayName(user, t('default_name'))
 
-  const count = (v: 'yum' | 'meh' | 'nah') =>
-    items.filter((it) => it.verdict === v).length
+  // Stats only count tasted items — todos have no verdict
+  const tastedItems = items.filter((it) => (it.status ?? 'tasted') === 'tasted')
 
-  const saved = items
+  const count = (v: 'yum' | 'meh' | 'nah') =>
+    tastedItems.filter((it) => it.verdict === v).length
+
+  const saved = tastedItems
     .filter((it) => it.verdict === 'nah')
     .reduce((sum, it) => {
       const n = parseFloat((it.price ?? '').replace(/[^0-9.]/g, ''))
@@ -242,7 +245,7 @@ export default function YouView({ items }: Props) {
             accessibilityRole="button"
             testID="tastes-logged-btn"
           >
-            <Text color="$ink500">{t('tastes_logged', { n: items.length })}</Text>
+            <Text color="$ink500">{t('tastes_logged', { n: tastedItems.length })}</Text>
           </Pressable>
         </View>
         <LangSwitcher

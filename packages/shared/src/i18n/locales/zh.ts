@@ -74,4 +74,15 @@ export const zh: Record<string, string> = {
   tag_delete_confirm: "删除标签？记录上已有的标签不受影响",
   tag_name_conflict: "已有同名标签",
   tag_empty: "还没有标签",
+  // A2/A3
+  add_mode_tasted: "吃过了",
+  add_mode_todo: "还没吃，先记下",
+  lib_tab_tasted: "已尝",
+  lib_tab_todo: "想吃",
+  todo_badge: "想吃",
+  promote_cta: "吃完了？打个分",
+  promote_title: "这次吃得怎么样？",
+  promote_confirm: "保存评价",
+  recall_in_todo: "在你的想吃清单里",
+  nearby_todo: "附近你想吃的",
 };

@@ -66,6 +66,7 @@ function makeTaste(verdict: 'yum' | 'meh' | 'nah', id: string) {
     name: 'item',
     place: '',
     price: '$1.00',
+    status: 'tasted' as const,
     verdict,
     tags: [],
     boughtCount: 1,

@@ -55,7 +55,8 @@ export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
   place?: string
   /** Display price string, e.g. "$5.80". */
   price?: string
-  verdict?: Verdict
+  /** Nullable for todo rows (status==='todo'). When null, renders todoLabel badge instead of VerdictStamp. */
+  verdict?: Verdict | null
   tags?: string[]
   /** How many times purchased. */
   boughtCount?: number
@@ -63,6 +64,8 @@ export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
   boughtLabel?: string
   /** Override the verdict word on the stamp. */
   verdictLabel?: string
+  /** Badge text for todo (想吃) rows. Rendered instead of VerdictStamp when verdict is null. */
+  todoLabel?: string
   onPress?: () => void
 }
 
@@ -109,6 +112,7 @@ export function FoodCard({
   boughtCount,
   boughtLabel,
   verdictLabel,
+  todoLabel,
   onPress,
   // Strip `interactive`/`pressStyle` from the forwarded props: FoodCard fully
   // owns its press visuals (manual scale/shadow + the wrapping Pressable). Letting
@@ -149,15 +153,25 @@ export function FoodCard({
             contentFit="cover"
           />
         ) : null}
-        <VerdictStamp
-          verdict={verdict}
-          size="sm"
-          label={verdictLabel}
-          rotate={-6}
-          position="absolute"
-          top="$2"
-          right="$2"
-        />
+        {verdict != null ? (
+          <VerdictStamp
+            verdict={verdict}
+            size="sm"
+            label={verdictLabel}
+            rotate={-6}
+            position="absolute"
+            top="$2"
+            right="$2"
+          />
+        ) : todoLabel != null ? (
+          <Tag
+            position="absolute"
+            top="$2"
+            right="$2"
+          >
+            {todoLabel}
+          </Tag>
+        ) : null}
       </View>
 
       {/* body */}

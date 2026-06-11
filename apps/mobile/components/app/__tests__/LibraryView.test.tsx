@@ -20,6 +20,7 @@ function taste(overrides: Partial<Taste> & { name: string }): Taste {
     id: String(++seq),
     place: '',
     price: '',
+    status: 'tasted' as const,
     verdict: 'yum',
     tags: [],
     boughtCount: 0,

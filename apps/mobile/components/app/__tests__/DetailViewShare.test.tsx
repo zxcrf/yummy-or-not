@@ -115,6 +115,7 @@ function makeTaste(overrides: Partial<Taste> = {}): Taste {
     name: 'Brown Sugar Boba',
     place: 'Tiger Sugar',
     price: '5.80',
+    status: 'tasted',
     verdict: 'yum',
     tags: [],
     boughtCount: 1,

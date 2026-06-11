@@ -97,6 +97,7 @@ function taste(overrides: Partial<Taste> = {}): Taste {
     name: 'Espresso',
     place: 'Corner Cafe',
     price: '$4.00',
+    status: 'tasted',
     verdict: 'yum',
     tags: ['Coffee'],
     boughtCount: 1,

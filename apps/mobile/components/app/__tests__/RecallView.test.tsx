@@ -89,6 +89,9 @@ jest.mock('@/components/ds', () => ({
   Input: ({ value, onChangeText, placeholder, ...rest }: { value: string; onChangeText: (t: string) => void; placeholder?: string; [k: string]: unknown }) => (
     <input value={value} onChange={(e) => onChangeText(e.target.value)} placeholder={placeholder} />
   ),
+  Tag: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
+    <span data-testid={testID}>{children}</span>
+  ),
   VerdictStamp: ({ verdict, label }: { verdict: string; label: string }) => (
     <span data-verdict={verdict}>{label}</span>
   ),
