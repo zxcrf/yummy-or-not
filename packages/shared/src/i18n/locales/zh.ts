@@ -64,4 +64,14 @@ export const zh: Record<string, string> = {
   share: "分享",
   share_failed: "分享失败，请重试",
   share_brand_tag: "记录于 Yummy or Not · yon.baobao.click",
+  // B/C
+  edit_profile: "编辑昵称",
+  display_name_label: "昵称",
+  default_name: "吃货",
+  invalid_display_name: "昵称需为 1–50 个字符",
+  tag_manage: "标签管理",
+  tag_rename: "重命名",
+  tag_delete_confirm: "删除标签？记录上已有的标签不受影响",
+  tag_name_conflict: "已有同名标签",
+  tag_empty: "还没有标签",
 };

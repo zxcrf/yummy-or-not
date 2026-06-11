@@ -155,6 +155,8 @@ export interface UpdateUserInput {
   warningsEnabled?: boolean;
   /** Enable or disable location capture for this account. */
   locationEnabled?: boolean;
+  /** Display name (nickname). Trimmed, 1–50 chars. */
+  displayName?: string;
 }
 
 /** Social / OAuth providers we can link an account to. */

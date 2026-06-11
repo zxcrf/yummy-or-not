@@ -27,6 +27,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   getCachedTaste: jest.fn(() => undefined),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [], loading: false }),
+  invalidateTagsCache: jest.fn(),
+}))
+
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'taste-1' }),
   useRouter: () => ({

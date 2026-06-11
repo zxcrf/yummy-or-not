@@ -64,4 +64,14 @@ export const es: Record<string, string> = {
   share: "Compartir",
   share_failed: "No se pudo compartir, inténtalo de nuevo",
   share_brand_tag: "Registrado en Yummy or Not · yon.baobao.click",
+  // B/C
+  edit_profile: "Editar apodo",
+  display_name_label: "Apodo",
+  default_name: "Foodie",
+  invalid_display_name: "El apodo debe tener entre 1 y 50 caracteres",
+  tag_manage: "Gestión de etiquetas",
+  tag_rename: "Renombrar",
+  tag_delete_confirm: "¿Eliminar etiqueta? Las etiquetas en tus registros no se verán afectadas.",
+  tag_name_conflict: "Ya existe una etiqueta con ese nombre",
+  tag_empty: "Aún no hay etiquetas",
 };

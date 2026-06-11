@@ -114,6 +114,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   getCachedTaste: jest.fn(() => undefined),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [], loading: false }),
+  invalidateTagsCache: jest.fn(),
+}))
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function taste(overrides: Partial<Taste> = {}): Taste {

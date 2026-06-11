@@ -64,4 +64,14 @@ export const en: Record<string, string> = {
   share: "Share",
   share_failed: "Couldn't share, try again",
   share_brand_tag: "Logged with Yummy or Not · yon.baobao.click",
+  // B/C
+  edit_profile: "Edit nickname",
+  display_name_label: "Nickname",
+  default_name: "Foodie",
+  invalid_display_name: "Nickname must be 1–50 characters",
+  tag_manage: "Tag library",
+  tag_rename: "Rename",
+  tag_delete_confirm: "Delete tag? Tags already on your logs won't be affected.",
+  tag_name_conflict: "A tag with that name already exists",
+  tag_empty: "No tags yet",
 };

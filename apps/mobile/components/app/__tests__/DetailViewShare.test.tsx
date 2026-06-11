@@ -34,6 +34,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   getCachedTaste: jest.fn(() => undefined),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [], loading: false }),
+  invalidateTagsCache: jest.fn(),
+}))
+
 // Mutable so the stale-capture test can simulate a route id change.
 const routeParams = { id: 'taste-1' }
 
