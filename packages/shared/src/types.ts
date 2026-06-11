@@ -8,6 +8,12 @@
 /** The three sacred verdicts. */
 export type Verdict = "yum" | "meh" | "nah";
 
+/** Lifecycle of a taste record.
+ *  - `tasted`: eaten and scored (the default; verdict is always non-null).
+ *  - `todo`:   on the 想吃 wishlist, not yet eaten (verdict may be null).
+ *  Status only ever moves todo → tasted (promotion / 转正); never the reverse. */
+export type TasteStatus = "tasted" | "todo";
+
 /** Subscription tiers. "pro" is the highest tier (see issue #2 pricing). */
 export type Plan = "free" | "pro";
 
@@ -35,7 +41,12 @@ export interface Taste {
   place: string;
   /** Pure numeric amount string with NO currency symbol, e.g. "5.80". May be "" / "—"; client formats display per language. */
   price: string;
-  verdict: Verdict;
+  /** Lifecycle: `tasted` (default, scored) or `todo` (wishlist). */
+  status: TasteStatus;
+  /** The verdict, or `null` for `todo` rows that have not been scored yet.
+   *  Nullable by design (migration 0006): every UI consumer must gate on
+   *  `status`/null before rendering a verdict. `tasted` rows are always non-null. */
+  verdict: Verdict | null;
   tags: string[];
   /** Derived: 1 + count of taste_purchases rows. Always reflects the ledger. */
   boughtCount: number;
@@ -72,7 +83,11 @@ export interface CreateTasteInput {
   name: string;
   place?: string;
   price?: string;
-  verdict: Verdict;
+  /** Defaults to `tasted` when omitted. `todo` creates a wishlist row. */
+  status?: TasteStatus;
+  /** Required iff the row is `tasted` (the default). For `status: 'todo'` the
+   *  server forces verdict to null regardless of what is sent. */
+  verdict?: Verdict;
   tags?: string[];
   notes?: string;
   image?: string;
@@ -82,6 +97,10 @@ export interface CreateTasteInput {
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */
 export type UpdateTasteInput = Partial<CreateTasteInput> & {
+  /** Promote-only: the sole accepted status transition is todo → `tasted`
+   *  (转正). The server rejects any other value with `invalid_status_transition`
+   *  and requires a non-null verdict (patch value or stored) to promote. */
+  status?: "tasted";
   /** @deprecated Use POST /api/tastes/:id/purchases instead. Ignored by server. */
   incrementBought?: number;
   /** Whether to show a repurchase warning for this taste. */

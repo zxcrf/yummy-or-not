@@ -64,7 +64,8 @@ function createSchema() {
       name         text NOT NULL,
       place        text NOT NULL DEFAULT '',
       price        text NOT NULL DEFAULT '',
-      verdict      text NOT NULL CHECK (verdict IN ('yum','meh','nah')),
+      status       text NOT NULL DEFAULT 'tasted' CHECK (status IN ('tasted','todo')),
+      verdict      text CHECK (verdict IN ('yum','meh','nah')),
       tags         text[] NOT NULL DEFAULT '{}',
       bought_count    int NOT NULL DEFAULT 1,
       warn_before_buy boolean NOT NULL DEFAULT false,
@@ -106,11 +107,15 @@ it('ignores a client-supplied image in PATCH (cannot repoint at another user\'s 
   } as never);
 
   expect(updated).not.toBeNull();
+  // updateTaste returns Taste | error-string | null; narrow to the Taste.
+  if (updated === null || typeof updated === 'string') {
+    throw new Error(`expected a Taste, got ${String(updated)}`);
+  }
   // The benign field updated…
-  expect(updated!.name).toBe('Renamed');
+  expect(updated.name).toBe('Renamed');
   // …but the image column did NOT change to the victim key.
-  expect(updated!.imageDisplay).toContain(OWN_UUID);
-  expect(updated!.imageDisplay).not.toContain(VICTIM_UUID);
+  expect(updated.imageDisplay).toContain(OWN_UUID);
+  expect(updated.imageDisplay).not.toContain(VICTIM_UUID);
 
   // Confirm at the storage layer too: the raw column is still the owned key.
   const row = memdb().public.one(

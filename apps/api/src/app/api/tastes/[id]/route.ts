@@ -49,9 +49,12 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const { id } = await params;
   try {
     const patch = (await req.json()) as UpdateTasteInput;
-    const taste = await updateTaste(user.id, id, patch);
-    if (!taste) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
-    return withCors(NextResponse.json(taste), origin);
+    const result = await updateTaste(user.id, id, patch);
+    if (result === 'invalid_status_transition' || result === 'verdict_required') {
+      return withCors(NextResponse.json({ error: result }, { status: 400 }), origin);
+    }
+    if (!result) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
+    return withCors(NextResponse.json(result), origin);
   } catch (err) {
     console.error(`PATCH /api/tastes/${id} error:`, err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);

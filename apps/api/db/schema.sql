@@ -81,7 +81,10 @@ CREATE TABLE tastes (
   name           text        NOT NULL,
   place          text        NOT NULL DEFAULT '',
   price          text        NOT NULL DEFAULT '',
-  verdict        text        NOT NULL CHECK (verdict IN ('yum', 'meh', 'nah')),
+  -- status: 'tasted' (default, scored) or 'todo' (想吃 wishlist, verdict may be NULL).
+  status         text        NOT NULL DEFAULT 'tasted' CHECK (status IN ('tasted', 'todo')),
+  -- verdict is NULL only for todo rows; the implication CHECK below pins tasted⇒NOT NULL.
+  verdict        text        CHECK (verdict IN ('yum', 'meh', 'nah')),
   tags           text[]      NOT NULL DEFAULT '{}',
   bought_count   int         NOT NULL DEFAULT 1,   -- legacy counter; reads use derived 1+COUNT(taste_purchases)
   warn_before_buy boolean    NOT NULL DEFAULT false,
@@ -89,11 +92,15 @@ CREATE TABLE tastes (
   image          text        NOT NULL DEFAULT '',
   lat            double precision,
   lng            double precision,
-  created_at     timestamptz NOT NULL DEFAULT now()
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT tastes_status_verdict_check CHECK (status <> 'tasted' OR verdict IS NOT NULL)
 );
 
 -- Per-user, newest-first queries (the hot path)
 CREATE INDEX tastes_user_created_idx ON tastes (user_id, created_at DESC);
+
+-- Per-user, status-partitioned newest-first (Library 已尝/想吃 segments)
+CREATE INDEX tastes_user_status_created_idx ON tastes (user_id, status, created_at DESC);
 
 -- Fast tag filtering
 CREATE INDEX tastes_tags_gin_idx ON tastes USING GIN (tags);

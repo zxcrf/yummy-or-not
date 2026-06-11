@@ -105,10 +105,15 @@ async function authPost<T>(path: string, body: unknown): Promise<T> {
 export async function listTastes(params?: {
   q?: string;
   filter?: string;
+  /** Lifecycle filter. Omitted → server default 'tasted' (old-client compat).
+   *  Pass 'all' to fetch both tasted + todo (the single shared mobile list),
+   *  or 'todo' for the wishlist only. */
+  status?: "tasted" | "todo" | "all";
 }): Promise<Taste[]> {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.filter && params.filter !== "All") qs.set("filter", params.filter);
+  if (params?.status) qs.set("status", params.status);
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiFetch<Taste[]>(`/api/tastes${suffix}`);
 }
@@ -144,7 +149,9 @@ export async function createTaste(
       fd.append("photo", photo);
     }
     fd.append("name", input.name);
-    fd.append("verdict", input.verdict);
+    // verdict is optional now (todo rows have none); only send when present.
+    if (input.verdict) fd.append("verdict", input.verdict);
+    if (input.status) fd.append("status", input.status);
     if (input.place) fd.append("place", input.place);
     if (input.price) fd.append("price", input.price);
     if (input.notes) fd.append("notes", input.notes);

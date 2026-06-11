@@ -201,7 +201,8 @@ async function rowToTaste(row: any): Promise<Taste> {
     name:          row.name,
     place:         row.place ?? '',
     price:         row.price ?? '',
-    verdict:       row.verdict,
+    status:        row.status ?? 'tasted',
+    verdict:       row.verdict ?? null,
     tags:          parsePgArray(row.tags).flatMap((t: string) => normalizeTag(t)),
     boughtCount:   1 + purchaseCount,
     warnBeforeBuy: Boolean(row.warn_before_buy),
@@ -261,9 +262,13 @@ export async function listTastes(
   {
     q,
     filter,
+    status = 'tasted',
   }: {
     q?: string;
     filter?: string;
+    /** Lifecycle filter: 'tasted' (DEFAULT — old clients never see todos),
+     *  'todo' (wishlist only), or 'all' (no status condition). */
+    status?: 'tasted' | 'todo' | 'all';
   } = {}
 ): Promise<Taste[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -280,6 +285,11 @@ export async function listTastes(
   if (filter && filter !== 'All') {
     values.push(filter);
     conditions.push(`$${values.length} = ANY(tags)`);
+  }
+
+  if (status !== 'all') {
+    values.push(status);
+    conditions.push(`status = $${values.length}`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -313,11 +323,17 @@ export async function createTaste(
     tags = [],
     notes = '',
     image = '',
+    status = 'tasted',
   } = input;
+
+  // A todo (wishlist) row is never scored: force verdict null and clear the
+  // repurchase warning regardless of what the client sent.
+  const isTodo = status === 'todo';
+  const effectiveVerdict = isTodo ? null : verdict;
 
   const resolvedImage = imageUrl ?? image;
   const normalizedPrice = normalizePrice(price);
-  const warnBeforeBuy = verdict === 'nah';
+  const warnBeforeBuy = !isTodo && effectiveVerdict === 'nah';
   const normalizedLat =
     typeof input.lat === 'number' && Number.isFinite(input.lat) && input.lat >= -90 && input.lat <= 90
       ? input.lat
@@ -328,22 +344,46 @@ export async function createTaste(
       : null;
 
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image, warn_before_buy, lat, lng)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng]
+    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng]
   );
   // New taste has no purchases yet — pass empty aggregates directly.
   const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
   return await rowToTaste(row);
 }
 
-/** Patch a taste owned by the user; returns the updated Taste or null if not found. */
+/** Machine-readable reasons a PATCH was rejected by the status/verdict rules.
+ *  The route maps these to a 400 with the matching `error` code. */
+export type UpdateTasteError =
+  | 'invalid_status_transition'
+  | 'verdict_required';
+
+/** Patch a taste owned by the user; returns the updated Taste, null if not
+ *  found, or a machine-readable error when the promotion rules are violated. */
 export async function updateTaste(
   userId: string,
   id: string,
   patch: UpdateTasteInput
-): Promise<Taste | null> {
+): Promise<Taste | UpdateTasteError | null> {
+  // ── Status / promotion rules (转正) ────────────────────────────────────────
+  // Status is promote-only: the sole accepted value is 'tasted'. The type already
+  // narrows UpdateTasteInput.status to 'tasted', but the body is untrusted at
+  // runtime, so re-check here.
+  if (patch.status !== undefined && patch.status !== 'tasted') {
+    return 'invalid_status_transition';
+  }
+  if (patch.status === 'tasted') {
+    // Promotion must result in a non-null verdict — from this patch or the
+    // already-stored value. (A todo row promoted without ever scoring is invalid.)
+    const existing = await getTaste(userId, id);
+    if (!existing) return null;
+    const resultingVerdict =
+      patch.verdict !== undefined ? patch.verdict : existing.verdict;
+    if (!resultingVerdict) return 'verdict_required';
+  }
+
   // Build SET clauses dynamically from provided fields.
   const setClauses: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -361,6 +401,7 @@ export async function updateTaste(
     name:          'name',
     place:         'place',
     price:         'price',
+    status:        'status',
     verdict:       'verdict',
     tags:          'tags',
     notes:         'notes',
@@ -429,7 +470,7 @@ export async function getStats(userId: string): Promise<Stats> {
         '[]'
       )                                   AS nah_prices
     FROM tastes
-    WHERE user_id = $1
+    WHERE user_id = $1 AND status = 'tasted'
   `, [userId]);
 
   const row = rows[0];
