@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
 import * as ExpoRouter from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { searchTastes } from '@yon/shared'
+import { searchTastes, type TasteStatus } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
@@ -37,6 +37,7 @@ export default function LibraryView() {
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
+  const [statusTab, setStatusTab] = useState<TasteStatus>('tasted')
   const routeVerdict = useMemo(() => normalizeVerdictParam(params.verdict), [params.verdict])
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter | null>(routeVerdict)
 
@@ -60,17 +61,22 @@ export default function LibraryView() {
   )
 
   const shown = useMemo(() => {
-    // Tag/name filter first (pure boolean — no scoring needed).
+    // Status partition first — exclusive between tasted and todo.
+    const byStatus = items.filter((it) => (it.status ?? 'tasted') === statusTab)
+
+    // Tag/name filter (pure boolean — no scoring needed).
     const filteredByTag =
       filter === 'All'
-        ? items
-        : items.filter(
+        ? byStatus
+        : byStatus.filter(
             (it) =>
               it.tags.includes(filter) ||
               it.name.toLowerCase().includes(filter.toLowerCase()),
           )
+
+    // Verdict filter only applies to tasted items (todo items have no verdict).
     const filtered =
-      verdictFilter == null
+      statusTab === 'todo' || verdictFilter == null
         ? filteredByTag
         : filteredByTag.filter((it) => it.verdict === verdictFilter)
 
@@ -80,7 +86,7 @@ export default function LibraryView() {
 
     const results = searchTastes(filtered, query)
     return results.map((r) => r.item)
-  }, [items, query, filter, verdictFilter])
+  }, [items, query, filter, verdictFilter, statusTab])
 
   return (
     <ScrollView
@@ -121,6 +127,62 @@ export default function LibraryView() {
           />
         </View>
       </YStack>
+
+      {/* status tab — 已尝 / 想吃 */}
+      <XStack
+        borderWidth={2}
+        borderColor="$ink900"
+        borderRadius="$md"
+        overflow="hidden"
+        testID="lib-status-tabs"
+      >
+        <View
+          flex={1}
+          paddingVertical={10}
+          alignItems="center"
+          backgroundColor={statusTab === 'tasted' ? '$ink900' : '$paper2'}
+          onPress={() => {
+            setStatusTab('tasted')
+          }}
+          accessibilityRole="button"
+          cursor="pointer"
+          testID="lib-tab-tasted"
+        >
+          <Text
+            color={statusTab === 'tasted' ? '#fff' : '$ink900'}
+            fontWeight="600"
+            fontSize={14}
+          >
+            {t('lib_tab_tasted')}
+          </Text>
+        </View>
+        <View width={2} backgroundColor="$ink900" />
+        <View
+          flex={1}
+          paddingVertical={10}
+          alignItems="center"
+          backgroundColor={statusTab === 'todo' ? '$ink900' : '$paper2'}
+          onPress={() => {
+            setStatusTab('todo')
+            // Clear verdict filter — todo items have no verdict
+            if (verdictFilter != null) {
+              router.setParams({ verdict: undefined })
+              setVerdictFilter(null)
+            }
+          }}
+          accessibilityRole="button"
+          cursor="pointer"
+          testID="lib-tab-todo"
+        >
+          <Text
+            color={statusTab === 'todo' ? '#fff' : '$ink900'}
+            fontWeight="600"
+            fontSize={14}
+          >
+            {t('lib_tab_todo')}
+          </Text>
+        </View>
+      </XStack>
 
       {/* filter chips — sourced from user's tag candidate set */}
       <XStack flexWrap="wrap" gap="$2">
@@ -182,11 +244,13 @@ export default function LibraryView() {
                 name={it.name}
                 place={it.place}
                 price={formatMoney(it.price)}
+                status={it.status}
                 verdict={it.verdict}
                 tags={it.tags}
                 boughtCount={it.boughtCount}
                 boughtLabel={t('bought_n', { n: it.boughtCount })}
-                verdictLabel={t('v_' + it.verdict)}
+                verdictLabel={it.status !== 'todo' && it.verdict ? t('v_' + it.verdict) : undefined}
+                todoLabel={it.status === 'todo' ? t('todo_badge') : undefined}
                 onPress={() => router.push(`/taste/${it.id}`)}
               />
             </View>

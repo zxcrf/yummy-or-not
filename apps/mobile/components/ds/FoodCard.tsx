@@ -11,7 +11,7 @@ import { Image } from 'expo-image'
 import { Pressable } from 'react-native'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { quick } from './animation'
-import type { Verdict } from '@yon/shared'
+import type { TasteStatus, Verdict } from '@yon/shared'
 import { VerdictStamp } from './VerdictStamp'
 import { Tag } from './Tag'
 
@@ -55,7 +55,8 @@ export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
   place?: string
   /** Display price string, e.g. "$5.80". */
   price?: string
-  verdict?: Verdict
+  /** Nullable for todo rows (status==='todo'). When null, renders todoLabel badge instead of VerdictStamp. */
+  verdict?: Verdict | null
   tags?: string[]
   /** How many times purchased. */
   boughtCount?: number
@@ -63,6 +64,10 @@ export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
   boughtLabel?: string
   /** Override the verdict word on the stamp. */
   verdictLabel?: string
+  /** Badge text for todo (想吃) rows. Rendered when status==='todo', regardless of verdict. */
+  todoLabel?: string
+  /** Taste status — drives badge vs stamp decision. When 'todo', todoLabel takes precedence over verdict. */
+  status?: TasteStatus
   onPress?: () => void
 }
 
@@ -109,6 +114,8 @@ export function FoodCard({
   boughtCount,
   boughtLabel,
   verdictLabel,
+  todoLabel,
+  status,
   onPress,
   // Strip `interactive`/`pressStyle` from the forwarded props: FoodCard fully
   // owns its press visuals (manual scale/shadow + the wrapping Pressable). Letting
@@ -149,15 +156,27 @@ export function FoodCard({
             contentFit="cover"
           />
         ) : null}
-        <VerdictStamp
-          verdict={verdict}
-          size="sm"
-          label={verdictLabel}
-          rotate={-6}
-          position="absolute"
-          top="$2"
-          right="$2"
-        />
+        {status === 'todo' ? (
+          todoLabel != null ? (
+            <Tag
+              position="absolute"
+              top="$2"
+              right="$2"
+            >
+              {todoLabel}
+            </Tag>
+          ) : null
+        ) : verdict != null ? (
+          <VerdictStamp
+            verdict={verdict}
+            size="sm"
+            label={verdictLabel}
+            rotate={-6}
+            position="absolute"
+            top="$2"
+            right="$2"
+          />
+        ) : null}
       </View>
 
       {/* body */}

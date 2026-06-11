@@ -80,6 +80,12 @@ export default function DetailView() {
     return [...builtIn, ...extra, ...itemLegacy]
   }, [userTags, item?.tags])
 
+  // Promote sheet state (todo → tasted 转正)
+  const [promoteSheetOpen, setPromoteSheetOpen] = useState(false)
+  const [promoteVerdict, setPromoteVerdict] = useState<Verdict | null>(null)
+  const [promotePrice, setPromotePrice] = useState('')
+  const [promoteSubmitting, setPromoteSubmitting] = useState(false)
+
   // Pro original viewer state.
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   const [originalLoading, setOriginalLoading] = useState(false)
@@ -121,6 +127,11 @@ export default function DetailView() {
     setBuyPrice('')
     setBuyPlace('')
     setBuySubmitting(false)
+    // Reset promote sheet state
+    setPromoteSheetOpen(false)
+    setPromoteVerdict(null)
+    setPromotePrice('')
+    setPromoteSubmitting(false)
   }
 
   useEffect(() => {
@@ -212,10 +223,45 @@ export default function DetailView() {
     setEditPlace(item.place)
     setEditPrice(item.price.replace(/[^0-9.]/g, ''))
     setEditNotes(item.notes)
-    setEditVerdict(item.verdict)
+    setEditVerdict(item.verdict ?? 'yum')
     setEditTags(item.tags)
     setSaveError(null)
     setEditing(true)
+  }
+
+  const openPromoteSheet = () => {
+    if (!item) return
+    setPromoteVerdict(null)
+    setPromotePrice('')
+    setPromoteSheetOpen(true)
+  }
+
+  const submitPromote = async () => {
+    if (!item || !promoteVerdict || promoteSubmitting) return
+    const promoteId = item.id
+    const prevItem = item
+    setPromoteSubmitting(true)
+    // Optimistic flip: close sheet and show tasted state immediately.
+    setItem({ ...item, status: 'tasted', verdict: promoteVerdict })
+    setPromoteSheetOpen(false)
+    try {
+      const updated = await updateTaste(promoteId, {
+        status: 'tasted',
+        verdict: promoteVerdict,
+        price: promotePrice || undefined,
+      })
+      void invalidateTastes()
+      if (idRef.current !== promoteId) return
+      setItem(updated)
+    } catch (err) {
+      if (idRef.current !== promoteId) return
+      // Revert optimistic update on failure.
+      setItem(prevItem)
+      setPromoteSheetOpen(true)
+      Alert.alert(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      if (idRef.current === promoteId) setPromoteSubmitting(false)
+    }
   }
 
   const cancelEditing = () => {
@@ -412,15 +458,17 @@ export default function DetailView() {
           </IconButton>
         </View>
 
-        {/* verdict stamp */}
-        <View position="absolute" left={18} bottom={-22}>
-          <VerdictStamp
-            verdict={item.verdict}
-            size="lg"
-            rotate={-5}
-            label={t('v_' + item.verdict)}
-          />
-        </View>
+        {/* verdict stamp — hidden for todo items */}
+        {item.status !== 'todo' && item.verdict != null ? (
+          <View position="absolute" left={18} bottom={-22}>
+            <VerdictStamp
+              verdict={item.verdict}
+              size="lg"
+              rotate={-5}
+              label={t('v_' + item.verdict)}
+            />
+          </View>
+        ) : null}
       </View>
 
       {/* content */}
@@ -542,19 +590,21 @@ export default function DetailView() {
               </Card>
             ) : null}
 
-            {/* warn toggle */}
-            <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1">
-              <XStack alignItems="center" gap="$3">
-                <Icon name="alert" size={20} color="#ff5d8f" />
-                <Text color="$ink900" fontWeight="500">
-                  {t('warn_before')}
-                </Text>
+            {/* warn toggle — hidden for todo items */}
+            {item.status !== 'todo' ? (
+              <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1">
+                <XStack alignItems="center" gap="$3">
+                  <Icon name="alert" size={20} color="#ff5d8f" />
+                  <Text color="$ink900" fontWeight="500">
+                    {t('warn_before')}
+                  </Text>
+                </XStack>
+                <Switch checked={remind} onChange={toggleRemind} />
               </XStack>
-              <Switch checked={remind} onChange={toggleRemind} />
-            </XStack>
+            ) : null}
 
-            {/* warn banner — shown when warnBeforeBuy is on and global warnings enabled */}
-            {remind && user?.warningsEnabled ? (
+            {/* warn banner — shown when warnBeforeBuy is on and global warnings enabled (tasted only) */}
+            {item.status !== 'todo' && remind && user?.warningsEnabled ? (
               <XStack
                 alignItems="center"
                 gap="$2"
@@ -573,6 +623,18 @@ export default function DetailView() {
               </XStack>
             ) : null}
 
+            {/* promote CTA — only for todo items */}
+            {item.status === 'todo' ? (
+              <Button
+                variant="primary"
+                iconLeft={<Icon name="check" size={18} color="#fff" />}
+                onPress={openPromoteSheet}
+                testID="promote-btn"
+              >
+                {t('promote_cta')}
+              </Button>
+            ) : null}
+
             {/* actions */}
             <XStack gap="$3" marginTop="$1" flexWrap="wrap">
               <Button variant="secondary" iconLeft={<Icon name="edit" size={18} />} onPress={startEditing}>
@@ -586,15 +648,19 @@ export default function DetailView() {
               >
                 {t('del')}
               </Button>
-              <Button
-                variant="secondary"
-                iconLeft={<Icon name="check" size={18} />}
-                onPress={openBuySheet}
-                testID="buy-again-btn"
-              >
-                {t('detail_buy_again')}
-              </Button>
-              {Platform.OS !== 'web' && sharingAvailable ? (
+              {/* buy-again hidden for todo items */}
+              {item.status !== 'todo' ? (
+                <Button
+                  variant="secondary"
+                  iconLeft={<Icon name="check" size={18} />}
+                  onPress={openBuySheet}
+                  testID="buy-again-btn"
+                >
+                  {t('detail_buy_again')}
+                </Button>
+              ) : null}
+              {/* share only available for tasted items (verdict present for share card) */}
+              {item.status !== 'todo' && Platform.OS !== 'web' && sharingAvailable ? (
                 <Button
                   variant="secondary"
                   iconLeft={<Icon name="arrow-right" size={18} />}
@@ -709,6 +775,50 @@ export default function DetailView() {
                 testID="buy-confirm-btn"
               >
                 {t('detail_buy_again_confirm')}
+              </Button>
+            </XStack>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Promote sheet — 转正: todo → tasted */}
+      <Modal
+        visible={promoteSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPromoteSheetOpen(false)}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={() => setPromoteSheetOpen(false)}>
+          <Pressable style={styles.sheetContent} onPress={() => {}}>
+            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
+              {t('promote_title')}
+            </Text>
+            <VerdictPicker
+              value={promoteVerdict}
+              onChange={setPromoteVerdict}
+              labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
+            />
+            <View marginTop={12}>
+              <Input
+                label={t('f_price')}
+                value={promotePrice}
+                onChangeText={setPromotePrice}
+                placeholder="5.80"
+                testID="promote-price-input"
+              />
+            </View>
+            <XStack gap="$3" marginTop={20}>
+              <Button variant="ghost" onPress={() => setPromoteSheetOpen(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!promoteVerdict || promoteSubmitting}
+                iconLeft={<Icon name="check" size={18} color="#fff" />}
+                onPress={submitPromote}
+                testID="promote-confirm-btn"
+              >
+                {t('promote_confirm')}
               </Button>
             </XStack>
           </Pressable>

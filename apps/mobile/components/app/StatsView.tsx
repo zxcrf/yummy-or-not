@@ -133,10 +133,12 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
     }
   }, [loadStats, refreshItems])
 
+  // Client-side fallback: only count tasted items (todos have no verdict)
+  const tastedItems = items.filter((it) => (it.status ?? 'tasted') === 'tasted')
   const count = (v: 'yum' | 'meh' | 'nah') =>
-    stats ? stats[v] : items.filter((it) => it.verdict === v).length
+    stats ? stats[v] : tastedItems.filter((it) => it.verdict === v).length
 
-  const total = stats?.total ?? items.length
+  const total = stats?.total ?? tastedItems.length
   const rawSaved = stats?.savedAmount != null ? parseFloat(stats.savedAmount.replace(/[^0-9.]/g, '')) : 0
   const savedNumeric = Number.isFinite(rawSaved) ? rawSaved : 0
   // Route through formatMoney so the symbol honours the active locale.

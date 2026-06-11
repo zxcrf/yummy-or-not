@@ -45,6 +45,7 @@ import {
   searchTastes,
   type PhotoInput,
   type Taste,
+  type TasteStatus,
   type Verdict,
 } from '@yon/shared'
 
@@ -167,6 +168,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120)
   }
 
+  // Mode: 'tasted' (default) shows VerdictPicker; 'todo' hides it.
+  const [mode, setMode] = useState<TasteStatus>('tasted')
+
   const [name, setName] = useState('')
   const [place, setPlace] = useState('')
   const [price, setPrice] = useState('')
@@ -243,14 +247,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const warningsOn = user?.warningsEnabled ?? false
 
   // Determine banner variant:
-  //   'warn' — at least one match has warnBeforeBuy AND warningsEnabled
+  //   'warn' — at least one match has warnBeforeBuy AND warningsEnabled AND mode=tasted
   //   'dup'  — plain duplicate (any match), no warn condition
   //   null   — no banner
+  // In todo mode the red warn variant is hidden (yellow dup banner stays).
   const bannerVariant = useMemo<'warn' | 'dup' | null>(() => {
     if (dupMatches.length === 0) return null
-    if (warningsOn && dupMatches.some((m) => m.warnBeforeBuy)) return 'warn'
+    if (mode === 'tasted' && warningsOn && dupMatches.some((m) => m.warnBeforeBuy)) return 'warn'
     return 'dup'
-  }, [dupMatches, warningsOn])
+  }, [dupMatches, warningsOn, mode])
 
   const showBanner = bannerVariant !== null && !bannerDismissed
 
@@ -387,10 +392,11 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
   }
 
-  const ready = !!name && !!verdict
+  const ready = !!name && (mode === 'todo' || !!verdict)
 
   const handleSave = async () => {
-    if (!ready || !verdict || saving) return
+    if (!ready || saving) return
+    if (mode === 'tasted' && !verdict) return
     setSaving(true)
     setError(null)
     try {
@@ -399,7 +405,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
           name,
           place: place || undefined,
           price: price || undefined,
-          verdict,
+          status: mode,
+          verdict: mode === 'todo' ? undefined : verdict === null ? undefined : verdict,
           tags: picked.length ? picked : undefined,
           notes: notes || undefined,
           lat,
@@ -475,6 +482,55 @@ export default function AddModal({ onClose, onSaved }: Props) {
         keyboardDismissMode="interactive"
         contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 24 }}
       >
+        {/* mode selector — 吃过了 / 还没吃，先记下 */}
+        <XStack
+          borderWidth={2}
+          borderColor="$ink900"
+          borderRadius="$md"
+          overflow="hidden"
+          testID="add-mode-selector"
+        >
+          <View
+            flex={1}
+            paddingVertical={10}
+            alignItems="center"
+            backgroundColor={mode === 'tasted' ? '$ink900' : '$paper2'}
+            onPress={() => setMode('tasted')}
+            accessibilityRole="button"
+            cursor="pointer"
+          >
+            <Text
+              color={mode === 'tasted' ? '#fff' : '$ink900'}
+              fontWeight="600"
+              fontSize={14}
+            >
+              {t('add_mode_tasted')}
+            </Text>
+          </View>
+          <View
+            width={2}
+            backgroundColor="$ink900"
+          />
+          <View
+            flex={1}
+            paddingVertical={10}
+            alignItems="center"
+            backgroundColor={mode === 'todo' ? '$ink900' : '$paper2'}
+            onPress={() => setMode('todo')}
+            accessibilityRole="button"
+            cursor="pointer"
+            testID="add-mode-todo-btn"
+          >
+            <Text
+              color={mode === 'todo' ? '#fff' : '$ink900'}
+              fontWeight="600"
+              fontSize={14}
+            >
+              {t('add_mode_todo')}
+            </Text>
+          </View>
+        </XStack>
+
         {/* photo + basic fields */}
         <View gap="$4">
           {/* photo dropzone */}
@@ -605,7 +661,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
                             </Text>
                           ) : null}
                         </YStack>
-                        <VerdictStamp verdict={match.verdict} size="sm" label={t('v_' + match.verdict)} />
+                        {match.verdict != null ? (
+                          <VerdictStamp verdict={match.verdict} size="sm" label={t('v_' + match.verdict)} />
+                        ) : null}
                       </XStack>
                     ))}
                   </YStack>
@@ -654,15 +712,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
           />
         </View>
 
-        {/* verdict picker */}
-        <View gap="$2">
-          <Text {...KICKER}>{t('how_was_it')}</Text>
-          <VerdictPicker
-            value={verdict}
-            onChange={setVerdict}
-            labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
-          />
-        </View>
+        {/* verdict picker — hidden in todo mode */}
+        {mode === 'tasted' ? (
+          <View gap="$2">
+            <Text {...KICKER}>{t('how_was_it')}</Text>
+            <VerdictPicker
+              value={verdict}
+              onChange={setVerdict}
+              labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
+            />
+          </View>
+        ) : null}
 
         {/* tag chips */}
         <View gap="$2">

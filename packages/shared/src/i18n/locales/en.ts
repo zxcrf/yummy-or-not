@@ -74,4 +74,15 @@ export const en: Record<string, string> = {
   tag_delete_confirm: "Delete tag? Tags already on your logs won't be affected.",
   tag_name_conflict: "A tag with that name already exists",
   tag_empty: "No tags yet",
+  // A2/A3
+  add_mode_tasted: "I ate it",
+  add_mode_todo: "Want to try",
+  lib_tab_tasted: "Tasted",
+  lib_tab_todo: "Want to Try",
+  todo_badge: "Want to Try",
+  promote_cta: "Ate it? Rate it",
+  promote_title: "How was it?",
+  promote_confirm: "Save rating",
+  recall_in_todo: "In your want-to-try list",
+  nearby_todo: "Want to try nearby",
 };

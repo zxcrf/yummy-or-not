@@ -74,4 +74,15 @@ export const es: Record<string, string> = {
   tag_delete_confirm: "¿Eliminar etiqueta? Las etiquetas en tus registros no se verán afectadas.",
   tag_name_conflict: "Ya existe una etiqueta con ese nombre",
   tag_empty: "Aún no hay etiquetas",
+  // A2/A3
+  add_mode_tasted: "Ya lo probé",
+  add_mode_todo: "Quiero probarlo",
+  lib_tab_tasted: "Probado",
+  lib_tab_todo: "Quiero probar",
+  todo_badge: "Quiero probar",
+  promote_cta: "¿Ya lo comiste? Califica",
+  promote_title: "¿Qué tal estuvo?",
+  promote_confirm: "Guardar calificación",
+  recall_in_todo: "En tu lista de quiero probar",
+  nearby_todo: "Quiero probar cerca",
 };

@@ -15,10 +15,13 @@ import { useRouter } from 'expo-router'
 import * as Location from 'expo-location'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { searchTastes, haversineMeters, formatDistance, type Taste, type Verdict } from '@yon/shared'
-import { Button, Card, Icon, Input, VerdictStamp } from '@/components/ds'
+import { Button, Card, Icon, Input, Tag, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+
+const NEARBY_TASTED_CAP = 5
+const NEARBY_TODO_CAP = 3
 
 const ACCENT_BG = {
   yum: '$verdictYum',
@@ -54,12 +57,14 @@ function RecallRow({
   flat,
   warnActive,
   distanceLabel,
+  isTodo,
 }: {
   item: Taste
   onPress: () => void
   flat?: boolean
   warnActive?: boolean
   distanceLabel?: string
+  isTodo?: boolean
 }) {
   const { t } = useI18n()
   return (
@@ -117,7 +122,11 @@ function RecallRow({
             <Text color="$ink400" fontSize={12}>{distanceLabel}</Text>
           ) : null}
         </YStack>
-        <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
+        {isTodo ? (
+          <Tag testID="todo-badge">{t('todo_badge')}</Tag>
+        ) : item.verdict != null ? (
+          <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
+        ) : null}
       </XStack>
     </Pressable>
   )
@@ -172,24 +181,41 @@ export default function RecallView() {
     }
   }, [refresh])
 
-  // Nearby eaten — items with coords sorted by distance ascending.
-  // Distance tiebreaker in search results is deferred (out of scope for L2).
-  const nearbyItems = useMemo(() => {
-    if (!userCoords) return []
-    return items
+  // Nearby groups — items with coords sorted by distance ascending, split by status.
+  // 想吃 (todo) cap 3, 吃过的 (tasted) cap 5. Both absent → neither group renders.
+  const { nearbyTodo, nearbyTasted } = useMemo(() => {
+    if (!userCoords) return { nearbyTodo: [], nearbyTasted: [] }
+    const withDistance = items
       .filter((it) => it.lat != null && it.lng != null)
       .map((it) => ({
         item: it,
         distance: haversineMeters(userCoords.lat, userCoords.lng, it.lat!, it.lng!),
       }))
       .sort((a, b) => a.distance - b.distance)
+    return {
+      nearbyTodo: withDistance.filter((x) => (x.item.status ?? 'tasted') === 'todo').slice(0, NEARBY_TODO_CAP),
+      nearbyTasted: withDistance.filter((x) => (x.item.status ?? 'tasted') === 'tasted').slice(0, NEARBY_TASTED_CAP),
+    }
   }, [items, userCoords])
 
   // All scored results above threshold, ranked by score descending.
-  const results = useMemo(() => (q ? searchTastes(items, q) : []), [items, q])
+  const tastedItems = useMemo(
+    () => items.filter((it) => (it.status ?? 'tasted') === 'tasted'),
+    [items],
+  )
+  const results = useMemo(() => (q ? searchTastes(tastedItems, q) : []), [tastedItems, q])
 
   const topMatch = results[0]?.item ?? null
   const otherMatches = results.slice(1).map((r) => r.item)
+
+  // Todo hint: when searching, check if query hits the todo list
+  const todoHints = useMemo(() => {
+    if (!q) return []
+    const todoItems = items.filter((it) => (it.status ?? 'tasted') === 'todo')
+    return searchTastes(todoItems, q)
+      .filter((r) => r.strength === 'exact' || r.strength === 'strong')
+      .map((r) => r.item)
+  }, [items, q])
 
   // Warning styling applies only when the taste has the flag set and the user
   // has warnings enabled globally. Falls back to plain display if user is null
@@ -239,7 +265,30 @@ export default function RecallView() {
       <YStack gap="$3">
         {!q ? (
           <YStack gap="$3">
-            {nearbyItems.length > 0 ? (
+            {/* 附近你想吃的 — todo + coords, cap 3 (shown first) */}
+            {nearbyTodo.length > 0 ? (
+              <YStack gap="$3">
+                <Text
+                  color="$ink400"
+                  fontSize={10}
+                  letterSpacing={1}
+                  textTransform="uppercase"
+                >
+                  {t('nearby_todo')}
+                </Text>
+                {nearbyTodo.map(({ item: it, distance }) => (
+                  <RecallRow
+                    key={it.id}
+                    item={it}
+                    onPress={() => router.push(`/taste/${it.id}`)}
+                    distanceLabel={formatDistance(distance)}
+                    isTodo
+                  />
+                ))}
+              </YStack>
+            ) : null}
+            {/* 附近吃过的 — tasted + coords, cap 5 */}
+            {nearbyTasted.length > 0 ? (
               <YStack gap="$3">
                 <Text
                   color="$ink400"
@@ -249,7 +298,7 @@ export default function RecallView() {
                 >
                   {t('nearby_eaten')}
                 </Text>
-                {nearbyItems.map(({ item: it, distance }) => (
+                {nearbyTasted.map(({ item: it, distance }) => (
                   <RecallRow
                     key={it.id}
                     item={it}
@@ -267,7 +316,7 @@ export default function RecallView() {
             >
               {t('recently_recalled')}
             </Text>
-            {items.slice(0, visibleRecentItems).map((it) => (
+            {tastedItems.slice(0, visibleRecentItems).map((it) => (
               <RecallRow
                 key={it.id}
                 item={it}
@@ -280,7 +329,7 @@ export default function RecallView() {
             {/* top result — big verdict card */}
             <Card variant="raised">
               <YStack
-                backgroundColor={topWarn ? '$verdictNah' : ACCENT_BG[topMatch.verdict]}
+                backgroundColor={topWarn ? '$verdictNah' : (topMatch.verdict ? ACCENT_BG[topMatch.verdict] : '$paper2')}
                 paddingHorizontal={22}
                 paddingTop={22}
                 paddingBottom={20}
@@ -302,7 +351,7 @@ export default function RecallView() {
                       {t('recall_warn_skip')}
                     </Text>
                   </>
-                ) : (
+                ) : topMatch.verdict != null ? (
                   <>
                     <Text
                       color="$ink900"
@@ -317,6 +366,10 @@ export default function RecallView() {
                       {t(VERDICT_KEY[topMatch.verdict])}
                     </Text>
                   </>
+                ) : (
+                  <Text color="$ink900" fontWeight="700" fontSize={28} marginTop="$1">
+                    {t('todo_badge')}
+                  </Text>
                 )}
               </YStack>
               <View padding={18}>
@@ -351,6 +404,29 @@ export default function RecallView() {
                     />
                   )
                 })}
+              </YStack>
+            ) : null}
+
+            {/* todo hint — "在你的想吃清单里" */}
+            {todoHints.length > 0 ? (
+              <YStack gap="$2">
+                <Text
+                  color="$ink400"
+                  fontSize={10}
+                  letterSpacing={1}
+                  textTransform="uppercase"
+                  testID="recall-in-todo-header"
+                >
+                  {t('recall_in_todo')}
+                </Text>
+                {todoHints.map((it) => (
+                  <RecallRow
+                    key={it.id}
+                    item={it}
+                    onPress={() => router.push(`/taste/${it.id}`)}
+                    isTodo
+                  />
+                ))}
               </YStack>
             ) : null}
           </YStack>

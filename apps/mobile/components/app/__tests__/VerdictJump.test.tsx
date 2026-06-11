@@ -192,6 +192,7 @@ function makeTaste(name: string, verdict: 'yum' | 'meh' | 'nah'): Taste {
     name,
     place: '',
     price: '1',
+    status: 'tasted',
     verdict,
     tags: [],
     boughtCount: 0,

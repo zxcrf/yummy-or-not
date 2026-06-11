@@ -89,6 +89,9 @@ jest.mock('@/components/ds', () => ({
   Input: ({ value, onChangeText, placeholder, ...rest }: { value: string; onChangeText: (t: string) => void; placeholder?: string; [k: string]: unknown }) => (
     <input value={value} onChange={(e) => onChangeText(e.target.value)} placeholder={placeholder} />
   ),
+  Tag: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
+    <span data-testid={testID}>{children}</span>
+  ),
   VerdictStamp: ({ verdict, label }: { verdict: string; label: string }) => (
     <span data-verdict={verdict}>{label}</span>
   ),
@@ -251,6 +254,52 @@ describe('RecallView', () => {
     act(() => { input.props.onChangeText('boba') })
 
     expect(textNodes(renderer, 'Other matches')).toHaveLength(0)
+  })
+
+  // ── Regression #1: search must run over tasted-only items ─────────────────
+  it('todo item does not surface as a primary search result', () => {
+    // A todo item whose name matches the query — must NOT appear as top/other result.
+    const todoItem = { ...taste({ id: 'td1', name: 'Ramen' }), status: 'todo', verdict: null }
+    const tastedItem = taste({ id: 'ta1', name: 'Ramen tasted', verdict: 'yum' })
+    mockItems = [todoItem, tastedItem] as never[]
+
+    // searchTastes is called with tasted-only subset; mock returns only the tasted hit.
+    mockSearchTastes.mockImplementation((items: unknown[]) =>
+      // If called with the filtered list, only tasted item is present.
+      (items as Array<{ id: string }>).map((it) => ({ item: it, score: 10001, strength: 'exact' }))
+        .filter((r) => r.item.id !== 'td1'),
+    )
+
+    const renderer = renderRecallView()
+    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
+    act(() => { input.props.onChangeText('ramen') })
+
+    // searchTastes must have been called with a list that excludes the todo item.
+    const [calledItems] = mockSearchTastes.mock.calls[0] as [Array<{ id: string; status?: string }>]
+    expect(calledItems.every((it) => (it.status ?? 'tasted') === 'tasted')).toBe(true)
+    expect(calledItems.some((it) => it.id === 'td1')).toBe(false)
+  })
+
+  // ── Regression #2: recently-recalled list must not show todo items ─────────
+  it('todo item does not appear in the recently-recalled list', () => {
+    const todoItem = { ...taste({ id: 'td2', name: 'Want-to-try Ramen' }), status: 'todo', verdict: null }
+    const tastedItem = taste({ id: 'ta2', name: 'Ate Ramen', verdict: 'yum' })
+    // Put todo first so it would appear first if filtering were absent.
+    mockItems = [todoItem, tastedItem] as never[]
+
+    const renderer = renderRecallView()
+
+    // No query — recently-recalled list renders.
+    const wantToTryNodes = renderer.root.findAll(
+      (n) => typeof n.props.children === 'string' && n.props.children === 'Want-to-try Ramen',
+    )
+    expect(wantToTryNodes).toHaveLength(0)
+
+    // Tasted item must still appear.
+    const tastedNodes = renderer.root.findAll(
+      (n) => typeof n.props.children === 'string' && n.props.children === 'Ate Ramen',
+    )
+    expect(tastedNodes.length).toBeGreaterThan(0)
   })
 })
 

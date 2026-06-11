@@ -74,4 +74,15 @@ export const ja: Record<string, string> = {
   tag_delete_confirm: "タグを削除しますか？ログに付いているタグには影響しません。",
   tag_name_conflict: "同じ名前のタグがすでに存在します",
   tag_empty: "タグはまだありません",
+  // A2/A3
+  add_mode_tasted: "食べた",
+  add_mode_todo: "食べてみたい",
+  lib_tab_tasted: "食べた",
+  lib_tab_todo: "食べたい",
+  todo_badge: "食べたい",
+  promote_cta: "食べた？評価する",
+  promote_title: "どうだった？",
+  promote_confirm: "評価を保存",
+  recall_in_todo: "食べたいリストにあります",
+  nearby_todo: "近くで食べたい",
 };
