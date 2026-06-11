@@ -17,6 +17,7 @@ import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { TamaguiProvider, Theme } from 'tamagui'
 
@@ -64,7 +65,8 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <TamaguiProvider config={tamaguiConfig} defaultTheme="yum">
+      <KeyboardProvider>
+        <TamaguiProvider config={tamaguiConfig} defaultTheme="yum">
         <Theme name="yum">
           <I18nProvider>
             <AuthProvider>
@@ -100,7 +102,8 @@ export default function RootLayout() {
             </AuthProvider>
           </I18nProvider>
         </Theme>
-      </TamaguiProvider>
+        </TamaguiProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   )
 }

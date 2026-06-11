@@ -23,10 +23,12 @@ function MoneyProbe() {
 }
 
 describe('I18nProvider money formatting', () => {
-  const realOS = Platform.OS
-  const realLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  let realOS: typeof Platform.OS
+  let realLocalStorage: PropertyDescriptor | undefined
 
   beforeEach(() => {
+    realOS = Platform.OS
+    realLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' })
     Object.defineProperty(globalThis, 'localStorage', {
       configurable: true,
@@ -41,7 +43,7 @@ describe('I18nProvider money formatting', () => {
     setLangRef = null
   })
 
-  afterAll(() => {
+  afterEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
     if (realLocalStorage) {
       Object.defineProperty(globalThis, 'localStorage', realLocalStorage)

@@ -228,6 +228,8 @@ export default function RecallView() {
       flex={1}
       backgroundColor="$background"
       contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 40 }}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

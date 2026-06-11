@@ -26,11 +26,11 @@
    ============================================================ */
 
 import { useEffect, useRef, useMemo, useState } from 'react'
+import { Platform } from 'react-native'
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView as RNScrollView,
-} from 'react-native'
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
@@ -144,7 +144,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const scrollRef = useRef<RNScrollView>(null)
   const { tags: userTags } = useTags()
   const { items } = useRefreshableTastes()
 
@@ -157,19 +156,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
     return [...builtIn, ...extra]
   }, [userTags])
 
-  // Under Expo SDK 54+ edge-to-edge the keyboard floats over the content, so
-  // KeyboardAvoidingView (padding) shrinks the scroll viewport to end above the
-  // keyboard — but the focused field still has to be scrolled into that smaller
-  // viewport. The bottom fields (custom tag + notes) sit below the fold, so
-  // bring the end of the form up on focus (the save row is now a sticky footer
-  // outside the scroll, always visible — it no longer needs scrolling into view).
-  // The delay lets the keyboard-driven padding settle before we measure/scroll.
-  const revealBottomFields = () => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120)
-  }
-
   // Mode: 'tasted' (default) shows VerdictPicker; 'todo' hides it.
   const [mode, setMode] = useState<TasteStatus>('tasted')
+
 
   const [name, setName] = useState('')
   const [place, setPlace] = useState('')
@@ -188,6 +177,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+
+  // Measured height of the sticky action footer. The footer floats up over the
+  // scroll viewport when the keyboard opens (KeyboardStickyView), so the scroll
+  // view's bottomOffset must reserve footer height + a 16dp margin — otherwise a
+  // focused bottom field (notes / custom tag) sits BEHIND the floating footer.
+  // Seed with an estimate (button row + paddings + safe-area inset) so the very
+  // first focus before onLayout fires still clears the footer; the real measured
+  // height replaces it on layout.
+  const [footerHeight, setFooterHeight] = useState(64 + insets.bottom)
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -349,10 +347,19 @@ export default function AddModal({ onClose, onSaved }: Props) {
       const positionPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       })
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('location_timeout')), 10_000),
-      )
-      const current = await Promise.race([positionPromise, timeoutPromise])
+      // Clear the timeout once the race settles so the timer never lingers
+      // (a pending 10s timer keeps the event loop alive and, after the race
+      // resolves, its reject becomes an unhandled rejection).
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('location_timeout')), 10_000)
+      })
+      let current: Location.LocationObject
+      try {
+        current = await Promise.race([positionPromise, timeoutPromise])
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId)
+      }
       const nextLat = current.coords.latitude
       const nextLng = current.coords.longitude
       setLat(nextLat)
@@ -441,19 +448,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const bannerIcon = bannerVariant === 'warn' ? 'alert' : 'info-box'
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // `padding` on both platforms. Under Expo SDK 54+ edge-to-edge (always
-      // on) the keyboard floats OVER the content — the window no longer resizes
-      // — so the modal must inset for it or the bottom fields (custom tag,
-      // notes, save row) stay hidden behind the keyboard. `padding` pads the
-      // bottom by the keyboard height, shrinking the scroll viewport to end
-      // above the keyboard. We deliberately avoid `height`: it animates the
-      // container height and, during the open transition, collapsed this flex
-      // body to a sliver (the AddModal "闪烁/空白" flicker). `padding` only
-      // grows bottom inset, so it never zeroes the body.
-      behavior="padding"
-    >
     <View flex={1} backgroundColor="$background">
       {/* sticky header */}
       <View
@@ -474,9 +468,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
         </IconButton>
       </View>
 
-      {/* scrollable body */}
-      <RNScrollView
-        ref={scrollRef}
+      {/* scrollable body — KeyboardAwareScrollView keeps the focused input and
+          its cursor visible above the keyboard with a frame-synced animation
+          (no one-frame jump). bottomOffset reserves the sticky footer height +
+          a 16dp margin: the footer floats up over the viewport with the keyboard
+          (KeyboardStickyView), so clearing only the keyboard would leave a
+          focused bottom field hidden behind it. It subsumes the old RN
+          KeyboardAvoidingView + manual scrollToEnd-on-focus compensation. */}
+      <KeyboardAwareScrollView
+        bottomOffset={footerHeight + 16}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -753,7 +753,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 value={customTag}
                 onChangeText={setCustomTag}
                 onSubmitEditing={addCustomTag}
-                onFocus={revealBottomFields}
                 returnKeyType="done"
               />
             </View>
@@ -770,7 +769,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
           numberOfLines={3}
           value={notes}
           onChangeText={setNotes}
-          onFocus={revealBottomFields}
         />
 
         {error ? (
@@ -781,33 +779,40 @@ export default function AddModal({ onClose, onSaved }: Props) {
           </Animated.View>
         ) : null}
 
-      </RNScrollView>
+      </KeyboardAwareScrollView>
 
-      {/* sticky footer — actions row pinned outside the scroll */}
-      <View
-        testID="add-actions-footer"
-        flexDirection="row"
-        justifyContent="flex-end"
-        gap="$3"
-        borderTopWidth={3}
-        borderTopColor="$ink900"
-        paddingHorizontal="$5"
-        paddingTop="$4"
-        paddingBottom={insets.bottom + 16}
-      >
-        <Button variant="ghost" onPress={onClose}>
-          {t('cancel')}
-        </Button>
-        <Button
-          variant="primary"
-          disabled={!ready || saving}
-          iconLeft={<Icon name="check" size={18} color="#fff" />}
-          onPress={handleSave}
+      {/* sticky footer — actions row pinned outside the scroll. KeyboardStickyView
+          translates it up WITH the keyboard (frame-synced) so the save row stays
+          pinned just above the keyboard instead of being hidden behind it. The
+          footer's own paddingBottom (safe-area bottom inset + 16) is the resting
+          gap when the keyboard is closed; when it opens, the view rides the
+          keyboard top and that padding becomes the gap above the keys. */}
+      <KeyboardStickyView>
+        <View
+          testID="add-actions-footer"
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+          flexDirection="row"
+          justifyContent="flex-end"
+          gap="$3"
+          borderTopWidth={3}
+          borderTopColor="$ink900"
+          paddingHorizontal="$5"
+          paddingTop="$4"
+          paddingBottom={insets.bottom + 16}
         >
-          {t('save_taste_web')}
-        </Button>
-      </View>
+          <Button variant="ghost" onPress={onClose}>
+            {t('cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!ready || saving}
+            iconLeft={<Icon name="check" size={18} color="#fff" />}
+            onPress={handleSave}
+          >
+            {t('save_taste_web')}
+          </Button>
+        </View>
+      </KeyboardStickyView>
     </View>
-    </KeyboardAvoidingView>
   )
 }
