@@ -110,13 +110,27 @@ export function FoodCard({
   boughtLabel,
   verdictLabel,
   onPress,
+  // Strip `interactive`/`pressStyle` from the forwarded props: FoodCard fully
+  // owns its press visuals (manual scale/shadow + the wrapping Pressable). Letting
+  // a caller pass these through `...rest` would re-register a native touch
+  // responder on CardFrame and swallow the tap again (see content() note below).
+  interactive: _interactive,
+  pressStyle: _pressStyle,
   ...rest
 }: FoodCardProps) {
+  void _interactive
+  void _pressStyle
   const normalizedTags = normalizeTags(tags)
   const content = (pressed: boolean) => (
+    // NOTE: do NOT use the `interactive` variant here. Its `pressStyle` registers
+    // a native touch responder on CardFrame; nested inside the outer <Pressable>
+    // that responder wins the gesture negotiation and swallows the tap, so
+    // Pressable.onPress never fires (cards stop opening detail on native). The
+    // pressed visual is driven manually by the `scale`/`shadowOffset` props from
+    // the Pressable render-prop instead. `cursor: pointer` is kept for web.
     <CardFrame
       {...(onPress ? quick : {})}
-      interactive={!!onPress}
+      {...(onPress ? { cursor: 'pointer' as const } : {})}
       scale={pressed ? 0.98 : 1}
       shadowOffset={pressed ? { width: 3, height: 3 } : { width: 5, height: 5 }}
       {...rest}
