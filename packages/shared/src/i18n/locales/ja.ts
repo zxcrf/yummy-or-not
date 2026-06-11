@@ -64,4 +64,14 @@ export const ja: Record<string, string> = {
   share: "共有",
   share_failed: "共有できませんでした。再試行してください",
   share_brand_tag: "Yummy or Not に記録 · yon.baobao.click",
+  // B/C
+  edit_profile: "ニックネームを編集",
+  display_name_label: "ニックネーム",
+  default_name: "食いしん坊",
+  invalid_display_name: "ニックネームは1〜50文字にしてください",
+  tag_manage: "タグ管理",
+  tag_rename: "名前変更",
+  tag_delete_confirm: "タグを削除しますか？ログに付いているタグには影響しません。",
+  tag_name_conflict: "同じ名前のタグがすでに存在します",
+  tag_empty: "タグはまだありません",
 };

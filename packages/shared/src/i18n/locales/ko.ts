@@ -64,4 +64,14 @@ export const ko: Record<string, string> = {
   share: "공유",
   share_failed: "공유에 실패했습니다. 다시 시도하세요",
   share_brand_tag: "Yummy or Not에서 기록 · yon.baobao.click",
+  // B/C
+  edit_profile: "닉네임 편집",
+  display_name_label: "닉네임",
+  default_name: "미식가",
+  invalid_display_name: "닉네임은 1–50자여야 합니다",
+  tag_manage: "태그 관리",
+  tag_rename: "이름 변경",
+  tag_delete_confirm: "태그를 삭제할까요? 기록에 이미 있는 태그는 영향 받지 않습니다.",
+  tag_name_conflict: "같은 이름의 태그가 이미 있습니다",
+  tag_empty: "아직 태그가 없습니다",
 };

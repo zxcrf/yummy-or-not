@@ -71,6 +71,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: () => mockInvalidateTastes(),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [], loading: false }),
+  invalidateTagsCache: jest.fn(),
+}))
+
 jest.mock('@/components/ds', () => {
   const React = require('react')
   const stub =

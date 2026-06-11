@@ -10,12 +10,12 @@
    ============================================================ */
 
 import { useCallback, useState } from 'react'
-import { Pressable } from 'react-native'
+import { Modal, Pressable, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { LANGS, updateUser, type Taste } from '@yon/shared'
 
-import { Avatar, Button, Card, Icon, LangSwitcher, Switch } from '@/components/ds'
+import { Avatar, Button, Card, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -27,29 +27,47 @@ function SettingRow({
   icon,
   label,
   last,
+  onPress,
 }: {
   icon: string
   label: string
   last?: boolean
+  onPress?: () => void
 }) {
   return (
-    <View
-      flexDirection="row"
-      alignItems="center"
-      gap="$3"
-      paddingVertical={14}
-      paddingHorizontal={2}
-      borderBottomWidth={last ? 0 : 2}
-      borderBottomColor="$ink200"
-      borderStyle="dotted"
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
     >
-      <Icon name={icon} size={20} color="#5a4f63" />
-      <Text flex={1} color="$ink900" fontWeight="500">
-        {label}
-      </Text>
-      <Icon name="chevron-right" size={18} color="#cfc7d4" />
-    </View>
+      <View
+        flexDirection="row"
+        alignItems="center"
+        gap="$3"
+        paddingVertical={14}
+        paddingHorizontal={2}
+        borderBottomWidth={last ? 0 : 2}
+        borderBottomColor="$ink200"
+        borderStyle="dotted"
+      >
+        <Icon name={icon} size={20} color="#5a4f63" />
+        <Text flex={1} color="$ink900" fontWeight="500">
+          {label}
+        </Text>
+        <Icon name="chevron-right" size={18} color="#cfc7d4" />
+      </View>
+    </Pressable>
   )
+}
+
+/** Derive a display name from the user object, never falling back to a hardcoded name. */
+function deriveDisplayName(
+  user: { displayName?: string; email?: string; phone?: string } | null | undefined,
+  defaultName: string,
+): string {
+  if (user?.displayName && user.displayName.trim()) return user.displayName.trim()
+  if (user?.email && user.email.includes('@')) return user.email.split('@')[0]
+  if (user?.phone && user.phone.length >= 4) return `Foodie ${user.phone.slice(-4)}`
+  return defaultName
 }
 
 export default function YouView({ items }: Props) {
@@ -59,6 +77,12 @@ export default function YouView({ items }: Props) {
 
   const [warningsEnabled, setWarningsEnabled] = useState(() => user?.warningsEnabled ?? false)
   const [locationEnabled, setLocationEnabled] = useState(() => user?.locationEnabled ?? false)
+
+  // Nickname edit modal state
+  const [editNameOpen, setEditNameOpen] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameError, setNameError] = useState('')
 
   const toggleWarnings = async (next: boolean) => {
     const prev = warningsEnabled
@@ -82,7 +106,37 @@ export default function YouView({ items }: Props) {
     }
   }
 
-  const displayName = user?.displayName || 'Mina Park'
+  function openEditName() {
+    setNameInput(user?.displayName ?? '')
+    setNameError('')
+    setEditNameOpen(true)
+  }
+
+  function closeEditName() {
+    setEditNameOpen(false)
+    setNameError('')
+  }
+
+  async function submitEditName() {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed.length > 50) {
+      setNameError(t('invalid_display_name'))
+      return
+    }
+    setNameSaving(true)
+    setNameError('')
+    try {
+      const { user: updated } = await updateUser({ displayName: trimmed })
+      patchUser({ displayName: updated.displayName })
+      closeEditName()
+    } catch {
+      setNameError(t('invalid_display_name'))
+    } finally {
+      setNameSaving(false)
+    }
+  }
+
+  const displayName = deriveDisplayName(user, t('default_name'))
 
   const count = (v: 'yum' | 'meh' | 'nah') =>
     items.filter((it) => it.verdict === v).length
@@ -94,6 +148,7 @@ export default function YouView({ items }: Props) {
       return sum + (Number.isFinite(n) ? n : 0)
     }, 0)
   const savedAmount = formatMoney(saved)
+
   const openVerdict = useCallback(
     (verdict: 'yum' | 'meh' | 'nah') => {
       router.push({ pathname: '/(tabs)', params: { verdict } })
@@ -148,9 +203,17 @@ export default function YouView({ items }: Props) {
         <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
         <View flex={1}>
           <View flexDirection="row" alignItems="center" gap={8} flexWrap="wrap">
-            <Text color="$ink900" fontWeight="700" fontSize={22}>
+            <Text color="$ink900" fontWeight="700" fontSize={22} testID="display-name">
               {displayName}
             </Text>
+            <Pressable
+              onPress={openEditName}
+              accessibilityRole="button"
+              testID="edit-name-btn"
+              style={{ padding: 4 }}
+            >
+              <Icon name="edit" size={16} color="#9b8fa4" />
+            </Pressable>
             {user?.plan === 'pro' ? (
               <View
                 backgroundColor="$candyYellow"
@@ -172,7 +235,14 @@ export default function YouView({ items }: Props) {
               </View>
             ) : null}
           </View>
-          <Text color="$ink500">{t('tastes_logged', { n: items.length })}</Text>
+          {/* tastes_logged taps to Library tab */}
+          <Pressable
+            onPress={() => router.push('/(tabs)')}
+            accessibilityRole="button"
+            testID="tastes-logged-btn"
+          >
+            <Text color="$ink500">{t('tastes_logged', { n: items.length })}</Text>
+          </Pressable>
         </View>
         <LangSwitcher
           value={lang}
@@ -190,24 +260,30 @@ export default function YouView({ items }: Props) {
         {stat(t('nah'), count('nah'), '$verdictNah', 'nah')}
       </View>
 
-      {/* saved card */}
-      <Card
-        padded
-        marginTop="$4"
-        flexDirection="row"
-        alignItems="center"
-        gap={14}
+      {/* saved card — taps to Stats tab */}
+      <Pressable
+        onPress={() => router.push('/(tabs)/stats')}
+        accessibilityRole="button"
+        testID="savings-card-btn"
       >
-        <Icon name="coin" size={36} color="#ff5ca8" />
-        <View>
-          <Text color="$ink900" fontWeight="700" fontSize={24}>
-            {t('saved_amt', { amt: savedAmount })}
-          </Text>
-          <Text color="$ink500" fontSize={14}>
-            {t('saved_sub')}
-          </Text>
-        </View>
-      </Card>
+        <Card
+          padded
+          marginTop="$4"
+          flexDirection="row"
+          alignItems="center"
+          gap={14}
+        >
+          <Icon name="coin" size={36} color="#ff5ca8" />
+          <View>
+            <Text color="$ink900" fontWeight="700" fontSize={24}>
+              {t('saved_amt', { amt: savedAmount })}
+            </Text>
+            <Text color="$ink500" fontSize={14}>
+              {t('saved_sub')}
+            </Text>
+          </View>
+        </Card>
+      </Pressable>
 
       {/* settings list */}
       <View marginTop={18}>
@@ -252,7 +328,13 @@ export default function YouView({ items }: Props) {
           </Text>
           <Switch checked={locationEnabled} onChange={toggleLocation} testID="location-switch" />
         </View>
-        <SettingRow icon="lock" label={t('set_private')} last />
+        {/* Tag management — navigates to /tags stack screen */}
+        <SettingRow
+          icon="tag"
+          label={t('tag_manage')}
+          onPress={() => router.push('/tags')}
+        />
+        {/* set_private row removed until S3 */}
       </View>
 
       {/* sign out */}
@@ -267,6 +349,64 @@ export default function YouView({ items }: Props) {
       >
         {t('auth_signout')}
       </Button>
+
+      {/* Nickname edit modal */}
+      <Modal
+        visible={editNameOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEditName}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={closeEditName}>
+          <Pressable style={styles.sheetContent} onPress={() => {}}>
+            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
+              {t('edit_profile')}
+            </Text>
+            <Input
+              label={t('display_name_label')}
+              value={nameInput}
+              onChangeText={(v) => {
+                setNameInput(v)
+                setNameError('')
+              }}
+              testID="display-name-input"
+            />
+            {nameError ? (
+              <Text color="$verdictNah2" fontSize={13} marginTop={8} testID="name-error">
+                {nameError}
+              </Text>
+            ) : null}
+            <View flexDirection="row" gap="$3" marginTop={20}>
+              <Button variant="ghost" onPress={closeEditName}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={nameSaving || !nameInput.trim()}
+                onPress={submitEditName}
+                testID="save-name-btn"
+              >
+                {t('save_taste')}
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   )
 }
+
+const styles = StyleSheet.create({
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+    paddingBottom: 40,
+  },
+})

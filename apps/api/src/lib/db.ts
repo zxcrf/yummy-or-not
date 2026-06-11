@@ -944,6 +944,10 @@ export async function updateUserSettings(
     values.push(input.locationEnabled);
     setClauses.push(`location_enabled = $${values.length}`);
   }
+  if (input.displayName !== undefined) {
+    values.push(input.displayName);
+    setClauses.push(`display_name = $${values.length}`);
+  }
 
   if (setClauses.length === 0) return findUserById(userId);
 

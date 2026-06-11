@@ -8,7 +8,7 @@
    chrome is dropped; this renders as a routed screen body.
    ============================================================ */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Image, Modal, Platform, Pressable, StyleSheet, View as RNView } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -18,6 +18,7 @@ import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredErr
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
+import { useTags } from '@/app/(tabs)/_useTags'
 import {
   Badge,
   Button,
@@ -66,6 +67,18 @@ export default function DetailView() {
   const [editNotes, setEditNotes] = useState('')
   const [editVerdict, setEditVerdict] = useState<Verdict>('yum')
   const [editTags, setEditTags] = useState<string[]>([])
+
+  // Tag chip candidates: built-in choices first, then library extras, then the
+  // item's own legacy tags not in either. Mirrors AddModal.tsx:153-157.
+  const { tags: userTags } = useTags()
+  const tagChoices = useMemo(() => {
+    const builtIn = TAG_CHOICES as readonly string[]
+    const extra = userTags.map((tg) => tg.name).filter((n) => !builtIn.includes(n))
+    const itemLegacy = (item?.tags ?? []).filter(
+      (n) => !builtIn.includes(n) && !extra.includes(n),
+    )
+    return [...builtIn, ...extra, ...itemLegacy]
+  }, [userTags, item?.tags])
 
   // Pro original viewer state.
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
@@ -449,7 +462,7 @@ export default function DetailView() {
                 {t('tags')}
               </Text>
               <XStack flexWrap="wrap" gap="$2">
-                {TAG_CHOICES.map((tag) => (
+                {tagChoices.map((tag) => (
                   <Tag key={tag} active={editTags.includes(tag)} onPress={() => toggleEditTag(tag)}>
                     {tag}
                   </Tag>

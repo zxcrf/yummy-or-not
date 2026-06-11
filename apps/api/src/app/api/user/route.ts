@@ -19,6 +19,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const hasWarnings = Object.prototype.hasOwnProperty.call(body ?? {}, 'warningsEnabled');
     const hasLocation = Object.prototype.hasOwnProperty.call(body ?? {}, 'locationEnabled');
+    const hasDisplayName = Object.prototype.hasOwnProperty.call(body ?? {}, 'displayName');
 
     if (hasWarnings && typeof body?.warningsEnabled !== 'boolean') {
       return withCors(
@@ -32,7 +33,23 @@ export async function PATCH(req: NextRequest) {
         origin
       );
     }
-    if (!hasWarnings && !hasLocation) {
+    if (hasDisplayName) {
+      const raw = body?.displayName;
+      if (typeof raw !== 'string') {
+        return withCors(
+          NextResponse.json({ error: 'invalid_display_name' }, { status: 400 }),
+          origin
+        );
+      }
+      const trimmed = raw.trim();
+      if (trimmed.length < 1 || trimmed.length > 50) {
+        return withCors(
+          NextResponse.json({ error: 'invalid_display_name' }, { status: 400 }),
+          origin
+        );
+      }
+    }
+    if (!hasWarnings && !hasLocation && !hasDisplayName) {
       return withCors(
         NextResponse.json({ error: 'warningsEnabled or locationEnabled must be a boolean' }, { status: 400 }),
         origin
@@ -42,6 +59,7 @@ export async function PATCH(req: NextRequest) {
     const updated = await updateUserSettings(user.id, {
       ...(hasWarnings ? { warningsEnabled: body.warningsEnabled } : {}),
       ...(hasLocation ? { locationEnabled: body.locationEnabled } : {}),
+      ...(hasDisplayName ? { displayName: (body.displayName as string).trim() } : {}),
     });
     if (!updated) {
       return withCors(NextResponse.json({ error: 'not_found' }, { status: 404 }), origin);
