@@ -120,6 +120,17 @@ describe('YouView display name — Mina Park never renders (RISK-02)', () => {
     expect(texts).toContain('alice')
   })
 
+  it('skips empty email local-part (e.g. @example.com) and continues to phone fallback', () => {
+    mockUser = { ...mockUser, displayName: '', email: '@example.com', phone: '+8613800138000' }
+    const renderer = renderYouView()
+    const texts = getAllText(renderer)
+    // empty local-part must not become the display name
+    expect(texts).not.toContain('')
+    expect(texts).not.toContain('Mina Park')
+    // must reach the phone fallback
+    expect(texts.some((t) => t.startsWith('Foodie'))).toBe(true)
+  })
+
   it('falls back to Foodie {phone tail} when displayName and email are both absent', () => {
     mockUser = { ...mockUser, displayName: '', email: '', phone: '+8613800138000' }
     const renderer = renderYouView()

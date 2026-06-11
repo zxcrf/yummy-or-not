@@ -65,7 +65,8 @@ function deriveDisplayName(
   defaultName: string,
 ): string {
   if (user?.displayName && user.displayName.trim()) return user.displayName.trim()
-  if (user?.email && user.email.includes('@')) return user.email.split('@')[0]
+  const emailLocal = user?.email?.split('@')[0]?.trim()
+  if (emailLocal) return emailLocal
   if (user?.phone && user.phone.length >= 4) return `Foodie ${user.phone.slice(-4)}`
   return defaultName
 }
