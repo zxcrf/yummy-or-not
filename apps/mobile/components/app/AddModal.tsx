@@ -347,10 +347,19 @@ export default function AddModal({ onClose, onSaved }: Props) {
       const positionPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       })
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('location_timeout')), 10_000),
-      )
-      const current = await Promise.race([positionPromise, timeoutPromise])
+      // Clear the timeout once the race settles so the timer never lingers
+      // (a pending 10s timer keeps the event loop alive and, after the race
+      // resolves, its reject becomes an unhandled rejection).
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('location_timeout')), 10_000)
+      })
+      let current: Location.LocationObject
+      try {
+        current = await Promise.race([positionPromise, timeoutPromise])
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId)
+      }
       const nextLat = current.coords.latitude
       const nextLng = current.coords.longitude
       setLat(nextLat)
