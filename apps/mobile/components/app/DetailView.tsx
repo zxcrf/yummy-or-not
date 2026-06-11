@@ -73,7 +73,15 @@ export default function DetailView() {
 
   // Share card state — A1.
   const [sharing, setSharing] = useState(false)
+  const [sharingAvailable, setSharingAvailable] = useState(false)
   const shareCardRef = useRef<RNView>(null)
+  // Resolves the onReady race: set by handleShare, called by ShareCard.
+  const shareReadyResolveRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    Sharing.isAvailableAsync().then(setSharingAvailable).catch(() => {})
+  }, [])
 
   // Same-instance route `id` change: re-seed from the shared cache synchronously
   // during render (React "adjust state on prop change" pattern) so we never paint
@@ -270,21 +278,32 @@ export default function DetailView() {
     const captureId = item.id
     setSharing(true)
     try {
-      // Wait for the off-screen card to paint (image onLoad fires, or 600 ms
-      // timeout when there is no photo / the thumb is already disk-cached).
-      await new Promise<void>((resolve) => setTimeout(resolve, 600))
-      // Guard: nav moved to a different taste while we waited.
+      // Race: wait for ShareCard image onLoad callback (onReady) against a
+      // 600 ms timeout fallback (no-photo case / already disk-cached thumb).
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          shareReadyResolveRef.current = resolve
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, 600)),
+      ])
+      shareReadyResolveRef.current = null
+
+      // Guard: nav moved to a different taste while we waited — abort silently.
       if (idRef.current !== captureId) return
       const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
       if (idRef.current !== captureId) return
-      const available = await Sharing.isAvailableAsync()
-      if (!available) return
       await Sharing.shareAsync(uri, { mimeType: 'image/png' })
     } catch {
       Alert.alert(t('share_failed'))
     } finally {
-      if (idRef.current === captureId) setSharing(false)
+      // Always reset sharing — idRef guard only gates the shareAsync call,
+      // not the state reset, so the button is always re-enabled after this.
+      setSharing(false)
     }
+  }
+
+  const onShareCardReady = () => {
+    shareReadyResolveRef.current?.()
   }
 
   const submitBuy = async () => {
@@ -562,7 +581,7 @@ export default function DetailView() {
               >
                 {t('detail_buy_again')}
               </Button>
-              {Platform.OS !== 'web' ? (
+              {Platform.OS !== 'web' && sharingAvailable ? (
                 <Button
                   variant="secondary"
                   iconLeft={<Icon name="arrow-right" size={18} />}
@@ -588,6 +607,7 @@ export default function DetailView() {
                   verdictLabel={t('v_' + (item.verdict ?? 'yum'))}
                   brandText={t('share_brand_tag')}
                   priceText={item.price ? formatMoney(item.price) : ''}
+                  onReady={onShareCardReady}
                 />
               </RNView>
             ) : null}

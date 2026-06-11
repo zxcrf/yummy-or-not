@@ -8,7 +8,7 @@
    capture path has no i18n dependency at render time.
    ============================================================ */
 
-import { forwardRef } from 'react'
+import { forwardRef, useEffect } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
 import type { Taste, Verdict } from '@yon/shared'
@@ -27,19 +27,31 @@ export type ShareCardProps = {
   verdictLabel: string
   brandText: string
   priceText: string
+  /** Called once the card is ready to capture: image loaded (or no photo). */
+  onReady?: () => void
 }
 
 /**
  * ShareCard — off-screen branded layout captured to PNG and shared.
  * Must be wrapped in a ref-bearing View with collapsable={false} by
  * the caller so captureRef can read the native backing view.
+ *
+ * Calls onReady when the card is ready to capture:
+ * - With photo: fires on expo-image onLoad (image pixels in backing view).
+ * - No photo: fires synchronously via useEffect after first paint.
  */
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
-  { taste, verdictLabel, brandText, priceText },
+  { taste, verdictLabel, brandText, priceText, onReady },
   ref,
 ) {
   const hasPhoto = !!(taste.imageThumb || taste.image)
   const photoUri = taste.imageThumb || taste.image || ''
+
+  // No-photo path: signal ready after first paint so the caller's race
+  // timer does not have to wait the full 600 ms fallback.
+  useEffect(() => {
+    if (!hasPhoto) onReady?.()
+  }, [hasPhoto, onReady])
 
   return (
     <View ref={ref} style={styles.card} collapsable={false}>
@@ -54,6 +66,7 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             cachePolicy="disk"
             style={styles.photo}
             contentFit="cover"
+            onLoad={onReady}
           />
           {/* VerdictStamp overlapping the photo bottom edge */}
           <View style={styles.stampOverPhoto}>

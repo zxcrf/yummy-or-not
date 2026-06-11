@@ -5,7 +5,9 @@
    1. Pressing Share calls captureRef then shareAsync with a file:// tmpfile
       path — the presigned query string never appears in the shared payload.
    2. shareAsync rejection → share_failed alert shown; sharing state resets
-      (button re-enabled).
+      (button re-enabled) unconditionally.
+   3. Stale-capture guard: if the route id changes between press and capture
+      resolution, shareAsync is NOT called and sharing resets.
    ============================================================ */
 
 import React from 'react'
@@ -32,8 +34,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   getCachedTaste: jest.fn(() => undefined),
 }))
 
+// Mutable so the stale-capture test can simulate a route id change.
+const routeParams = { id: 'taste-1' }
+
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ id: 'taste-1' }),
+  useLocalSearchParams: () => routeParams,
   useRouter: () => ({
     back: jest.fn(),
     canGoBack: jest.fn(() => true),
@@ -127,8 +132,14 @@ const mockedGetTaste = jest.mocked(getTaste)
 
 async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer
+  // First act: mount + run the getTaste fetch effect.
   await act(async () => {
     renderer = TestRenderer.create(<DetailView />)
+  })
+  // Second act: flush the isAvailableAsync effect so sharingAvailable=true
+  // propagates and the Share button appears in the tree.
+  await act(async () => {
+    await Promise.resolve()
   })
   return renderer
 }
@@ -145,6 +156,7 @@ describe('DetailView share (A1)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     jest.useFakeTimers()
+    routeParams.id = 'taste-1'
   })
 
   afterEach(() => {
@@ -204,5 +216,64 @@ describe('DetailView share (A1)', () => {
     expect(shareBtnAfter?.props.disabled).toBeFalsy()
 
     alertSpy.mockRestore()
+  })
+
+  it('stale-capture guard: route id change after press → shareAsync NOT called, sharing resets', async () => {
+    // Arrange: component starts on taste-1; taste-2 mock for re-render fetch.
+    mockedGetTaste.mockResolvedValueOnce(makeTaste({ id: 'taste-1' }))
+    mockedGetTaste.mockResolvedValueOnce(makeTaste({ id: 'taste-2' }))
+    const renderer = await renderDetail()
+
+    const { captureRef } = require('react-native-view-shot')
+    const { shareAsync } = require('expo-sharing')
+
+    // captureRef resolves only after we trigger the id change below.
+    let resolveCaptureRef!: (uri: string) => void
+    captureRef.mockImplementationOnce(
+      () => new Promise<string>((resolve) => { resolveCaptureRef = resolve }),
+    )
+
+    const shareBtn = findShareButton(renderer)
+    expect(shareBtn).toBeTruthy()
+
+    // Press share — starts the 600ms race + mounts off-screen card.
+    let pressDone = false
+    act(() => {
+      shareBtn.props.onPress()
+      pressDone = true
+    })
+    expect(pressDone).toBe(true)
+
+    // Advance 600ms timeout so the race resolves and captureRef is called.
+    await act(async () => {
+      jest.advanceTimersByTime(600)
+      await Promise.resolve()
+    })
+
+    // captureRef is now in-flight. Simulate nav to taste-2 by updating the
+    // mutable params object and re-rendering the component.
+    routeParams.id = 'taste-2'
+    await act(async () => {
+      renderer.update(<DetailView />)
+    })
+
+    // Now resolve captureRef — idRef.current is 'taste-2', captureId is 'taste-1'.
+    await act(async () => {
+      resolveCaptureRef('file:///tmp/stale-capture.png')
+      await Promise.resolve()
+    })
+
+    // captureRef was called once but shareAsync must NOT have been called
+    // (idRef guard prevented it).
+    expect(captureRef).toHaveBeenCalledTimes(1)
+    expect(shareAsync).not.toHaveBeenCalled()
+
+    // sharing state must be reset unconditionally — no disabled share button.
+    const disabledShareBtns = renderer.root.findAll(
+      (node) => (node.type as unknown) === 'Button' &&
+        node.props.testID === 'share-btn' &&
+        node.props.disabled === true,
+    )
+    expect(disabledShareBtns).toHaveLength(0)
   })
 })
