@@ -229,6 +229,44 @@ describe('AddModal keyboard wiring', () => {
     const behaviorNodes = findAllHavingProp(renderer, 'behavior')
     expect(behaviorNodes).toHaveLength(0)
   })
+
+  // The regression: bottomOffset={16} only cleared the keyboard itself.
+  // The sticky footer (KeyboardStickyView) floats up over the scroll viewport
+  // when the keyboard opens, so a focused bottom field (notes, custom tag)
+  // would sit BEHIND the footer. Fix: bottomOffset = footerHeight + 16.
+  //
+  // Two assertions:
+  // 1. Seed: before onLayout fires, bottomOffset is already > 16 (seeded with
+  //    an estimate so the very first focus clears the footer).
+  // 2. Post-layout: after a synthetic onLayout event with a specific footer
+  //    height, bottomOffset becomes exactly that height + 16.
+  //
+  // The test must fail against the old bottomOffset={16}: assertion 1 fails
+  // because 16 is not > 16, and assertion 2 fails because 16 ≠ measuredH + 16.
+  it('seeds bottomOffset above 16 before layout and updates it to footerHeight+16 after onLayout', () => {
+    const { KeyboardAwareScrollView } = require('react-native-keyboard-controller')
+
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
+    })
+
+    // 1. Seed check: before any layout event, bottomOffset must already exceed
+    //    the bare keyboard margin so the first focus still clears the footer.
+    const scroll = renderer.root.findByType(KeyboardAwareScrollView)
+    expect(scroll.props.bottomOffset).toBeGreaterThan(16)
+
+    // 2. Post-layout: fire a synthetic onLayout on the footer and assert the
+    //    scroll's bottomOffset updates to exactly measuredHeight + 16.
+    const measuredHeight = 88
+    const footer = renderer.root.findByProps({ testID: 'add-actions-footer' })
+    act(() => {
+      footer.props.onLayout({ nativeEvent: { layout: { height: measuredHeight } } })
+    })
+
+    const scrollAfter = renderer.root.findByType(KeyboardAwareScrollView)
+    expect(scrollAfter.props.bottomOffset).toBe(measuredHeight + 16)
+  })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
