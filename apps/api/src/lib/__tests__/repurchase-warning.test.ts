@@ -41,6 +41,17 @@ import {
 
 const memdb = () => (globalThis as Record<string, unknown>).__rpMemdb as IMemoryDb;
 
+/** updateTaste now returns Taste | error-string | null; narrow to the Taste
+ *  (or fail loudly) so assertions can read taste fields. */
+function asTaste(
+  result: Awaited<ReturnType<typeof updateTaste>>
+): import('@yon/shared').Taste {
+  if (result === null || typeof result === 'string') {
+    throw new Error(`expected a Taste, got ${String(result)}`);
+  }
+  return result;
+}
+
 function createSchema() {
   const db = memdb();
   db.public.none(`
@@ -65,7 +76,8 @@ function createSchema() {
       name           text NOT NULL,
       place          text NOT NULL DEFAULT '',
       price          text NOT NULL DEFAULT '',
-      verdict        text NOT NULL,
+      status         text NOT NULL DEFAULT 'tasted' CHECK (status IN ('tasted','todo')),
+      verdict        text,
       tags           text[] NOT NULL DEFAULT '{}',
       bought_count   int NOT NULL DEFAULT 1,
       warn_before_buy boolean NOT NULL DEFAULT false,
@@ -161,7 +173,7 @@ describe('warn_before_buy via PATCH', () => {
     expect(taste.warnBeforeBuy).toBe(false);
 
     const updated = await updateTaste('u1', taste.id, { warnBeforeBuy: true });
-    expect(updated?.warnBeforeBuy).toBe(true);
+    expect(asTaste(updated).warnBeforeBuy).toBe(true);
   });
 
   it('can be toggled back to false', async () => {
@@ -169,7 +181,7 @@ describe('warn_before_buy via PATCH', () => {
     expect(taste.warnBeforeBuy).toBe(true);
 
     const updated = await updateTaste('u1', taste.id, { warnBeforeBuy: false });
-    expect(updated?.warnBeforeBuy).toBe(false);
+    expect(asTaste(updated).warnBeforeBuy).toBe(false);
   });
 });
 

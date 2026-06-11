@@ -9,7 +9,7 @@ import { getUserFromRequest } from '@/lib/auth';
 import { uploadPhoto, deletePhoto } from '@/lib/storage';
 import { getPhotoStorage } from '@/lib/env';
 import { origKey, variantKeys, makeVariants, safeExt } from '@/lib/image-variants';
-import { FREE_TASTE_CAP, type CreateTasteInput, type Verdict } from '@yon/shared';
+import { FREE_TASTE_CAP, type CreateTasteInput, type Verdict, type TasteStatus } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -34,6 +34,15 @@ function parseOptionalFloat(value: FormDataEntryValue | null): number | undefine
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/** A `tasted` row (the default) requires a verdict. A `todo` row may omit it.
+ *  Returns true when the input is valid to create. Previously the DB NOT NULL
+ *  on verdict was the only guard (a 500); migration 0006 removes it, so the
+ *  app must enforce this explicitly. */
+function tastedRequiresVerdict(input: CreateTasteInput): boolean {
+  if (input.status === 'todo') return true;
+  return Boolean(input.verdict);
+}
+
 export async function GET(req: NextRequest) {
   const origin = req.headers.get('origin');
   const user = await getUserFromRequest(req);
@@ -41,9 +50,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const q      = searchParams.get('q')      ?? undefined;
   const filter = searchParams.get('filter') ?? undefined;
+  // Lifecycle filter: default 'tasted' so old APKs (no param) never receive
+  // todo rows (and thus never a verdict:null). Unknown values fall back to default.
+  const statusParam = searchParams.get('status');
+  const status: 'tasted' | 'todo' | 'all' =
+    statusParam === 'todo' || statusParam === 'all' ? statusParam : 'tasted';
 
   try {
-    const tastes = await listTastes(user.id, { q, filter });
+    const tastes = await listTastes(user.id, { q, filter, status });
     return withCors(NextResponse.json(tastes), origin);
   } catch (err) {
     console.error('GET /api/tastes error:', err);
@@ -79,6 +93,8 @@ export async function POST(req: NextRequest) {
       const place   = (form.get('place')   as string | null) ?? '';
       const price   = (form.get('price')   as string | null) ?? '';
       const verdict = (form.get('verdict') as string | null) ?? '';
+      const statusField = (form.get('status') as string | null) ?? '';
+      const status: TasteStatus = statusField === 'todo' ? 'todo' : 'tasted';
       const notes   = (form.get('notes')   as string | null) ?? '';
       const imageField = (form.get('image') as string | null) ?? '';
       const lat = parseOptionalFloat(form.get('lat'));
@@ -104,7 +120,8 @@ export async function POST(req: NextRequest) {
         name,
         place,
         price,
-        verdict: verdict as Verdict,
+        status,
+        verdict: verdict ? (verdict as Verdict) : undefined,
         tags,
         notes,
         image: sanitizeClientImage(imageField),
@@ -160,12 +177,18 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      if (!tastedRequiresVerdict(input)) {
+        return withCors(NextResponse.json({ error: 'verdict_required' }, { status: 400 }), origin);
+      }
       const taste = await createTaste(user.id, input, imageUrl);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     } else {
       // JSON body
       input = (await req.json()) as CreateTasteInput;
       input.image = sanitizeClientImage(input.image);
+      if (!tastedRequiresVerdict(input)) {
+        return withCors(NextResponse.json({ error: 'verdict_required' }, { status: 400 }), origin);
+      }
       const taste = await createTaste(user.id, input);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     }
