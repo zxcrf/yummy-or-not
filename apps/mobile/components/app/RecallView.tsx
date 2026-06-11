@@ -9,7 +9,7 @@
    ============================================================ */
 
 import { useCallback, useMemo, useState } from 'react'
-import { RefreshControl, useWindowDimensions } from 'react-native'
+import { Pressable, RefreshControl, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
@@ -60,60 +60,60 @@ function RecallRow({
 }) {
   const { t } = useI18n()
   return (
-    <XStack
-      onPress={onPress}
-      cursor="pointer"
-      accessibilityRole="button"
-      alignItems="center"
-      gap="$3"
-      width="100%"
-      backgroundColor={flat ? 'transparent' : '$white'}
-      borderWidth={flat ? 0 : 3}
-      borderColor={warnActive ? '$verdictNah2' : '$ink900'}
-      borderRadius="$md"
-      padding={flat ? 0 : 10}
-      {...(flat
-        ? {}
-        : {
-            shadowColor: warnActive ? '$verdictNah2' : '$ink900',
-            shadowOffset: { width: 3, height: 3 },
-            shadowOpacity: 1,
-            shadowRadius: 0,
-          })}
-    >
-      <View
-        width={54}
-        height={54}
-        borderRadius="$sm"
-        borderWidth={2}
-        borderColor="$ink900"
-        backgroundColor="$paper2"
-        overflow="hidden"
-        flexShrink={0}
+    <Pressable onPress={onPress} accessibilityRole="button" style={{ width: '100%' }}>
+      <XStack
+        cursor="pointer"
+        alignItems="center"
+        gap="$3"
+        width="100%"
+        backgroundColor={flat ? 'transparent' : '$white'}
+        borderWidth={flat ? 0 : 3}
+        borderColor={warnActive ? '$verdictNah2' : '$ink900'}
+        borderRadius="$md"
+        padding={flat ? 0 : 10}
+        {...(flat
+          ? {}
+          : {
+              shadowColor: warnActive ? '$verdictNah2' : '$ink900',
+              shadowOffset: { width: 3, height: 3 },
+              shadowOpacity: 1,
+              shadowRadius: 0,
+            })}
       >
-        {(item.imageThumb || item.image) ? (
-          <Image
-            source={{
-              uri: item.imageThumb || item.image,
-              ...(item.imageKey ? { cacheKey: `${item.imageKey}:thumb` } : {}),
-            }}
-            cachePolicy="disk"
-            transition={150}
-            style={{ width: '100%', height: '100%' }}
-            contentFit="cover"
-          />
-        ) : null}
-      </View>
-      <YStack flex={1} minWidth={0}>
-        <Text color="$ink900" fontWeight="700" fontSize={16}>
-          {item.name}
-        </Text>
-        <Text color="$ink500" fontSize={13}>
-          {item.place} · {item.date}
-        </Text>
-      </YStack>
-      <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
-    </XStack>
+        <View
+          width={54}
+          height={54}
+          borderRadius="$sm"
+          borderWidth={2}
+          borderColor="$ink900"
+          backgroundColor="$paper2"
+          overflow="hidden"
+          flexShrink={0}
+        >
+          {(item.imageThumb || item.image) ? (
+            <Image
+              source={{
+                uri: item.imageThumb || item.image,
+                ...(item.imageKey ? { cacheKey: `${item.imageKey}:thumb` } : {}),
+              }}
+              cachePolicy="disk"
+              transition={150}
+              style={{ width: '100%', height: '100%' }}
+              contentFit="cover"
+            />
+          ) : null}
+        </View>
+        <YStack flex={1} minWidth={0}>
+          <Text color="$ink900" fontWeight="700" fontSize={16}>
+            {item.name}
+          </Text>
+          <Text color="$ink500" fontSize={13}>
+            {item.place} · {item.date}
+          </Text>
+        </YStack>
+        <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
+      </XStack>
+    </Pressable>
   )
 }
 

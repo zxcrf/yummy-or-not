@@ -120,6 +120,9 @@ importers:
       expo-linking:
         specifier: ~56.0.13
         version: 56.0.13(expo@56.0.9)(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
+      expo-location:
+        specifier: ~56.0.16
+        version: 56.0.16(expo@56.0.9)(typescript@6.0.3)
       expo-router:
         specifier: ~56.2.9
         version: 56.2.9(36603c3d7f3c7ee33d2a9b8fe7e11527)
@@ -3403,6 +3406,11 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  expo-location@56.0.16:
+    resolution: {integrity: sha512-L8Q8xyRd/r39rQU4/k6m2CUu7ALaE57XADL3PbP4XgRgZUH4JQSqb24SFd0iRUCuodnKawreO3G+JyskC50hgw==}
+    peerDependencies:
+      expo: '*'
 
   expo-manifests@56.0.4:
     resolution: {integrity: sha512-Fokawl2UkiExIF0bqGoblRFA8lYpROVD+EpvDwSW4LgqQyPwNua1gLSgHZjdl5GsVugfRMMWE3LHaibDyX93hw==}
@@ -10076,6 +10084,14 @@ snapshots:
     transitivePeerDependencies:
       - expo
       - supports-color
+
+  expo-location@56.0.16(expo@56.0.9)(typescript@6.0.3):
+    dependencies:
+      '@expo/image-utils': 0.10.1(typescript@6.0.3)
+      expo: 56.0.9(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(@expo/metro-runtime@56.0.14)(expo-router@56.2.9)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-manifests@56.0.4(expo@56.0.9):
     dependencies:

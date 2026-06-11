@@ -1,8 +1,8 @@
-// PATCH /api/user — update the signed-in user's settings (warningsEnabled).
+// PATCH /api/user — update the signed-in user's settings.
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { updateUserWarnings } from '@/lib/db';
+import { updateUserSettings } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
 
@@ -17,15 +17,32 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const hasWarnings = Object.prototype.hasOwnProperty.call(body ?? {}, 'warningsEnabled');
+    const hasLocation = Object.prototype.hasOwnProperty.call(body ?? {}, 'locationEnabled');
 
-    if (typeof body?.warningsEnabled !== 'boolean') {
+    if (hasWarnings && typeof body?.warningsEnabled !== 'boolean') {
       return withCors(
         NextResponse.json({ error: 'warningsEnabled must be a boolean' }, { status: 400 }),
         origin
       );
     }
+    if (hasLocation && typeof body?.locationEnabled !== 'boolean') {
+      return withCors(
+        NextResponse.json({ error: 'locationEnabled must be a boolean' }, { status: 400 }),
+        origin
+      );
+    }
+    if (!hasWarnings && !hasLocation) {
+      return withCors(
+        NextResponse.json({ error: 'warningsEnabled or locationEnabled must be a boolean' }, { status: 400 }),
+        origin
+      );
+    }
 
-    const updated = await updateUserWarnings(user.id, body.warningsEnabled);
+    const updated = await updateUserSettings(user.id, {
+      ...(hasWarnings ? { warningsEnabled: body.warningsEnabled } : {}),
+      ...(hasLocation ? { locationEnabled: body.locationEnabled } : {}),
+    });
     if (!updated) {
       return withCors(NextResponse.json({ error: 'not_found' }, { status: 404 }), origin);
     }

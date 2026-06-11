@@ -28,6 +28,12 @@ function sanitizeClientImage(image: string | undefined | null): string {
   return '';
 }
 
+function parseOptionalFloat(value: FormDataEntryValue | null): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export async function GET(req: NextRequest) {
   const origin = req.headers.get('origin');
   const user = await getUserFromRequest(req);
@@ -75,6 +81,8 @@ export async function POST(req: NextRequest) {
       const verdict = (form.get('verdict') as string | null) ?? '';
       const notes   = (form.get('notes')   as string | null) ?? '';
       const imageField = (form.get('image') as string | null) ?? '';
+      const lat = parseOptionalFloat(form.get('lat'));
+      const lng = parseOptionalFloat(form.get('lng'));
 
       // Read all 'tags' values (one per fd.append call from the client).
       // Also handle legacy backward-compat where a single JSON-array string was sent.
@@ -100,6 +108,8 @@ export async function POST(req: NextRequest) {
         tags,
         notes,
         image: sanitizeClientImage(imageField),
+        ...(lat !== undefined ? { lat } : {}),
+        ...(lng !== undefined ? { lng } : {}),
       };
 
       // Handle optional photo upload

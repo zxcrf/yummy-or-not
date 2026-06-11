@@ -39,19 +39,21 @@ Recall 搜索返回全部相关结果（替代原 R02：`items.find()` 只取第
 
 ## P2 — 个性化
 
-### [ ] You 页全区域可交互
-- verdict 磁贴 / 省钱卡 / taste 计数 → 跳转 Stats / Library 存量页（零开发）
+### [~] You 页全区域可交互
+- [x] verdict 磁贴（StatsView + YouView）→ 跳转 Library 并按 verdict 过滤（可清除）
+- [ ] 省钱卡 / taste 计数 → 跳转 Stats / Library（未做）
 - Warnings 行 → 全局提醒开关（依赖重复购买提醒落地）
-- Location 行 → 定位记录开关（见下）
+- [x] Location 行 → 定位记录开关（locationEnabled，PATCH /api/user，见下）
 - Private mode 行 → S3 圈子前隐藏，落地后变「新记录默认可见性」
 - Tag 管理入口（依赖 Tag 库）
 
 ### [ ] 头像 / 昵称编辑
 PATCH user API + 编辑页。（原 R06）
 
-### [ ] 位置：L1 + L2，永不做 L3
-L1：Add 时一次性前台定位，自动填 place / 存坐标。
-L2：Recall 按距离排「附近吃过的」。
+### [~] 位置：L1 + L2，永不做 L3
+L1（已完成）：Add 时一次性前台定位（expo-location，You 页开关 opt-in），
+reverse geocode 自动填 place / 存 lat-lng；权限拒绝·超时·无网静默降级。
+L2（待 L1 数据积累后做）：Recall 按距离排「附近吃过的」。
 L3（geofencing + push 主动提醒）已决议**永久砍掉**。
 📄 [plans/location.md](plans/location.md)
 

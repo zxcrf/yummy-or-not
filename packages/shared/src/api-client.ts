@@ -148,6 +148,8 @@ export async function createTaste(
     if (input.place) fd.append("place", input.place);
     if (input.price) fd.append("price", input.price);
     if (input.notes) fd.append("notes", input.notes);
+    if (input.lat != null) fd.append("lat", String(input.lat));
+    if (input.lng != null) fd.append("lng", String(input.lng));
     input.tags?.forEach((t) => fd.append("tags", t));
     return apiFetch<Taste>("/api/tastes", { method: "POST", body: fd });
   }

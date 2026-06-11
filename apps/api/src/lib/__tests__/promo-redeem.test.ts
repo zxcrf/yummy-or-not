@@ -58,6 +58,7 @@ function createSchema() {
       avatar        text NOT NULL DEFAULT '',
       locale        text NOT NULL DEFAULT 'zh',
       plan          text NOT NULL DEFAULT 'free' CHECK (plan IN ('free','pro')),
+      location_enabled boolean NOT NULL DEFAULT false,
       created_at    timestamptz NOT NULL DEFAULT now()
     );
   `);

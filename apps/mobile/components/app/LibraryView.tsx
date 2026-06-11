@@ -5,9 +5,9 @@
    Loading + empty states. Tapping a card routes to /taste/[id].
    ============================================================ */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
-import { useRouter } from 'expo-router'
+import * as ExpoRouter from 'expo-router'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { searchTastes } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
@@ -15,9 +15,20 @@ import { useI18n } from '@/providers/I18nProvider'
 import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
 
+type VerdictFilter = 'yum' | 'meh' | 'nah'
+
+function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictFilter | null {
+  const value = Array.isArray(verdict) ? verdict[0] : verdict
+  return value === 'yum' || value === 'meh' || value === 'nah' ? value : null
+}
+
 export default function LibraryView() {
   const { t, formatMoney } = useI18n()
-  const router = useRouter()
+  const router = ExpoRouter.useRouter()
+  const params =
+    typeof ExpoRouter.useLocalSearchParams === 'function'
+      ? ExpoRouter.useLocalSearchParams<{ verdict?: string | string[] }>()
+      : {}
   const { width } = useWindowDimensions()
   const isDesktop = width >= 768
 
@@ -26,6 +37,12 @@ export default function LibraryView() {
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
+  const routeVerdict = useMemo(() => normalizeVerdictParam(params.verdict), [params.verdict])
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter | null>(routeVerdict)
+
+  useEffect(() => {
+    setVerdictFilter(routeVerdict)
+  }, [routeVerdict])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -38,13 +55,13 @@ export default function LibraryView() {
 
   // Filter chips: "All" sentinel always first, then the user's tag candidate set.
   const filterChips = useMemo(
-    () => ['All', ...tags.map((tg) => tg.name)],
+    () => tags.map((tg) => tg.name),
     [tags],
   )
 
   const shown = useMemo(() => {
     // Tag/name filter first (pure boolean — no scoring needed).
-    const filtered =
+    const filteredByTag =
       filter === 'All'
         ? items
         : items.filter(
@@ -52,6 +69,10 @@ export default function LibraryView() {
               it.tags.includes(filter) ||
               it.name.toLowerCase().includes(filter.toLowerCase()),
           )
+    const filtered =
+      verdictFilter == null
+        ? filteredByTag
+        : filteredByTag.filter((it) => it.verdict === verdictFilter)
 
     // Search: use scored searchTastes so notes are included and results are ranked.
     // When query is empty/too-short, searchTastes returns [] — fall back to full list.
@@ -59,7 +80,7 @@ export default function LibraryView() {
 
     const results = searchTastes(filtered, query)
     return results.map((r) => r.item)
-  }, [items, query, filter])
+  }, [items, query, filter, verdictFilter])
 
   return (
     <ScrollView
@@ -103,9 +124,35 @@ export default function LibraryView() {
 
       {/* filter chips — sourced from user's tag candidate set */}
       <XStack flexWrap="wrap" gap="$2">
+        <Tag
+          active={filter === 'All' && verdictFilter == null}
+          onPress={() => {
+            setFilter('All')
+            if (verdictFilter != null) router.setParams({ verdict: undefined })
+            setVerdictFilter(null)
+          }}
+        >
+          {t('all')}
+        </Tag>
+        {(['yum', 'meh', 'nah'] as const).map((verdict) => (
+          <Tag
+            key={verdict}
+            active={verdictFilter === verdict}
+            onPress={() => {
+              if (verdictFilter === verdict) {
+                router.setParams({ verdict: undefined })
+                setVerdictFilter(null)
+                return
+              }
+              setVerdictFilter(verdict)
+            }}
+          >
+            {t(verdict)}
+          </Tag>
+        ))}
         {filterChips.map((f) => (
           <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
-            {f === 'All' ? t('all') : f}
+            {f}
           </Tag>
         ))}
       </XStack>

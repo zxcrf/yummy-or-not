@@ -9,7 +9,9 @@
    way without hitting the stats endpoint.
    ============================================================ */
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import { Pressable } from 'react-native'
+import { useRouter } from 'expo-router'
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { LANGS, updateUser, type Taste } from '@yon/shared'
 
@@ -53,8 +55,10 @@ function SettingRow({
 export default function YouView({ items }: Props) {
   const { t, lang, setLang, formatMoney } = useI18n()
   const { user, signOut, patchUser } = useAuth()
+  const router = useRouter()
 
   const [warningsEnabled, setWarningsEnabled] = useState(() => user?.warningsEnabled ?? false)
+  const [locationEnabled, setLocationEnabled] = useState(() => user?.locationEnabled ?? false)
 
   const toggleWarnings = async (next: boolean) => {
     const prev = warningsEnabled
@@ -64,6 +68,17 @@ export default function YouView({ items }: Props) {
       patchUser({ warningsEnabled: updated.warningsEnabled })
     } catch {
       setWarningsEnabled(prev)
+    }
+  }
+
+  const toggleLocation = async (next: boolean) => {
+    const prev = locationEnabled
+    setLocationEnabled(next)
+    try {
+      const { user: updated } = await updateUser({ locationEnabled: next })
+      patchUser({ locationEnabled: updated.locationEnabled })
+    } catch {
+      setLocationEnabled(prev)
     }
   }
 
@@ -79,39 +94,51 @@ export default function YouView({ items }: Props) {
       return sum + (Number.isFinite(n) ? n : 0)
     }, 0)
   const savedAmount = formatMoney(saved)
+  const openVerdict = useCallback(
+    (verdict: 'yum' | 'meh' | 'nah') => {
+      router.push({ pathname: '/(tabs)', params: { verdict } })
+    },
+    [router],
+  )
 
   const stat = (
     label: string,
     value: number,
     color: GetProps<typeof View>['backgroundColor'],
+    verdict: 'yum' | 'meh' | 'nah',
   ) => (
-    <View
-      flex={1}
-      paddingVertical={14}
-      paddingHorizontal={10}
-      alignItems="center"
-      borderWidth={3}
-      borderColor="$ink900"
-      borderRadius="$lg"
-      backgroundColor={color}
-      shadowColor="$ink900"
-      shadowOffset={{ width: 5, height: 5 }}
-      shadowOpacity={1}
-      shadowRadius={0}
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => openVerdict(verdict)}
+      style={{ flex: 1, cursor: 'pointer' }}
     >
-      <Text color="#fff" fontWeight="700" fontSize={34} lineHeight={34}>
-        {value}
-      </Text>
-      <Text
-        color="#fff"
-        fontSize={9}
-        letterSpacing={1.1}
-        textTransform="uppercase"
-        marginTop={6}
+      <View
+        paddingVertical={14}
+        paddingHorizontal={10}
+        alignItems="center"
+        borderWidth={3}
+        borderColor="$ink900"
+        borderRadius="$lg"
+        backgroundColor={color}
+        shadowColor="$ink900"
+        shadowOffset={{ width: 5, height: 5 }}
+        shadowOpacity={1}
+        shadowRadius={0}
       >
-        {label}
-      </Text>
-    </View>
+        <Text color="#fff" fontWeight="700" fontSize={34} lineHeight={34}>
+          {value}
+        </Text>
+        <Text
+          color="#fff"
+          fontSize={9}
+          letterSpacing={1.1}
+          textTransform="uppercase"
+          marginTop={6}
+        >
+          {label}
+        </Text>
+      </View>
+    </Pressable>
   )
 
   return (
@@ -158,9 +185,9 @@ export default function YouView({ items }: Props) {
 
       {/* verdict stat tiles */}
       <View flexDirection="row" gap="$3" marginTop={18}>
-        {stat(t('yum'), count('yum'), '$verdictYum')}
-        {stat(t('meh'), count('meh'), '$verdictMeh')}
-        {stat(t('nah'), count('nah'), '$verdictNah')}
+        {stat(t('yum'), count('yum'), '$verdictYum', 'yum')}
+        {stat(t('meh'), count('meh'), '$verdictMeh', 'meh')}
+        {stat(t('nah'), count('nah'), '$verdictNah', 'nah')}
       </View>
 
       {/* saved card */}
@@ -209,7 +236,22 @@ export default function YouView({ items }: Props) {
           </Text>
           <Switch checked={warningsEnabled} onChange={toggleWarnings} testID="warnings-switch" />
         </View>
-        <SettingRow icon="map" label={t('set_location')} />
+        <View
+          flexDirection="row"
+          alignItems="center"
+          gap="$3"
+          paddingVertical={14}
+          paddingHorizontal={2}
+          borderBottomWidth={2}
+          borderBottomColor="$ink200"
+          borderStyle="dotted"
+        >
+          <Icon name="map" size={20} color="#5a4f63" />
+          <Text flex={1} color="$ink900" fontWeight="500">
+            {t('set_location')}
+          </Text>
+          <Switch checked={locationEnabled} onChange={toggleLocation} testID="location-switch" />
+        </View>
         <SettingRow icon="lock" label={t('set_private')} last />
       </View>
 

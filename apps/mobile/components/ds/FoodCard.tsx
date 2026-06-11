@@ -8,6 +8,7 @@
    ============================================================ */
 
 import { Image } from 'expo-image'
+import { Pressable } from 'react-native'
 import { type GetProps, View, styled, Text } from 'tamagui'
 import { quick } from './animation'
 import type { Verdict } from '@yon/shared'
@@ -112,9 +113,14 @@ export function FoodCard({
   ...rest
 }: FoodCardProps) {
   const normalizedTags = normalizeTags(tags)
-
-  return (
-    <CardFrame {...(onPress ? quick : {})} interactive={!!onPress} onPress={onPress} {...rest}>
+  const content = (pressed: boolean) => (
+    <CardFrame
+      {...(onPress ? quick : {})}
+      interactive={!!onPress}
+      scale={pressed ? 0.98 : 1}
+      shadowOffset={pressed ? { width: 3, height: 3 } : { width: 5, height: 5 }}
+      {...rest}
+    >
       {/* media */}
       <View position="relative" backgroundColor="$paper2" aspectRatio={4 / 3}>
         {(imageThumb || image) ? (
@@ -171,6 +177,16 @@ export function FoodCard({
         ) : null}
       </View>
     </CardFrame>
+  )
+
+  if (!onPress) {
+    return content(false)
+  }
+
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      {({ pressed }) => content(pressed)}
+    </Pressable>
   )
 }
 

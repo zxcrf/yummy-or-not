@@ -119,7 +119,16 @@ it('appends a bytes()-shaped part with filename and content type', async () => {
 });
 
 it('still appends text fields correctly', async () => {
-  const input = { name: 'Burger', verdict: 'nah' as const, place: 'Downtown', price: '12', notes: 'meh', tags: ['Burger', 'Spicy'] };
+  const input = {
+    name: 'Burger',
+    verdict: 'nah' as const,
+    place: 'Downtown',
+    price: '12',
+    notes: 'meh',
+    lat: -31.9523,
+    lng: 115.8613,
+    tags: ['Burger', 'Spicy'],
+  };
 
   await createTaste(input, rnFile);
 
@@ -129,7 +138,17 @@ it('still appends text fields correctly', async () => {
   expect(fd.get('place')).toBe('Downtown');
   expect(fd.get('price')).toBe('12');
   expect(fd.get('notes')).toBe('meh');
+  expect(fd.get('lat')).toBe('-31.9523');
+  expect(fd.get('lng')).toBe('115.8613');
   expect(fd.getAll('tags')).toEqual(['Burger', 'Spicy']);
+});
+
+it('omits location fields when they are not provided', async () => {
+  await createTaste({ name: 'No location', verdict: 'yum' as const, tags: [] }, rnFile);
+
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd.get('lat')).toBeNull();
+  expect(fd.get('lng')).toBeNull();
 });
 
 it('passes a browser File straight through (web path)', async () => {

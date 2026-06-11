@@ -35,6 +35,7 @@ import {
   addTastePurchase,
   listTastePurchases,
   updateUserWarnings,
+  updateUserSettings,
   findUserById,
 } from '../db';
 
@@ -53,6 +54,7 @@ function createSchema() {
       locale           text NOT NULL DEFAULT 'zh',
       plan             text NOT NULL DEFAULT 'free',
       warnings_enabled boolean NOT NULL DEFAULT true,
+      location_enabled boolean NOT NULL DEFAULT false,
       created_at       timestamptz NOT NULL DEFAULT now()
     );
   `);
@@ -69,6 +71,8 @@ function createSchema() {
       warn_before_buy boolean NOT NULL DEFAULT false,
       notes          text NOT NULL DEFAULT '',
       image          text NOT NULL DEFAULT '',
+      lat            double precision,
+      lng            double precision,
       created_at     timestamptz NOT NULL DEFAULT now()
     );
   `);
@@ -112,6 +116,27 @@ beforeEach(() => {
 // ── warn_before_buy defaults ──────────────────────────────────────────────────
 
 describe('warn_before_buy creation defaults', () => {
+  it('surfaces nullable lat/lng from the taste mapper', async () => {
+    const taste = await createTaste('u1', {
+      name: 'Mapped Sushi',
+      verdict: 'yum',
+      lat: -31.9523,
+      lng: 115.8613,
+    });
+    expect(taste.lat).toBe(-31.9523);
+    expect(taste.lng).toBe(115.8613);
+
+    const fetched = await getTaste('u1', taste.id);
+    expect(fetched?.lat).toBe(-31.9523);
+    expect(fetched?.lng).toBe(115.8613);
+  });
+
+  it('returns null lat/lng when omitted', async () => {
+    const taste = await createTaste('u1', { name: 'No Location', verdict: 'yum' });
+    expect(taste.lat).toBeNull();
+    expect(taste.lng).toBeNull();
+  });
+
   it('defaults to true when verdict is nah', async () => {
     const taste = await createTaste('u1', { name: 'Bad Ramen', verdict: 'nah' });
     expect(taste.warnBeforeBuy).toBe(true);
@@ -424,6 +449,11 @@ describe('warnings_enabled', () => {
     expect(user?.warningsEnabled).toBe(true);
   });
 
+  it('defaults locationEnabled to false for new users', async () => {
+    const user = await findUserById('u1');
+    expect(user?.locationEnabled).toBe(false);
+  });
+
   it('can be set to false via updateUserWarnings', async () => {
     const updated = await updateUserWarnings('u1', false);
     expect(updated?.warningsEnabled).toBe(false);
@@ -438,5 +468,11 @@ describe('warnings_enabled', () => {
   it('returns null for a non-existent user', async () => {
     const result = await updateUserWarnings('nonexistent', false);
     expect(result).toBeNull();
+  });
+
+  it('can update locationEnabled without changing warningsEnabled', async () => {
+    const updated = await updateUserSettings('u1', { locationEnabled: true });
+    expect(updated?.locationEnabled).toBe(true);
+    expect(updated?.warningsEnabled).toBe(true);
   });
 });

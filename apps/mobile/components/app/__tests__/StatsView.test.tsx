@@ -69,6 +69,8 @@ function makeTaste(verdict: 'yum' | 'meh' | 'nah', id: string) {
     verdict,
     tags: [],
     boughtCount: 1,
+    warnBeforeBuy: false,
+    purchases: [],
     date: 'today',
     notes: '',
     image: '',

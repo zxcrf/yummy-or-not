@@ -9,7 +9,8 @@
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshControl } from 'react-native'
+import { Pressable, RefreshControl } from 'react-native'
+import { useRouter } from 'expo-router'
 import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { getStats, type Stats, type Taste } from '@yon/shared'
 
@@ -90,6 +91,7 @@ function SavedAmountRow({ t, symbolPrefix, symbolSuffix, savedNumeric }: SavedAm
 
 export default function StatsView({ items, onRefresh: refreshItems }: Props) {
   const { t, formatMoney } = useI18n()
+  const router = useRouter()
   const [stats, setStats] = useState<Stats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const mounted = useRef(false)
@@ -151,38 +153,50 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
 
   type Color = GetProps<typeof View>['backgroundColor']
 
-  const tile = (label: string, value: number, color: Color) => (
-    <View
-      flex={1}
-      paddingVertical={22}
-      paddingHorizontal={18}
-      alignItems="center"
-      borderWidth={3}
-      borderColor="$ink900"
-      borderRadius="$lg"
-      backgroundColor={color}
-      shadowColor="$ink900"
-      shadowOffset={{ width: 5, height: 5 }}
-      shadowOpacity={1}
-      shadowRadius={0}
+  const openVerdict = useCallback(
+    (verdict: 'yum' | 'meh' | 'nah') => {
+      router.push({ pathname: '/(tabs)', params: { verdict } })
+    },
+    [router],
+  )
+
+  const tile = (label: string, value: number, color: Color, verdict: 'yum' | 'meh' | 'nah') => (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => openVerdict(verdict)}
+      style={{ flex: 1, cursor: 'pointer' }}
     >
-      <AnimatedNumber
-        value={value}
-        color="#fff"
-        fontWeight="700"
-        fontSize={48}
-        lineHeight={48}
-      />
-      <Text
-        color="#fff"
-        fontSize={10}
-        letterSpacing={1.1}
-        textTransform="uppercase"
-        marginTop="$2"
+      <View
+        paddingVertical={22}
+        paddingHorizontal={18}
+        alignItems="center"
+        borderWidth={3}
+        borderColor="$ink900"
+        borderRadius="$lg"
+        backgroundColor={color}
+        shadowColor="$ink900"
+        shadowOffset={{ width: 5, height: 5 }}
+        shadowOpacity={1}
+        shadowRadius={0}
       >
-        {label}
-      </Text>
-    </View>
+        <AnimatedNumber
+          value={value}
+          color="#fff"
+          fontWeight="700"
+          fontSize={48}
+          lineHeight={48}
+        />
+        <Text
+          color="#fff"
+          fontSize={10}
+          letterSpacing={1.1}
+          textTransform="uppercase"
+          marginTop="$2"
+        >
+          {label}
+        </Text>
+      </View>
+    </Pressable>
   )
 
   const bar = (label: string, verdict: 'yum' | 'meh' | 'nah', color: Color) => {
@@ -231,9 +245,9 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
 
       {/* verdict tiles */}
       <View flexDirection="row" gap="$4" marginTop={22} maxWidth={720}>
-        {tile(t('yum'), count('yum'), '$verdictYum')}
-        {tile(t('meh'), count('meh'), '$verdictMeh')}
-        {tile(t('nah'), count('nah'), '$verdictNah')}
+        {tile(t('yum'), count('yum'), '$verdictYum', 'yum')}
+        {tile(t('meh'), count('meh'), '$verdictMeh', 'meh')}
+        {tile(t('nah'), count('nah'), '$verdictNah', 'nah')}
       </View>
 
       {/* saved card */}

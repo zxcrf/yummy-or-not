@@ -34,6 +34,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { Text, View, XStack, YStack } from 'tamagui'
 import {
@@ -171,6 +172,10 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [picked, setPicked] = useState<string[]>([])
   const [customTag, setCustomTag] = useState('')
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [locationDenied, setLocationDenied] = useState(false)
+  const [locating, setLocating] = useState(false)
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
@@ -301,6 +306,59 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
   }
 
+  const fillPlaceFromAddress = (address: Location.LocationGeocodedAddress | null | undefined) => {
+    if (!address) return
+    const line1 = [address.name, address.street].filter(Boolean).join(' ')
+    const line2 = [address.city ?? address.district, address.region].filter(Boolean).join(', ')
+    const nextPlace = [line1, line2].filter(Boolean).join(' · ')
+    if (nextPlace) setPlace(nextPlace)
+  }
+
+  const locateMe = async () => {
+    if (locating) return
+    setLocating(true)
+    setLat(null)
+    setLng(null)
+    let permission: { granted: boolean }
+    try {
+      permission = await Location.requestForegroundPermissionsAsync()
+    } catch {
+      setLocationDenied(true)
+      setLocating(false)
+      return
+    }
+    if (!permission.granted) {
+      setLocationDenied(true)
+      setLocating(false)
+      return
+    }
+    setLocationDenied(false)
+    try {
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      })
+      const nextLat = current.coords.latitude
+      const nextLng = current.coords.longitude
+      setLat(nextLat)
+      setLng(nextLng)
+      try {
+        const results = await Location.reverseGeocodeAsync({
+          latitude: nextLat,
+          longitude: nextLng,
+        })
+        fillPlaceFromAddress(results[0])
+      } catch {
+        // Silent degrade: keep coords even when reverse geocoding fails.
+      }
+    } catch {
+      // Silent degrade: save path must still work without location.
+      setLat(null)
+      setLng(null)
+    } finally {
+      setLocating(false)
+    }
+  }
+
   const ready = !!name && !!verdict
 
   const handleSave = async () => {
@@ -316,6 +374,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
           verdict,
           tags: picked.length ? picked : undefined,
           notes: notes || undefined,
+          lat,
+          lng,
         },
         photo,
       )
@@ -526,12 +586,25 @@ export default function AddModal({ onClose, onSaved }: Props) {
             </Animated.View>
           ) : null}
 
-          <Input
-            label={t('f_where')}
-            placeholder="Tiger Sugar · Hongdae"
-            value={place}
-            onChangeText={setPlace}
-          />
+          <View gap="$2">
+            <Input
+              label={t('f_where')}
+              placeholder="Tiger Sugar · Hongdae"
+              value={place}
+              onChangeText={setPlace}
+            />
+            {user?.locationEnabled && !locationDenied ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onPress={locateMe}
+                testID="locate-button"
+                iconLeft={<Icon name="map" size={16} color="#191017" />}
+              >
+                {locating ? 'Locating...' : 'Use current location'}
+              </Button>
+            ) : null}
+          </View>
           <Input
             label={t('f_price')}
             placeholder="$5.80"

@@ -46,6 +46,8 @@ export interface Taste {
   /** Human display date, e.g. "2 weeks ago" / "just now". Derived from createdAt. */
   date: string;
   notes: string;
+  lat?: number | null;
+  lng?: number | null;
   /** Display-quality image URL (presigned R2 or /uploads/... path). "" if none.
    *  Kept as the legacy field name for old-APK compatibility; new code should
    *  prefer imageDisplay for display and imageThumb for list thumbnails. */
@@ -74,6 +76,8 @@ export interface CreateTasteInput {
   tags?: string[];
   notes?: string;
   image?: string;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */
@@ -121,6 +125,8 @@ export interface User {
   plan: Plan;
   /** Whether the repurchase-warning feature is enabled for this account. */
   warningsEnabled: boolean;
+  /** Whether this account allows recording location with new tastes. */
+  locationEnabled: boolean;
   createdAt: string;
 }
 
@@ -128,6 +134,8 @@ export interface User {
 export interface UpdateUserInput {
   /** Enable or disable repurchase warnings globally for this account. */
   warningsEnabled?: boolean;
+  /** Enable or disable location capture for this account. */
+  locationEnabled?: boolean;
 }
 
 /** Social / OAuth providers we can link an account to. */

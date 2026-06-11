@@ -14,6 +14,9 @@
     "android": {
       "package": "com.yummyornot.app",
       "versionCode": 1,
+      "permissions": [
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#fff6e6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -42,6 +45,14 @@
         {
           "photosPermission": "Yummy or Not needs access to your photos so you can add pictures of your meals.",
           "cameraPermission": "Yummy or Not needs access to your camera so you can take pictures of your meals."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Yummy or Not uses your location to fill in where you logged a taste.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [

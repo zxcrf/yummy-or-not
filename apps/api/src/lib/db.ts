@@ -2,7 +2,7 @@
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput } from '@yon/shared';
 import { FILTERS } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
@@ -208,6 +208,8 @@ async function rowToTaste(row: any): Promise<Taste> {
     purchases,
     date:          relativeDate(new Date(row.created_at)),
     notes:         row.notes ?? '',
+    lat:           row.lat ?? null,
+    lng:           row.lng ?? null,
     image:         urls.image,
     imageThumb:    urls.imageThumb,
     imageDisplay:  urls.imageDisplay,
@@ -316,12 +318,20 @@ export async function createTaste(
   const resolvedImage = imageUrl ?? image;
   const normalizedPrice = normalizePrice(price);
   const warnBeforeBuy = verdict === 'nah';
+  const normalizedLat =
+    typeof input.lat === 'number' && Number.isFinite(input.lat) && input.lat >= -90 && input.lat <= 90
+      ? input.lat
+      : null;
+  const normalizedLng =
+    typeof input.lng === 'number' && Number.isFinite(input.lng) && input.lng >= -180 && input.lng <= 180
+      ? input.lng
+      : null;
 
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image, warn_before_buy)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO tastes (user_id, name, place, price, verdict, tags, notes, image, warn_before_buy, lat, lng)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage, warnBeforeBuy]
+    [userId, name, place, normalizedPrice, verdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng]
   );
   // New taste has no purchases yet — pass empty aggregates directly.
   const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
@@ -449,6 +459,7 @@ function rowToUser(row: any): User {
     locale:          row.locale ?? 'zh',
     plan:            row.plan ?? 'free',
     warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
+    locationEnabled: row.location_enabled != null ? Boolean(row.location_enabled) : false,
     createdAt:       new Date(row.created_at).toISOString(),
   };
 }
@@ -867,9 +878,30 @@ export async function updateUserWarnings(
   userId: string,
   warningsEnabled: boolean
 ): Promise<User | null> {
+  return updateUserSettings(userId, { warningsEnabled });
+}
+
+export async function updateUserSettings(
+  userId: string,
+  input: UpdateUserInput
+): Promise<User | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [userId];
+
+  if (input.warningsEnabled !== undefined) {
+    values.push(input.warningsEnabled);
+    setClauses.push(`warnings_enabled = $${values.length}`);
+  }
+  if (input.locationEnabled !== undefined) {
+    values.push(input.locationEnabled);
+    setClauses.push(`location_enabled = $${values.length}`);
+  }
+
+  if (setClauses.length === 0) return findUserById(userId);
+
   const { rows } = await pool.query(
-    'UPDATE users SET warnings_enabled = $2 WHERE id = $1 RETURNING *',
-    [userId, warningsEnabled]
+    `UPDATE users SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
+    values
   );
   return rows.length ? rowToUser(rows[0]) : null;
 }

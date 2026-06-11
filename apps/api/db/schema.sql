@@ -22,6 +22,7 @@ CREATE TABLE users (
   locale           text        NOT NULL DEFAULT 'zh',
   plan             text        NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
   warnings_enabled boolean     NOT NULL DEFAULT true,
+  location_enabled boolean     NOT NULL DEFAULT false,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
@@ -86,6 +87,8 @@ CREATE TABLE tastes (
   warn_before_buy boolean    NOT NULL DEFAULT false,
   notes          text        NOT NULL DEFAULT '',
   image          text        NOT NULL DEFAULT '',
+  lat            double precision,
+  lng            double precision,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 

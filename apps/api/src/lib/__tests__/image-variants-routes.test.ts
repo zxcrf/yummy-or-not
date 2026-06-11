@@ -322,6 +322,37 @@ describe('POST /api/tastes — client image key is not trusted', () => {
     mockedCreateTaste.mockResolvedValue({ id: 'new-taste' } as never);
   });
 
+  it('parses optional multipart lat/lng before creating a taste', async () => {
+    const form = new FormData();
+    form.append('name', 'Geo snack');
+    form.append('verdict', 'yum');
+    form.append('lat', '-31.9523');
+    form.append('lng', '115.8613');
+
+    const req = new Request('http://localhost/api/tastes', { method: 'POST', body: form });
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(201);
+    const [, input] = mockedCreateTaste.mock.calls[0];
+    expect(input.lat).toBe(-31.9523);
+    expect(input.lng).toBe(115.8613);
+  });
+
+  it('omits invalid multipart lat/lng values', async () => {
+    const form = new FormData();
+    form.append('name', 'No geo snack');
+    form.append('verdict', 'yum');
+    form.append('lat', 'nope');
+    form.append('lng', '');
+
+    const req = new Request('http://localhost/api/tastes', { method: 'POST', body: form });
+    await POST(req as never);
+
+    const [, input] = mockedCreateTaste.mock.calls[0];
+    expect(input.lat).toBeUndefined();
+    expect(input.lng).toBeUndefined();
+  });
+
   it('strips a client-supplied bare storage key from a JSON create', async () => {
     /* Regression: createTaste used input.image verbatim, so a caller could store
        another user's object key (e.g. t/<victim>/orig.jpg) and later mint a
