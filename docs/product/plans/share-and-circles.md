@@ -6,19 +6,15 @@
 
 ## S1 — 卡片图片分享
 
-- DetailView 加「Share」入口：taste 卡片离屏渲染（专用分享版式：
-  照片 + verdict 印章 + 名称/地点/价格 + app 品牌角标）→
-  `react-native-view-shot` 截图 → `expo-sharing` 系统分享面板
-- 用户在系统面板自选微信/其他 app。照片是客户端本地渲染，
-  不暴露 presigned URL，与私有 R2 桶边界无冲突
-- **微信 SDK 直连暂不做**：需微信开放平台注册（¥300 认证）+ 应用审核 +
-  绑定 APK 包名与签名，且要求应用已上架。上架后再接，
-  体验差异仅少一步选择
-- Web 端：降级为下载图片（无系统分享面板时）
+**已实现**（#74）：DetailView 加「Share」入口，taste 卡片离屏渲染（专用分享版式：照片 + verdict 印章 + 名称/地点/价格 + app 品牌角标）→ `react-native-view-shot` 截图 → `expo-sharing` 系统分享面板。用户在系统面板自选微信/其他 app；照片是客户端本地渲染，不暴露 presigned URL。
+
+**微信 SDK 直连暂不做**：需微信开放平台注册（¥300 认证）+ 应用审核 + 绑定 APK 包名与签名，上架后再接。
+
+Web 端：已暂停维护（2026-06-10）。
 
 ## S2 — to-taste（想吃清单）
 
-- 比圈子先做：单机即有价值，且是 S3「导入」功能的落点
+**已实现**（#75 API，#78 mobile）：tastes 加 status（'tasted'|'todo'），todo 无 verdict；AddModal 「还没吃，先记下」模式，Library 分 tab，DetailView 转正流程。
 - `tastes` 加 `status text NOT NULL DEFAULT 'tasted'`：`'tasted'` | `'todo'`
 - todo 记录无 verdict（schema 上 verdict 改可空，仅 status='todo' 时允许空）
 - UI：
@@ -26,6 +22,16 @@
   - Library 加 tab 或 filter 区分 tasted / to-taste
   - to-taste 条目「吃完转正」：选 verdict（+ 可补照片/价格）→ status 翻成 tasted
 - Stats / Recall 默认只算 tasted；Recall 可顺带提示「在你的想吃清单里」
+
+### S2×L2 addendum — Recall 附近分组
+
+Recall 空搜索态展示两个附近分组，**想吃优先**：
+- `附近你想吃的`：todo 记录 + 坐标，cap **3**，按距离升序
+- `附近吃过的`：tasted 记录 + 坐标，cap **5**，按距离升序
+
+复用 haversine/formatDistance，client-side 过滤无新 API。单组为空时隐藏该分组头（符合既有逻辑）。
+
+**转正 v1 不补照片**：`image` 列不可 PATCH（IDOR 边界），照片补传是后续任务。
 
 ## S3 — 口味圈子
 
