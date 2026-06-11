@@ -298,6 +298,17 @@ export async function addPurchase(
   );
 }
 
+/** GET /api/geocode/reverse — server-side reverse geocode (AMap for China, Nominatim elsewhere).
+ *  Returns { place: string | null }. Never throws on provider failure. */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<{ place: string | null }> {
+  return apiFetch<{ place: string | null }>(
+    `/api/geocode/reverse?lat=${lat}&lng=${lng}`,
+  );
+}
+
 /** PATCH /api/user — update signed-in user settings (e.g. warningsEnabled). */
 export async function updateUser(input: UpdateUserInput): Promise<{ user: User }> {
   return apiFetch<{ user: User }>("/api/user", {

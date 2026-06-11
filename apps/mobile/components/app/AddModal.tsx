@@ -41,6 +41,7 @@ import {
   TAG_CHOICES,
   createTaste,
   createTag,
+  reverseGeocode,
   searchTastes,
   type PhotoInput,
   type Taste,
@@ -176,6 +177,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [lng, setLng] = useState<number | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
   const [locating, setLocating] = useState(false)
+  const [locRecorded, setLocRecorded] = useState(false)
+  const [locFailed, setLocFailed] = useState(false)
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
@@ -319,6 +322,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
     setLocating(true)
     setLat(null)
     setLng(null)
+    setLocRecorded(false)
+    setLocFailed(false)
     let permission: { granted: boolean }
     try {
       permission = await Location.requestForegroundPermissionsAsync()
@@ -334,26 +339,48 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
     setLocationDenied(false)
     try {
-      const current = await Location.getCurrentPositionAsync({
+      // Race getCurrentPositionAsync against a 10s timeout.
+      const positionPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       })
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('location_timeout')), 10_000),
+      )
+      const current = await Promise.race([positionPromise, timeoutPromise])
       const nextLat = current.coords.latitude
       const nextLng = current.coords.longitude
       setLat(nextLat)
       setLng(nextLng)
+      setLocRecorded(true)
+
+      // Try native geocode first; fall back to server if empty.
+      let geocoded = false
       try {
         const results = await Location.reverseGeocodeAsync({
           latitude: nextLat,
           longitude: nextLng,
         })
-        fillPlaceFromAddress(results[0])
+        if (results.length > 0 && results[0]) {
+          fillPlaceFromAddress(results[0])
+          geocoded = true
+        }
       } catch {
-        // Silent degrade: keep coords even when reverse geocoding fails.
+        // Native geocode failed — try server fallback below.
       }
-    } catch {
+
+      if (!geocoded) {
+        try {
+          const { place } = await reverseGeocode(nextLat, nextLng)
+          if (place) setPlace(place)
+        } catch {
+          // Server fallback failed — coords are still recorded, place stays editable.
+        }
+      }
+    } catch (err) {
       // Silent degrade: save path must still work without location.
       setLat(null)
       setLng(null)
+      setLocFailed(true)
     } finally {
       setLocating(false)
     }
@@ -594,15 +621,27 @@ export default function AddModal({ onClose, onSaved }: Props) {
               onChangeText={setPlace}
             />
             {user?.locationEnabled && !locationDenied ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onPress={locateMe}
-                testID="locate-button"
-                iconLeft={<Icon name="map" size={16} color="#191017" />}
-              >
-                {locating ? 'Locating...' : 'Use current location'}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={locateMe}
+                  testID="locate-button"
+                  iconLeft={<Icon name="map" size={16} color="#191017" />}
+                >
+                  {locating ? t('loc_locating') : t('loc_use_location')}
+                </Button>
+                {locRecorded && !locating ? (
+                  <Text testID="loc-recorded-marker" style={{ fontSize: 12, color: '#4caf50' }}>
+                    {'✓ ' + t('loc_recorded')}
+                  </Text>
+                ) : null}
+                {locFailed && !locating ? (
+                  <Text testID="loc-failed-hint" style={{ fontSize: 12, color: '#888' }}>
+                    {t('loc_failed')}
+                  </Text>
+                ) : null}
+              </>
             ) : null}
           </View>
           <Input
