@@ -9,61 +9,59 @@
 
 ## P0 — 当前主线
 
-### [ ] 全局统一搜索
+### [x] 全局统一搜索
 吃了什么 / 在哪里 / 看法（notes）混合检索，按相关性评分排序。先做内存评分
 实现（个人数据量级足够），接口可替换，未来需要时再换 FTS5 引擎。
 Library / Recall / Add 同名检测共用同一套搜索函数。
 📄 [plans/unified-search-and-tags.md](plans/unified-search-and-tags.md)
 
-### [~] 用户自定义 Tag 库
-AddModal 已支持输入自定义 tag（仅作用于当条记录）。缺：用户级 tag 库持久化、
-Library filter chips 改读用户 tag 库（替代硬编码 FILTERS）、You 页管理入口。
+### [x] 用户自定义 Tag 库
+AddModal 自定义 tag、库持久化、Library chips、You 页管理入口（rename/delete）、DetailView 编辑态 chips 均已完成。
 📄 [plans/unified-search-and-tags.md](plans/unified-search-and-tags.md)
 
-### [ ] 小项清理
-- Recall 「最近回忆」卡片数量按设备视口高度动态适配（现硬编码 4 条）
+### [x] 小项清理
+- Recall 「最近回忆」卡片数量按设备视口高度动态适配
 - 「你的口味」文案改「我的口味」（5 locale）
 
 ## P1 — 数据完整性 + 体验
 
-### [ ] 重复购买提醒
-warn 开关持久化（现仅前端 state）+ 三个触发场景：Recall 命中警示、
-Add 同名检测 inline 提示、+1 Again 确认。不做 push。
+### [x] 重复购买提醒
+warn 开关持久化 + 三个触发场景：Recall 命中警示、Add 同名检测 inline 提示、+1 Again 确认。
 购买升级为流水表（taste_purchases），boughtCount 改派生值，支持不同地点/价格。
-Recall 搜索返回全部相关结果（替代原 R02：`items.find()` 只取第一条）。
+Recall 搜索返回全部相关结果。
 📄 [plans/repurchase-warning.md](plans/repurchase-warning.md)
 
-### [ ] Stats 数字动画
-统计数字已实时（API + 本地 fallback），补加载完成后 0 → 目标值的
+### [x] Stats 数字动画
+统计数字已实时（API + 本地 fallback），加载完成后 0 → 目标值的
 翻牌/滚动动画（reanimated）。金额走 formatMoney，符号不参与滚动。
 
 ## P2 — 个性化
 
-### [~] You 页全区域可交互
+### [x] You 页全区域可交互
 - [x] verdict 磁贴（StatsView + YouView）→ 跳转 Library 并按 verdict 过滤（可清除）
-- [ ] 省钱卡 / taste 计数 → 跳转 Stats / Library（未做）
-- Warnings 行 → 全局提醒开关（依赖重复购买提醒落地）
-- [x] Location 行 → 定位记录开关（locationEnabled，PATCH /api/user，见下）
+- [x] 省钱卡 / taste 计数 → 跳转 Stats / Library
+- [x] Warnings 行 → 全局提醒开关
+- [x] Location 行 → 定位记录开关（locationEnabled，PATCH /api/user）
 - Private mode 行 → S3 圈子前隐藏，落地后变「新记录默认可见性」
-- Tag 管理入口（依赖 Tag 库）
+- [x] Tag 管理入口
 
-### [ ] 头像 / 昵称编辑
-PATCH user API + 编辑页。（原 R06）
+### [~] 头像 / 昵称编辑
+昵称编辑已完成；头像上传暂缓（原因：私有桶 presign vs 公共前缀未决）。
 
-### [~] 位置：L1 + L2，永不做 L3
+### [x] 位置：L1 + L2，永不做 L3
 L1（已完成）：Add 时一次性前台定位（expo-location，You 页开关 opt-in），
 reverse geocode 自动填 place / 存 lat-lng；权限拒绝·超时·无网静默降级。
-L2（待 L1 数据积累后做）：Recall 按距离排「附近吃过的」。
+L2（已完成）：Recall 按距离排「附近吃过的」。
 L3（geofencing + push 主动提醒）已决议**永久砍掉**。
 📄 [plans/location.md](plans/location.md)
 
 ## P3 — 分享与圈子（分三期，每期独立可发布）
 
-### [ ] S1 卡片图片分享
+### [x] S1 卡片图片分享
 taste 卡片客户端渲染成图 → 系统分享面板（用户自选微信）。
 微信 SDK 直连等上架后再接（需开放平台注册 + 审核）。
 
-### [ ] S2 to-taste（想吃清单）
+### [x] S2 to-taste（想吃清单）
 tastes 加 status（tasted / todo），todo 无 verdict，吃完转正。
 单机即有价值，且是 S3 导入功能的落点。
 
