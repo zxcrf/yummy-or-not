@@ -15,7 +15,8 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
+import { Platform } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import AddModal from '../AddModal'
 
 const mockCreateTaste = jest.fn()
@@ -175,52 +176,32 @@ describe('AddModal', () => {
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
   })
 
-  it('insets the keyboard with padding (never "height", never none) so bottom inputs stay reachable', () => {
-    // Two regressions guarded at once:
-    //  - behavior="height" animated the container height and collapsed this
-    //    flex body to a sliver during the open transition (the flicker).
-    //  - NO behavior left the keyboard floating over the content under Expo
-    //    SDK 54+ edge-to-edge, hiding the custom-tag / notes / save row.
-    // "padding" only grows the bottom inset: no collapse, and the scroll
-    // viewport ends above the keyboard so the bottom fields are reachable.
+  it('keeps the focused input above the keyboard via KeyboardAwareScrollView with a bottom margin', () => {
+    // The form scrolls inside a KeyboardAwareScrollView, which keeps the
+    // focused input and its cursor visible above the keyboard with a
+    // frame-synced animation (replacing the old RN KeyboardAvoidingView +
+    // manual scrollToEnd-on-focus compensation). bottomOffset reserves the
+    // ≥16dp margin above the keyboard.
     const renderer = renderAddModal()
-    const kav = renderer.root.findByType(KeyboardAvoidingView)
-    expect(kav.props.behavior).toBe('padding')
-    expect(kav.props.behavior).not.toBe('height')
+    const scroll = renderer.root.findByType(KeyboardAwareScrollView)
+    expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(16)
   })
 
-  it('keeps behavior="padding" on iOS too', () => {
+  it('keeps the same KeyboardAwareScrollView construction on iOS (no Platform keyboard branch)', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' })
     const renderer = renderAddModal()
-    const kav = renderer.root.findByType(KeyboardAvoidingView)
-    expect(kav.props.behavior).toBe('padding')
+    // Single construction both platforms — no Platform.OS keyboard branching.
+    expect(renderer.root.findAllByType(KeyboardAwareScrollView)).toHaveLength(1)
   })
 
-  it('scrolls the form to the end when a bottom field (notes) is focused so it clears the keyboard', () => {
-    // Padding alone shrinks the viewport but does not move the focused field
-    // into it. Focusing a below-the-fold field must scroll the form up so it
-    // sits above the keyboard — like every other app.
-    jest.useFakeTimers()
-    const scrollToEnd = jest
-      .spyOn(ScrollView.prototype, 'scrollToEnd')
-      .mockImplementation(() => {})
-    try {
-      const renderer = renderAddModal()
-      const notes = renderer.root.findByProps({
-        placeholder: 'Too sweet, but the texture was perfect…',
-      })
-      act(() => {
-        notes.props.onFocus?.({})
-      })
-      act(() => {
-        jest.advanceTimersByTime(200)
-      })
-
-      expect(scrollToEnd).toHaveBeenCalled()
-    } finally {
-      scrollToEnd.mockRestore()
-      jest.useRealTimers()
-    }
+  it('renders the action footer (kept as a sticky footer outside the scroll)', () => {
+    // The save row stays a sticky footer; it now rides the keyboard via
+    // KeyboardStickyView. The jest mock collapses KeyboardStickyView to a bare
+    // RN View, so we pin the footer renders (its outside-the-scroll placement
+    // is guarded by AddModalFooter.test.tsx) rather than matching the wrapper
+    // by type.
+    const renderer = renderAddModal()
+    expect(renderer.root.findByProps({ testID: 'add-actions-footer' })).toBeTruthy()
   })
 
   it('saves a newly added custom tag with the taste payload', async () => {
