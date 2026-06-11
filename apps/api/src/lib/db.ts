@@ -367,21 +367,28 @@ export async function updateTaste(
   id: string,
   patch: UpdateTasteInput
 ): Promise<Taste | UpdateTasteError | null> {
-  // ── Status / promotion rules (转正) ────────────────────────────────────────
+  // ── Status / verdict invariant ─────────────────────────────────────────────
   // Status is promote-only: the sole accepted value is 'tasted'. The type already
   // narrows UpdateTasteInput.status to 'tasted', but the body is untrusted at
   // runtime, so re-check here.
   if (patch.status !== undefined && patch.status !== 'tasted') {
     return 'invalid_status_transition';
   }
-  if (patch.status === 'tasted') {
-    // Promotion must result in a non-null verdict — from this patch or the
-    // already-stored value. (A todo row promoted without ever scoring is invalid.)
+  // Enforce the DB CHECK (status<>'tasted' OR verdict IS NOT NULL) in app code,
+  // computed over the RESULTING row — not just promotion patches. This catches
+  // the back door of PATCH {verdict:null} on an already-tasted row (no status
+  // field) which would otherwise produce tasted + NULL verdict (a 500 / corrupt
+  // row in prod, silently allowed where the CHECK isn't enforced, e.g. pg-mem).
+  // Only fetch the existing row when the patch could violate the invariant.
+  if (patch.status === 'tasted' || patch.verdict !== undefined) {
     const existing = await getTaste(userId, id);
     if (!existing) return null;
+    const resultingStatus = patch.status ?? existing.status;
     const resultingVerdict =
       patch.verdict !== undefined ? patch.verdict : existing.verdict;
-    if (!resultingVerdict) return 'verdict_required';
+    if (resultingStatus === 'tasted' && !resultingVerdict) {
+      return 'verdict_required';
+    }
   }
 
   // Build SET clauses dynamically from provided fields.

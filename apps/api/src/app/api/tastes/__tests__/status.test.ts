@@ -229,6 +229,32 @@ describe('updateTaste promotion rules', () => {
     expect(promoted.status).toBe('tasted');
     expect(promoted.verdict).toBe('meh');
   });
+
+  it('rejects clearing the verdict on an already-tasted row (no status field) → verdict_required', async () => {
+    // The back door: PATCH { verdict: null } on a tasted row, with NO status in
+    // the patch, must not be allowed to leave the row tasted + null verdict.
+    // The DB CHECK would block this in prod, but the app must reject it too
+    // (it's the only guard where the CHECK isn't enforced, e.g. pg-mem).
+    const tasted = await createTaste('u1', { name: 'Scored', verdict: 'yum' });
+    const result = await updateTaste('u1', tasted.id, { verdict: null } as never);
+    expect(result).toBe('verdict_required');
+    // The row is untouched — verdict still 'yum'.
+    const row = memdb().public.one(
+      `SELECT verdict, status FROM tastes WHERE id = '${tasted.id}'`
+    ) as { verdict: string; status: string };
+    expect(row.verdict).toBe('yum');
+    expect(row.status).toBe('tasted');
+  });
+
+  it('allows clearing the verdict when the row is (also) being kept as todo', async () => {
+    // A todo row may legitimately hold verdict null; PATCH { verdict: null } on a
+    // todo row is fine because the resulting status is not 'tasted'.
+    const todo = await createTaste('u1', { name: 'Wishlist', status: 'todo' });
+    memdb().public.none(`UPDATE tastes SET verdict = 'meh' WHERE id = '${todo.id}'`);
+    const result = asTaste(await updateTaste('u1', todo.id, { verdict: null } as never));
+    expect(result.status).toBe('todo');
+    expect(result.verdict).toBeNull();
+  });
 });
 
 // ── getStats: excludes todo rows ─────────────────────────────────────────────
