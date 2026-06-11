@@ -128,21 +128,19 @@ function pressableByText(
 }
 
 describe('AddModal', () => {
-  const realOS = Platform.OS
+  let realOS: typeof Platform.OS
 
   beforeEach(() => {
+    realOS = Platform.OS
     jest.useFakeTimers()
     jest.clearAllMocks()
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' })
   })
 
   afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
     jest.clearAllTimers()
     jest.useRealTimers()
-  })
-
-  afterAll(() => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
   })
 
   it('shows only the large photo dropzone label on native', () => {

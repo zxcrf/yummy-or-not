@@ -158,9 +158,13 @@ function findAllHavingProp(
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('AuthScreen keyboard wrapper', () => {
-  const realOS = Platform.OS
+  let realOS: typeof Platform.OS
 
-  afterAll(() => {
+  beforeEach(() => {
+    realOS = Platform.OS
+  })
+
+  afterEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
   })
 

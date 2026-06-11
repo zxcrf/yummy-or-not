@@ -29,13 +29,14 @@ describe('Input._FIELD_COLOR', () => {
 })
 
 describe('Input on Android', () => {
-  const realOS = Platform.OS
+  let realOS: typeof Platform.OS
 
-  beforeAll(() => {
+  beforeEach(() => {
+    realOS = Platform.OS
     // Force the Android branch (jest-expo defaults to ios).
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' })
   })
-  afterAll(() => {
+  afterEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
   })
 
