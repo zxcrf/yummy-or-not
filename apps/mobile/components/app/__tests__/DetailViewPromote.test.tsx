@@ -95,6 +95,11 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: () => mockInvalidateTastes(),
 }))
 
+jest.mock('@/app/(tabs)/_useTags', () => ({
+  useTags: () => ({ tags: [] }),
+  invalidateTagsCache: jest.fn(),
+}))
+
 // ---- mock expo-router -----------------------------------------------------
 
 jest.mock('expo-router', () => ({
