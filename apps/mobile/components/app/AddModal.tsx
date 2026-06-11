@@ -178,6 +178,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
+  // Measured height of the sticky action footer. The footer floats up over the
+  // scroll viewport when the keyboard opens (KeyboardStickyView), so the scroll
+  // view's bottomOffset must reserve footer height + a 16dp margin — otherwise a
+  // focused bottom field (notes / custom tag) sits BEHIND the floating footer.
+  // Seed with an estimate (button row + paddings + safe-area inset) so the very
+  // first focus before onLayout fires still clears the footer; the real measured
+  // height replaces it on layout.
+  const [footerHeight, setFooterHeight] = useState(64 + insets.bottom)
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -452,11 +461,13 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
       {/* scrollable body — KeyboardAwareScrollView keeps the focused input and
           its cursor visible above the keyboard with a frame-synced animation
-          (no one-frame jump), and bottomOffset reserves a 16dp margin above the
-          keyboard. It subsumes the old RN KeyboardAvoidingView + manual
-          scrollToEnd-on-focus compensation entirely. */}
+          (no one-frame jump). bottomOffset reserves the sticky footer height +
+          a 16dp margin: the footer floats up over the viewport with the keyboard
+          (KeyboardStickyView), so clearing only the keyboard would leave a
+          focused bottom field hidden behind it. It subsumes the old RN
+          KeyboardAvoidingView + manual scrollToEnd-on-focus compensation. */}
       <KeyboardAwareScrollView
-        bottomOffset={16}
+        bottomOffset={footerHeight + 16}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -770,6 +781,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
       <KeyboardStickyView>
         <View
           testID="add-actions-footer"
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           flexDirection="row"
           justifyContent="flex-end"
           gap="$3"

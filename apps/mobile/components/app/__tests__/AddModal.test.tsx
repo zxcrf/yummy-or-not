@@ -176,15 +176,18 @@ describe('AddModal', () => {
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
   })
 
-  it('keeps the focused input above the keyboard via KeyboardAwareScrollView with a bottom margin', () => {
+  it('reserves the sticky footer height plus a 16dp margin in bottomOffset', () => {
     // The form scrolls inside a KeyboardAwareScrollView, which keeps the
     // focused input and its cursor visible above the keyboard with a
     // frame-synced animation (replacing the old RN KeyboardAvoidingView +
-    // manual scrollToEnd-on-focus compensation). bottomOffset reserves the
-    // ≥16dp margin above the keyboard.
+    // manual scrollToEnd-on-focus compensation). The sticky footer floats up
+    // over the viewport with the keyboard, so bottomOffset must clear the
+    // footer height too — not just the 16dp keyboard margin — or a focused
+    // bottom field would sit behind the footer.
     const renderer = renderAddModal()
     const scroll = renderer.root.findByType(KeyboardAwareScrollView)
-    expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(16)
+    // Strictly greater than the bare 16dp margin: footer height is included.
+    expect(scroll.props.bottomOffset).toBeGreaterThan(16)
   })
 
   it('keeps the same KeyboardAwareScrollView construction on iOS (no Platform keyboard branch)', () => {
