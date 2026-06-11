@@ -60,4 +60,8 @@ export const es: Record<string, string> = {
   recall_warn_skip: "La última vez dijiste ×_× NO — mejor pásalo",
   add_duplicate_hint: "Ya lo registraste antes",
   add_warn_hint: "La última vez dijiste que no",
+  // A1
+  share: "Compartir",
+  share_failed: "No se pudo compartir, inténtalo de nuevo",
+  share_brand_tag: "Registrado en Yummy or Not · yon.baobao.click",
 };

@@ -60,4 +60,8 @@ export const en: Record<string, string> = {
   detail_buy_again_confirm: "Confirm purchase",
   detail_warn_banner: "You said skip this one — sure you want to buy it again?",
   you_warn_global_off: "Buy-again warnings are off. Turn them on in Settings.",
+  // A1
+  share: "Share",
+  share_failed: "Couldn't share, try again",
+  share_brand_tag: "Logged with Yummy or Not · yon.baobao.click",
 };

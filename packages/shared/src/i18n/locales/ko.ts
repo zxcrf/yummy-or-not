@@ -60,4 +60,8 @@ export const ko: Record<string, string> = {
   recall_warn_skip: "지난번에 ×_× 별로라고 했어요 — 패스하세요",
   add_duplicate_hint: "전에 기록한 적 있어요",
   add_warn_hint: "지난번에 별로라고 했어요",
+  // A1
+  share: "공유",
+  share_failed: "공유에 실패했습니다. 다시 시도하세요",
+  share_brand_tag: "Yummy or Not에서 기록 · yon.baobao.click",
 };

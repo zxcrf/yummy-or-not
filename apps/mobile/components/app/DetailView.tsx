@@ -9,12 +9,14 @@
    ============================================================ */
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Image, Modal, Pressable, StyleSheet } from 'react-native'
+import { Alert, Image, Modal, Platform, Pressable, StyleSheet, View as RNView } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
 import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { captureRef } from 'react-native-view-shot'
+import * as Sharing from 'expo-sharing'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import {
   Badge,
@@ -29,6 +31,7 @@ import {
   VerdictPicker,
   VerdictStamp,
 } from '@/components/ds'
+import { ShareCard } from '@/components/app/ShareCard'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -68,6 +71,10 @@ export default function DetailView() {
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   const [originalLoading, setOriginalLoading] = useState(false)
 
+  // Share card state — A1.
+  const [sharing, setSharing] = useState(false)
+  const shareCardRef = useRef<RNView>(null)
+
   // Same-instance route `id` change: re-seed from the shared cache synchronously
   // during render (React "adjust state on prop change" pattern) so we never paint
   // the previous taste for a commit before the passive effect runs. The lazy
@@ -85,6 +92,7 @@ export default function DetailView() {
     setSaveError(null)
     setOriginalUrl(null)
     setOriginalLoading(false)
+    setSharing(false)
     // Reset repurchase state so taste A's open sheet / typed inputs / remind value
     // don't bleed onto taste B before the data effect catches up.
     setRemind(cached?.warnBeforeBuy ?? false)
@@ -255,6 +263,28 @@ export default function DetailView() {
     setBuyPrice(lastPurchase?.price ?? item.price)
     setBuyPlace(lastPurchase?.place ?? item.place)
     setBuySheetOpen(true)
+  }
+
+  const handleShare = async () => {
+    if (!item || sharing) return
+    const captureId = item.id
+    setSharing(true)
+    try {
+      // Wait for the off-screen card to paint (image onLoad fires, or 600 ms
+      // timeout when there is no photo / the thumb is already disk-cached).
+      await new Promise<void>((resolve) => setTimeout(resolve, 600))
+      // Guard: nav moved to a different taste while we waited.
+      if (idRef.current !== captureId) return
+      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
+      if (idRef.current !== captureId) return
+      const available = await Sharing.isAvailableAsync()
+      if (!available) return
+      await Sharing.shareAsync(uri, { mimeType: 'image/png' })
+    } catch {
+      Alert.alert(t('share_failed'))
+    } finally {
+      if (idRef.current === captureId) setSharing(false)
+    }
   }
 
   const submitBuy = async () => {
@@ -512,7 +542,7 @@ export default function DetailView() {
             ) : null}
 
             {/* actions */}
-            <XStack gap="$3" marginTop="$1">
+            <XStack gap="$3" marginTop="$1" flexWrap="wrap">
               <Button variant="secondary" iconLeft={<Icon name="edit" size={18} />} onPress={startEditing}>
                 {t('edit')}
               </Button>
@@ -532,7 +562,35 @@ export default function DetailView() {
               >
                 {t('detail_buy_again')}
               </Button>
+              {Platform.OS !== 'web' ? (
+                <Button
+                  variant="secondary"
+                  iconLeft={<Icon name="arrow-right" size={18} />}
+                  disabled={sharing}
+                  onPress={handleShare}
+                  testID="share-btn"
+                >
+                  {t('share')}
+                </Button>
+              ) : null}
             </XStack>
+
+            {/* Off-screen ShareCard mount for capture — A1 */}
+            {sharing && item ? (
+              <RNView
+                style={{ position: 'absolute', left: -9999, top: 0 }}
+                collapsable={false}
+                pointerEvents="none"
+              >
+                <ShareCard
+                  ref={shareCardRef}
+                  taste={item}
+                  verdictLabel={t('v_' + (item.verdict ?? 'yum'))}
+                  brandText={t('share_brand_tag')}
+                  priceText={item.price ? formatMoney(item.price) : ''}
+                />
+              </RNView>
+            ) : null}
 
             {/* Pro original viewer */}
             {(item.imageThumb || item.image) ? (
