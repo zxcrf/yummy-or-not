@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -42,36 +42,81 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @yon/shared build 2>/dev/null || true
 
-      # Cache the entire android/ directory including CMake build artifacts (.cxx/).
-      # Key covers app.json (plugin config, SDK version) and pnpm-lock.yaml (native
-      # module versions). A cache hit skips expo prebuild AND C++ recompilation —
-      # the largest single time-sink in this pipeline (~5-10 min for Reanimated).
-      - name: Cache android project
+      # Restore android/ including .cxx/ CMake artifacts from most recent run.
+      # Per-run key + restore-key fallback: always gets the latest post-build state.
+      # A separate save step below uploads the updated android/ (with .cxx/) after
+      # the build so the next run's CMake tasks are UP-TO-DATE and skipped entirely.
+      - name: Restore android project cache
         id: cache-android
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: apps/mobile/android
-          key: android-v1-${{ hashFiles('apps/mobile/app.json', 'pnpm-lock.yaml') }}
+          key: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
+          restore-keys: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-
+
+      - name: Detect Android NDK version
+        id: ndk-version
+        run: |
+          version="$(ls "$ANDROID_HOME/ndk" | sort -V | tail -n 1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native CMake cache (.cxx)
+        id: restore-cxx
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules/react-native-gesture-handler/android/.cxx
+            node_modules/react-native-reanimated/android/.cxx
+          key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
+          restore-keys: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-
 
       - name: Expo prebuild (generate android/)
-        if: steps.cache-android.outputs.cache-hit != 'true'
         working-directory: apps/mobile
-        run: pnpm exec expo prebuild --platform android --no-install
+        run: test -f android/settings.gradle || pnpm exec expo prebuild --platform android --no-install
 
       - name: Configure Gradle properties
+        # Write to ~/.gradle/gradle.properties (user-level) so android/gradle.properties
+        # is never modified — keeping its content stable is critical for Gradle build
+        # cache hits (any change to the file invalidates all Kotlin task inputs).
         run: |
-          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\n' \
-            >> apps/mobile/android/gradle.properties
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError\nkotlin.daemon.jvmargs=-Xmx2g\norg.gradle.caching=true\n' \
+            >> ~/.gradle/gradle.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          cache-cleanup: never
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease
+        # -x lintVital*: skip per-library lint analysis (no value for CI APK artifact, saves ~3-4 min)
+        # --stacktrace: surface root cause if org.gradle.caching=true triggers a node task failure
+        run: >-
+          ./gradlew :app:assembleRelease
+          -x lintVitalRelease
+          -x lintVitalAnalyzeRelease
+          -x lintVitalReportRelease
+          --stacktrace
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
           NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Save android project cache
+        uses: actions/cache/save@v4
+        with:
+          path: apps/mobile/android
+          key: android-v2-${{ runner.os }}-${{ hashFiles('apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}-${{ github.run_id }}
+
+      - name: Save native CMake cache (.cxx)
+        if: steps.restore-cxx.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules/react-native-gesture-handler/android/.cxx
+            node_modules/react-native-reanimated/android/.cxx
+          key: android-cxx-v1-${{ runner.os }}-ndk-${{ steps.ndk-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
