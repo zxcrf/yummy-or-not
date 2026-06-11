@@ -276,32 +276,35 @@ describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
     expect(tastedHeaders.length).toBeGreaterThan(0)
   })
 
-  it('caps todo group at 3 items', async () => {
-    // 5 todo items all within range
-    mockItems = Array.from({ length: 5 }, (_, i) =>
+  it('caps todo group at 3 and renders in ascending distance order', async () => {
+    // 4 todo items; user at (31.0, 121.0).
+    // Distances increase with lat: Shop 0 closest, Shop 3 farthest.
+    // Cap is NEARBY_TODO_CAP=3, so Shop 3 must NOT appear in the nearby group.
+    // After fix #1/#2, todo items are excluded from recently-recalled,
+    // so their names only appear if rendered in the nearby-todo group.
+    mockItems = Array.from({ length: 4 }, (_, i) =>
       taste({
         id: `todo-${i}`,
         name: `Shop ${i}`,
         status: 'todo',
         verdict: null,
         // @ts-ignore
-        lat: 31.001 + i * 0.001,
+        lat: 31.001 + i * 0.01, // 0.01° steps → clearly distinct distances
         lng: 121.0,
       }),
     )
 
     const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 })
 
-    // Nearby-todo header renders (section exists)
+    // Section header must appear (≥1 todo item within range)
     const todoHeaders = findTextMatching(renderer, 'Want to try nearby')
     expect(todoHeaders.length).toBeGreaterThan(0)
 
-    // The cap (NEARBY_TODO_CAP=3) is enforced by the useMemo slice.
-    // We verify by checking that "Shop 4" and "Shop 3" do NOT appear in the
-    // nearby section — they are beyond the cap. Since all items also appear in
-    // the recently-recalled section we can only assert the header renders.
-    // The implementation-level cap is covered by the useMemo logic in RecallView.tsx.
-    // This test pins that the section renders at all when items exist.
-    expect(todoHeaders.length).toBeGreaterThan(0)
+    // Shops 0-2 must appear (within cap=3), Shop 3 must NOT
+    // (todo items excluded from recently-recalled, so name presence = nearby group only)
+    expect(findTextMatching(renderer, 'Shop 0').length).toBeGreaterThan(0)
+    expect(findTextMatching(renderer, 'Shop 1').length).toBeGreaterThan(0)
+    expect(findTextMatching(renderer, 'Shop 2').length).toBeGreaterThan(0)
+    expect(findTextMatching(renderer, 'Shop 3')).toHaveLength(0)
   })
 })

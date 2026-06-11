@@ -239,9 +239,13 @@ export default function DetailView() {
   const submitPromote = async () => {
     if (!item || !promoteVerdict || promoteSubmitting) return
     const promoteId = item.id
+    const prevItem = item
     setPromoteSubmitting(true)
+    // Optimistic flip: close sheet and show tasted state immediately.
+    setItem({ ...item, status: 'tasted', verdict: promoteVerdict })
+    setPromoteSheetOpen(false)
     try {
-      const updated = await updateTaste(item.id, {
+      const updated = await updateTaste(promoteId, {
         status: 'tasted',
         verdict: promoteVerdict,
         price: promotePrice || undefined,
@@ -249,9 +253,11 @@ export default function DetailView() {
       void invalidateTastes()
       if (idRef.current !== promoteId) return
       setItem(updated)
-      setPromoteSheetOpen(false)
     } catch (err) {
       if (idRef.current !== promoteId) return
+      // Revert optimistic update on failure.
+      setItem(prevItem)
+      setPromoteSheetOpen(true)
       Alert.alert(err instanceof Error ? err.message : 'Save failed')
     } finally {
       if (idRef.current === promoteId) setPromoteSubmitting(false)

@@ -248,8 +248,8 @@ export default function LibraryView() {
                 tags={it.tags}
                 boughtCount={it.boughtCount}
                 boughtLabel={t('bought_n', { n: it.boughtCount })}
-                verdictLabel={it.verdict ? t('v_' + it.verdict) : undefined}
-                todoLabel={it.verdict == null ? t('todo_badge') : undefined}
+                verdictLabel={it.status !== 'todo' && it.verdict ? t('v_' + it.verdict) : undefined}
+                todoLabel={it.status === 'todo' ? t('todo_badge') : undefined}
                 onPress={() => router.push(`/taste/${it.id}`)}
               />
             </View>

@@ -199,7 +199,11 @@ export default function RecallView() {
   }, [items, userCoords])
 
   // All scored results above threshold, ranked by score descending.
-  const results = useMemo(() => (q ? searchTastes(items, q) : []), [items, q])
+  const tastedItems = useMemo(
+    () => items.filter((it) => (it.status ?? 'tasted') === 'tasted'),
+    [items],
+  )
+  const results = useMemo(() => (q ? searchTastes(tastedItems, q) : []), [tastedItems, q])
 
   const topMatch = results[0]?.item ?? null
   const otherMatches = results.slice(1).map((r) => r.item)
@@ -312,7 +316,7 @@ export default function RecallView() {
             >
               {t('recently_recalled')}
             </Text>
-            {items.slice(0, visibleRecentItems).map((it) => (
+            {tastedItems.slice(0, visibleRecentItems).map((it) => (
               <RecallRow
                 key={it.id}
                 item={it}
