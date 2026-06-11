@@ -10,7 +10,8 @@
    ============================================================ */
 
 import { useState } from 'react'
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet } from 'react-native'
+import { Alert, Platform, Pressable, StyleSheet } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import Animated, {
   FadeIn,
   FadeOut,
@@ -100,7 +101,7 @@ export default function AuthScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#fff6e6' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
     >
       <ScrollView
         flex={1}
