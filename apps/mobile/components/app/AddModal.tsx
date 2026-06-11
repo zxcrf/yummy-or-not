@@ -160,8 +160,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // KeyboardAvoidingView (padding) shrinks the scroll viewport to end above the
   // keyboard — but the focused field still has to be scrolled into that smaller
   // viewport. The bottom fields (custom tag + notes) sit below the fold, so
-  // bring the end of the form (those fields + the save row) up on focus. The
-  // delay lets the keyboard-driven padding settle before we measure/scroll.
+  // bring the end of the form up on focus (the save row is now a sticky footer
+  // outside the scroll, always visible — it no longer needs scrolling into view).
+  // The delay lets the keyboard-driven padding settle before we measure/scroll.
   const revealBottomFields = () => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120)
   }
@@ -472,7 +473,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 24 }}
       >
         {/* photo + basic fields */}
         <View gap="$4">
@@ -720,26 +721,32 @@ export default function AddModal({ onClose, onSaved }: Props) {
           </Animated.View>
         ) : null}
 
-        {/* actions */}
-        <View
-          flexDirection="row"
-          justifyContent="flex-end"
-          gap="$3"
-          paddingTop="$2"
-        >
-          <Button variant="ghost" onPress={onClose}>
-            {t('cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!ready || saving}
-            iconLeft={<Icon name="check" size={18} color="#fff" />}
-            onPress={handleSave}
-          >
-            {t('save_taste_web')}
-          </Button>
-        </View>
       </RNScrollView>
+
+      {/* sticky footer — actions row pinned outside the scroll */}
+      <View
+        testID="add-actions-footer"
+        flexDirection="row"
+        justifyContent="flex-end"
+        gap="$3"
+        borderTopWidth={3}
+        borderTopColor="$ink900"
+        paddingHorizontal="$5"
+        paddingTop="$4"
+        paddingBottom={insets.bottom + 16}
+      >
+        <Button variant="ghost" onPress={onClose}>
+          {t('cancel')}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={!ready || saving}
+          iconLeft={<Icon name="check" size={18} color="#fff" />}
+          onPress={handleSave}
+        >
+          {t('save_taste_web')}
+        </Button>
+      </View>
     </View>
     </KeyboardAvoidingView>
   )

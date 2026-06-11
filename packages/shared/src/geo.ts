@@ -41,6 +41,25 @@ export function isInsideChina(lat: number, lng: number): boolean {
   return lat >= 3.86 && lat <= 53.55 && lng >= 73.66 && lng <= 135.05;
 }
 
+/** Great-circle distance between two WGS-84 points in meters (Haversine formula, R=6371000). */
+export function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6_371_000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const sinDLat = Math.sin(dLat / 2)
+  const sinDLng = Math.sin(dLng / 2)
+  const a2 = sinDLat * sinDLat + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * sinDLng * sinDLng
+  return 2 * R * Math.asin(Math.sqrt(a2))
+}
+
+/** Human-readable distance: <1000 m → "999 m"; ≥1000 m → "1.4 km". */
+export function formatDistance(meters: number): string {
+  // Branch on the rounded value so 999.6 m promotes to "1.0 km", not "1000 m".
+  if (Math.round(meters) < 1000) return `${Math.round(meters)} m`
+  return `${(meters / 1000).toFixed(1)} km`
+}
+
 /** Convert a WGS-84 coordinate to GCJ-02 (China Mars coordinate).
  *  Returns the input unchanged if the point is outside China. */
 export function wgs84ToGcj02(lat: number, lng: number): { lat: number; lng: number } {

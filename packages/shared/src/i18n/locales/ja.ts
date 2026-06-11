@@ -5,7 +5,7 @@ export const ja: Record<string, string> = {
   my_tastes: "私の味", count_logged: "{n}件", search_log: "記録を検索…",
   log_taste: "味を記録", recall_title: "前に食べた？",
   recall_sub: "買う前に検索。過去の自分の感想をお知らせします。",
-  recall_placeholder: "「抒茶」や「タピオカ」で検索…", recently_recalled: "最近の検索",
+  recall_placeholder: "「抒茶」や「タピオカ」で検索…", recently_recalled: "最近の検索", nearby_eaten: "近くで食べた",
   verdict_on_file: "記録された評価", loved_it: "気に入った", soso: "まあまあ", skip_it: "イマイチだった",
   no_record: "「{q}」の記録がありません。", try_then_log: "食べてから評価を記録しましょう。", log_it_now: "今すぐ記録",
   add_photo: "写真を追加", photo_permission_denied: "写真を選ぶには写真へのアクセス許可が必要です。", f_what: "何を食べた？", f_where: "どこで？", f_price: "価格",

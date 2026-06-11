@@ -5,7 +5,7 @@ export const zh: Record<string, string> = {
   my_tastes: "我的口味", count_logged: "{n} 条记录", search_log: "搜索你的记录…",
   log_taste: "记录口味", recall_title: "以前吃过吗？",
   recall_sub: "花钱前先搜一下。我们会告诉你过去的你怎么想。",
-  recall_placeholder: "试试“拿铁”或“珍珠奶茶”…", recently_recalled: "最近回忆",
+  recall_placeholder: "试试“拿铁”或“珍珠奶茶”…", recently_recalled: "最近回忆", nearby_eaten: "附近吃过的",
   verdict_on_file: "已存评价", loved_it: "你很喜欢", soso: "一般般", skip_it: "你说别买",
   no_record: "没有“{q}”的记录。", try_then_log: "尝过之后记录你的评价。", log_it_now: "立即记录",
   add_photo: "添加照片", photo_permission_denied: "需要照片权限才能选择图片。", f_what: "你吃了什么？", f_where: "在哪里？", f_price: "价格",

@@ -5,7 +5,7 @@ export const en: Record<string, string> = {
   my_tastes: "My Tastes", count_logged: "{n} logged", search_log: "Search your log…",
   log_taste: "Log a taste", recall_title: "Tasted it before?",
   recall_sub: "Search before you spend. We’ll tell you what past-you thought.",
-  recall_placeholder: "Try “matcha” or “boba”…", recently_recalled: "Recently recalled",
+  recall_placeholder: "Try “matcha” or “boba”…", recently_recalled: "Recently recalled", nearby_eaten: "Eaten nearby",
   verdict_on_file: "Verdict on file", loved_it: "You loved it", soso: "It was so-so", skip_it: "You said skip it",
   no_record: "No record of “{q}”.", try_then_log: "Try it, then log the verdict.", log_it_now: "Log it now",
   add_photo: "Add a photo", photo_permission_denied: "Photo access is needed to choose a picture.", f_what: "What did you have?", f_where: "Where?", f_price: "Price",
