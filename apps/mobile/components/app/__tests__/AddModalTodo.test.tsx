@@ -157,6 +157,13 @@ jest.mock('../PhotoPreview', () => ({
 
 // ---- helpers --------------------------------------------------------------
 
+// Tracks the most recently rendered modal so afterEach can unmount it. The
+// unmount fires AddModal's cleanup effect, which clears the 500ms same-name
+// debounce timer — otherwise a pending real timer fires setDebouncedName after
+// the test completes ("update not wrapped in act"), surfacing as an uncaught
+// error that fails the run on slower CI.
+let currentRenderer: TestRenderer.ReactTestRenderer | null = null
+
 function renderModal() {
   const onClose = jest.fn()
   const onSaved = jest.fn()
@@ -164,6 +171,7 @@ function renderModal() {
   act(() => {
     renderer = TestRenderer.create(<AddModal onClose={onClose} onSaved={onSaved} />)
   })
+  currentRenderer = renderer
   return { renderer, onClose, onSaved }
 }
 
@@ -193,6 +201,13 @@ describe('AddModal A2 — to-taste mode', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCreateTaste.mockResolvedValue({ id: 'new-id' })
+  })
+
+  afterEach(() => {
+    act(() => {
+      currentRenderer?.unmount()
+    })
+    currentRenderer = null
   })
 
   it('defaults to tasted mode — Save button disabled without verdict', () => {

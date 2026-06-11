@@ -83,11 +83,21 @@ jest.mock('expo-location', () => ({
 }))
 
 describe('AddModal footer placement regression', () => {
+  let currentRenderer: TestRenderer.ReactTestRenderer | null = null
+
+  afterEach(() => {
+    act(() => {
+      currentRenderer?.unmount()
+    })
+    currentRenderer = null
+  })
+
   it('renders the actions footer outside the ScrollView (sticky, not scrollable)', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
     })
+    currentRenderer = renderer
 
     // Footer must exist in the tree.
     const footer = renderer.root.findByProps({ testID: 'add-actions-footer' })
