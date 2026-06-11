@@ -9,6 +9,27 @@ Deploys `ghcr.io/zxcrf/yum-api:latest` to `ubuntu@baobao.click` after verifying
 the latest `docker-api.yml` CI run succeeded. Guards with commit-hash comparison
 so a stale or in-progress build is never deployed.
 
+## Step 0 — Pre-deploy checks (env + migration)
+
+The container loads env from `/etc/yum-api/.env` (mode 600) at `docker run`. Before
+deploying a commit that adds a NEW required env var or DB migration, stage it FIRST,
+else the new image crashes or 500s on first request.
+
+- **New env var** (e.g. a new provider key): append to `/etc/yum-api/.env` on the server
+  before the restart in Step 4. Current required keys: `DATABASE_URL`, `S3_*`,
+  `AMAP_KEY` (高德 Web 服务 key, powers `/api/geocode/reverse`). Verify presence:
+  ```bash
+  ssh ubuntu@baobao.click "sudo grep -c '^AMAP_KEY=' /etc/yum-api/.env"   # expect 1
+  ```
+  Secrets stay server-side only — never commit them, never bake into the client bundle.
+- **New DB migration** (`apps/api/db/migrations/*.sql`): run it against `yon-pg` BEFORE
+  restarting onto the new image (additive `ADD COLUMN` is safe to run first):
+  ```bash
+  cat apps/api/db/migrations/<n>.sql | \
+    ssh ubuntu@baobao.click "docker exec -i yon-pg psql -U yon -d yon -v ON_ERROR_STOP=1"
+  ```
+  Confirm columns exist before deploying the code that selects them.
+
 ## Step 1 — Verify CI succeeded
 
 ```bash

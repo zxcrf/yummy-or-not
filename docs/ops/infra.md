@@ -56,6 +56,26 @@ ssh ubuntu@baobao.click 'docker run -d --name yon-pg --restart unless-stopped \
 
 ⚠️ `storage.ts` 中 S3 SDK 必须使用**静态 import**。Next.js standalone bundler (nft) 不追踪动态 `await import()`，会导致运行时找不到模块。
 
+## 逆地理编码（reverse geocode）
+
+`GET /api/geocode/reverse?lat&lng`（**需登录鉴权**，非开放代理）。客户端先用
+`expo-location` native 解析，空/失败才回退到本接口。按坐标区域路由 provider：
+
+| 区域 | Provider | 说明 |
+|---|---|---|
+| 中国 bbox（`isInsideChina`） | **高德 AMap** `restapi.amap.com/v3/geocode/regeo` | 调用前必须 **WGS-84 → GCJ-02** 纠偏（`packages/shared/src/geo.ts`），否则偏移数百米；`location` 参数是 **lng,lat** 顺序 |
+| 海外 | **Nominatim (OSM)** `nominatim.openstreetmap.org/reverse` | 必须带描述性 `User-Agent`（OSM policy），否则 403 |
+
+| 项 | 值 |
+|---|---|
+| Key | `AMAP_KEY` in `/etc/yum-api/.env`（mode 600，**高德「Web 服务」类型** key，非 Android SDK key） |
+| 失败行为 | 任一 provider 失败 → `200 {place:null}`，不抛 500；客户端仍存坐标 |
+| 超时 | 每个上游 5s `AbortController` |
+| 安全 | `AMAP_KEY` 只在服务端读 `process.env`，**绝不进客户端包**（客户端只调本接口，不直连高德），不记日志 |
+
+⚠️ 换高德 key / 新建 key：服务平台选 **「Web 服务」**（REST），不要 Android 平台
+（那个要 SHA1 + 包名，用于客户端 SDK，本项目用不到）。
+
 ## 备份
 
 | 项目 | 值 |
