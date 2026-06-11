@@ -8,12 +8,13 @@
    - no-record empty state that links to Add
    ============================================================ */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, RefreshControl, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
+import * as Location from 'expo-location'
 import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
-import { searchTastes, type Taste, type Verdict } from '@yon/shared'
+import { searchTastes, haversineMeters, formatDistance, type Taste, type Verdict } from '@yon/shared'
 import { Button, Card, Icon, Input, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
@@ -52,11 +53,13 @@ function RecallRow({
   onPress,
   flat,
   warnActive,
+  distanceLabel,
 }: {
   item: Taste
   onPress: () => void
   flat?: boolean
   warnActive?: boolean
+  distanceLabel?: string
 }) {
   const { t } = useI18n()
   return (
@@ -110,6 +113,9 @@ function RecallRow({
           <Text color="$ink500" fontSize={13}>
             {item.place} · {item.date}
           </Text>
+          {distanceLabel ? (
+            <Text color="$ink400" fontSize={12}>{distanceLabel}</Text>
+          ) : null}
         </YStack>
         <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
       </XStack>
@@ -128,6 +134,35 @@ export default function RecallView() {
   const [refreshing, setRefreshing] = useState(false)
   const visibleRecentItems = recentCardCount(height)
 
+  // Nearby eaten — one-shot locate on mount when locationEnabled and no active query.
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+
+  useEffect(() => {
+    if (!user?.locationEnabled) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const perm = await Location.requestForegroundPermissionsAsync()
+        if (!perm.granted || cancelled) return
+        const posPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timeout')), 10_000)
+        })
+        try {
+          const pos = await Promise.race([posPromise, timeout])
+          if (!cancelled) setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        } finally {
+          if (timer) clearTimeout(timer)
+        }
+      } catch {
+        // Silent degrade — no coords, nearby group won't render
+      }
+    })()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.locationEnabled])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -136,6 +171,19 @@ export default function RecallView() {
       setRefreshing(false)
     }
   }, [refresh])
+
+  // Nearby eaten — items with coords sorted by distance ascending.
+  // Distance tiebreaker in search results is deferred (out of scope for L2).
+  const nearbyItems = useMemo(() => {
+    if (!userCoords) return []
+    return items
+      .filter((it) => it.lat != null && it.lng != null)
+      .map((it) => ({
+        item: it,
+        distance: haversineMeters(userCoords.lat, userCoords.lng, it.lat!, it.lng!),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+  }, [items, userCoords])
 
   // All scored results above threshold, ranked by score descending.
   const results = useMemo(() => (q ? searchTastes(items, q) : []), [items, q])
@@ -191,6 +239,26 @@ export default function RecallView() {
       <YStack gap="$3">
         {!q ? (
           <YStack gap="$3">
+            {nearbyItems.length > 0 ? (
+              <YStack gap="$3">
+                <Text
+                  color="$ink400"
+                  fontSize={10}
+                  letterSpacing={1}
+                  textTransform="uppercase"
+                >
+                  {t('nearby_eaten')}
+                </Text>
+                {nearbyItems.map(({ item: it, distance }) => (
+                  <RecallRow
+                    key={it.id}
+                    item={it}
+                    onPress={() => router.push(`/taste/${it.id}`)}
+                    distanceLabel={formatDistance(distance)}
+                  />
+                ))}
+              </YStack>
+            ) : null}
             <Text
               color="$ink400"
               fontSize={10}
