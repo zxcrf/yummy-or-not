@@ -81,6 +81,11 @@ renders and that no raw `img` element appears in the tree.
 **当前项目建议**
 继续当前方向：`AuthScreen` 共享 `<Input />`，`Input` 内部 Android raw `TextInput`，Web/iOS Tamagui。若 `Input` Android 分支继续变长，再拆成 `Input.android.tsx`。测试保留 Android 回归：确认真实 RN `TextInput` 存在，且 `color` 是 concrete hex。
 
+**UX 设计文档（按需阅读，不要预先全读）**
+- 改键盘/输入框/表单/`KeyboardAvoidingView`/sticky footer → 先读 `docs/product/keyboard-ux.md`（键盘升降策略、动画同步准则、验收清单）。
+- 加按压反馈/过渡/出入场动画 → 先读 `docs/product/material-motion.md`（动画 preset 与各组件已用模式）。
+- 涉及 Web 与 Mobile 行为取舍 → 查 `docs/product/platform-differences.md`。
+
 ## 部署拓扑
 
 | 层 | 地址 / 位置 | 说明 |
