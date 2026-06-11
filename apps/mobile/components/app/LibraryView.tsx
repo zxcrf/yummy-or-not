@@ -244,6 +244,7 @@ export default function LibraryView() {
                 name={it.name}
                 place={it.place}
                 price={formatMoney(it.price)}
+                status={it.status}
                 verdict={it.verdict}
                 tags={it.tags}
                 boughtCount={it.boughtCount}

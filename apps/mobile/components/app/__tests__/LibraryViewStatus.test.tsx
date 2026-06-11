@@ -77,12 +77,12 @@ jest.mock('@/providers/I18nProvider', () => ({
 // ---- mock ds components ---------------------------------------------------
 
 jest.mock('@/components/ds', () => ({
-  FoodCard: ({ name, todoLabel, verdictLabel, testID }: {
-    name?: string; todoLabel?: string; verdictLabel?: string; testID?: string
+  FoodCard: ({ name, todoLabel, verdictLabel, status, testID }: {
+    name?: string; todoLabel?: string; verdictLabel?: string; status?: string; testID?: string
   }) => (
-    <div data-testid={testID ?? 'food-card'} data-name={name} data-todo-label={todoLabel} data-verdict-label={verdictLabel}>
+    <div data-testid={testID ?? 'food-card'} data-name={name} data-todo-label={todoLabel} data-verdict-label={verdictLabel} data-status={status}>
       {name}
-      {todoLabel ? <span data-testid="todo-badge-label">{todoLabel}</span> : null}
+      {status === 'todo' && todoLabel ? <span data-testid="todo-badge-label">{todoLabel}</span> : null}
     </div>
   ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
@@ -227,5 +227,47 @@ describe('LibraryView A2 — status tabs', () => {
 
     const todoCards = renderer.root.findAll((n) => n.props['data-name'] === 'Matcha Latte')
     expect(todoCards).toHaveLength(0)
+  })
+
+  // ── Defensive: FoodCard status prop drives badge, not verdict nullness ──────
+
+  it('tasted item with null verdict does NOT show todo badge', () => {
+    // Hypothetical: a tasted row whose verdict is null (data gap) must never
+    // receive the todo badge — badge is gated on status, not verdict.
+    mockItems = [tastedTaste({ id: 'gap', name: 'Null-verdict Tasted', verdict: null })]
+    const renderer = render()
+
+    // On the tasted tab, the item appears
+    const cards = renderer.root.findAll((n) => n.props['data-name'] === 'Null-verdict Tasted')
+    expect(cards.length).toBeGreaterThan(0)
+
+    // status passed as 'tasted' — no todo badge
+    const withTodoLabel = renderer.root.findAll(
+      (n) => n.props['data-name'] === 'Null-verdict Tasted' && n.props['data-todo-label'] != null,
+    )
+    expect(withTodoLabel).toHaveLength(0)
+
+    // No todo-badge-label span rendered
+    expect(renderer.root.findAll((n) => n.props['data-testid'] === 'todo-badge-label')).toHaveLength(0)
+  })
+
+  it('todo item always shows todo badge regardless of verdict field', () => {
+    // A todo item must always get the badge even if verdict were somehow non-null.
+    mockItems = [todoTaste({ id: 'td-v', name: 'Todo With Verdict', verdict: 'yum' as const })]
+    const renderer = render()
+
+    // Switch to todo tab
+    const todoTab = findTabNode(renderer, 'lib-tab-todo')
+    act(() => { todoTab[0].props.onPress() })
+
+    // Item present in todo tab
+    const cards = renderer.root.findAll((n) => n.props['data-name'] === 'Todo With Verdict')
+    expect(cards.length).toBeGreaterThan(0)
+
+    // status='todo' passed → todo badge rendered
+    const withTodoLabel = renderer.root.findAll(
+      (n) => n.props['data-name'] === 'Todo With Verdict' && n.props['data-todo-label'] === 'Want to Try',
+    )
+    expect(withTodoLabel.length).toBeGreaterThan(0)
   })
 })
