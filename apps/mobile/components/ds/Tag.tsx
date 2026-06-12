@@ -108,14 +108,14 @@ export function Tag({
       }}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, disabled }}
     >
       <Animated.View
-        style={[styles.chip, active && styles.active, driver.animatedStyle, style]}
+        style={[styles.chip, active && styles.active, style, driver.animatedStyle]}
       >
         <Text style={[styles.label, { color: textColor }]}>{children}</Text>
-        {onRemove ? (
+        {onRemove && !disabled ? (
           <Text
             accessibilityRole="button"
             accessibilityLabel="Remove"

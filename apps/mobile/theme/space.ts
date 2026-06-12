@@ -28,7 +28,17 @@ export const space: Record<number, number> & { true: number } = {
 // ---------- Radius ----------
 // Mirrors tokens/effects.css --radius-*
 
-export const radius = {
+export const radius: {
+  0: number
+  xs: number
+  sm: number
+  md: number
+  lg: number
+  xl: number
+  pill: number
+  /** Tamagui compat alias — maps to `md` (10px). */
+  true: number
+} = {
   0: 0,
   xs: 4,
   sm: 6,
@@ -36,7 +46,8 @@ export const radius = {
   lg: 16,
   xl: 22,
   pill: 999,
-} as const
+  true: 10,
+}
 
 // ---------- Border widths ----------
 // Chunky ink borders — tokens/effects.css --border-thin/-w/-thick
@@ -49,9 +60,19 @@ export const borderWidths = {
 
 // ---------- Z-index ----------
 
-export const zIndex = {
+export const zIndex: {
+  0: number
+  base: number
+  sticky: number
+  overlay: number
+  toast: number
+  /** Tamagui compat alias — maps to `base` (1). */
+  true: number
+} = {
+  0: 0,
   base: 1,
   sticky: 100,
   overlay: 1000,
   toast: 2000,
-} as const
+  true: 1,
+}

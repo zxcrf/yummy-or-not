@@ -111,7 +111,6 @@ export function Button({
     <Pressable
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
       onPressIn={(e) => {
         driver.onPressIn()
         callerPressIn?.(e)
@@ -121,6 +120,7 @@ export function Button({
         callerPressOut?.(e)
       }}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, disabled }}
     >
       {({ pressed }) => (
         <Animated.View
@@ -130,8 +130,11 @@ export function Button({
             styles[size],
             block && styles.block,
             disabled && styles.disabled,
-            driver.animatedStyle,
+            // Caller style placed BEFORE animated style so that any caller
+            // transform is overridden by the Reanimated transform, not the
+            // other way around (prevents silent press-motion disappearance).
             style,
+            driver.animatedStyle,
             // On iOS: shadow collapses 5x5 → 0x0 during nudge press.
             // Android: translate handles the visual; shadow unchanged.
             pressed && !disabled ? pressedShadow.button : undefined,

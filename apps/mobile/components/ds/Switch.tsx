@@ -59,7 +59,6 @@ export function Switch({ checked = false, onChange, disabled = false, style, ...
   return (
     <Pressable
       accessibilityRole="switch"
-      accessibilityState={{ checked, disabled }}
       disabled={disabled}
       onPress={() => {
         if (!disabled) onChange?.(!checked)
@@ -73,6 +72,7 @@ export function Switch({ checked = false, onChange, disabled = false, style, ...
         style,
       ]}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, checked, disabled }}
     >
       <Animated.View
         style={[

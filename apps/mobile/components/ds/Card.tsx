@@ -118,7 +118,7 @@ function InteractiveCard({ variant, padded, style, children, rest }: Interactive
       testID={testID as string | undefined}
       accessibilityLabel={accessibilityLabel as string | undefined}
       accessibilityHint={accessibilityHint as string | undefined}
-      accessibilityRole={accessibilityRole as PressableProps['accessibilityRole']}
+      accessibilityRole={(accessibilityRole ?? 'button') as PressableProps['accessibilityRole']}
       hitSlop={hitSlop as PressableProps['hitSlop']}
       disabled={disabled as boolean | undefined}
       accessibilityState={{ disabled: !!disabled }}
@@ -131,8 +131,9 @@ function InteractiveCard({ variant, padded, style, children, rest }: Interactive
             padded && styles.padded,
             // On press: shadow collapses from 5x5 to 3x3 (iOS); translate handles Android
             pressed ? pressedShadow.card : undefined,
-            animatedStyle,
+            // Caller style before animated style so Reanimated transform wins.
             style,
+            animatedStyle,
           ]}
           {...(viewRest as object)}
         >

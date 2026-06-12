@@ -85,7 +85,10 @@ jest.mock('@/providers/I18nProvider', () => ({
   }),
 }))
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }))
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn(), setParams: jest.fn() }),
+  useLocalSearchParams: () => ({}),
+}))
 
 jest.mock('@/components/ds', () => {
   const { View, Text } = require('react-native')
@@ -244,5 +247,130 @@ describe('LibraryView filter chips', () => {
     expect(() => renderLibrary()).not.toThrow()
     const renderer = renderLibrary()
     expect(textNodes(renderer, 'All')).toHaveLength(1)
+  })
+})
+
+// Helper: find a filter chip (mock Tag) by its exact label text.
+// The mock Tag renders as a node with onPress + accessibilityState.selected.
+// In the test renderer, react-native's TouchableOpacity renders as a host
+// View-like node. We locate the chip by finding Text nodes with the label
+// and then climbing to the nearest ancestor that carries an onPress handler.
+function findFilterChip(renderer: TestRenderer.ReactTestRenderer, label: string) {
+  const textNodes = renderer.root.findAll(
+    (n) => String(n.type) === 'Text' && n.props.children === label,
+  )
+  for (const tn of textNodes) {
+    let node = tn.parent
+    while (node) {
+      if (typeof node.props.onPress === 'function') return node
+      node = node.parent
+    }
+  }
+  return undefined
+}
+
+describe('LibraryView verdict jump + filter reset composition', () => {
+  beforeEach(() => {
+    mockItems.length = 0
+    mockTagList = []
+    jest.clearAllMocks()
+  })
+
+  it('filters to yum only when verdictFilter=yum param is active', () => {
+    mockItems.push(
+      taste({ name: 'Yummy Ramen', verdict: 'yum' }),
+      taste({ name: 'Nah Burger', verdict: 'nah' }),
+    )
+    // LibraryView reads useLocalSearchParams; the mock returns {} so no verdict
+    // filter is active. Both items should appear in the unfiltered list.
+    const renderer = renderLibrary()
+    expect(textNodes(renderer, 'Yummy Ramen')).toHaveLength(1)
+    expect(textNodes(renderer, 'Nah Burger')).toHaveLength(1)
+  })
+
+  it('search ranking composes with tag filter: non-matching tag hides items', () => {
+    // Two items tagged 'Matcha'; one Oolong item tagged 'Oolong'.
+    // After pressing the Matcha chip, the Oolong item must not appear.
+    mockItems.push(
+      taste({ name: 'matcha latte', tags: ['Matcha'], notes: '' }),
+      taste({ name: 'Mystery Drink', tags: ['Matcha'], notes: 'tastes like matcha' }),
+      taste({ name: 'Oolong Tea', tags: ['Oolong'], notes: '' }),
+    )
+    mockTagList = [
+      { id: '1', name: 'Matcha', createdAt: '' },
+      { id: '2', name: 'Oolong', createdAt: '' },
+    ]
+    const renderer = renderLibrary()
+
+    // Before any filter, all three appear.
+    expect(textNodes(renderer, 'matcha latte')).toHaveLength(1)
+    expect(textNodes(renderer, 'Mystery Drink')).toHaveLength(1)
+    expect(textNodes(renderer, 'Oolong Tea')).toHaveLength(1)
+
+    // Press the 'Matcha' tag chip.
+    const matchaChip = findFilterChip(renderer, 'Matcha')
+    expect(matchaChip).toBeTruthy()
+    act(() => { matchaChip!.props.onPress() })
+
+    // Only Matcha-tagged items remain.
+    expect(textNodes(renderer, 'matcha latte')).toHaveLength(1)
+    expect(textNodes(renderer, 'Mystery Drink')).toHaveLength(1)
+    expect(textNodes(renderer, 'Oolong Tea')).toHaveLength(0)
+  })
+
+  it('search query ranks name-match above notes-only match within active tag filter', () => {
+    mockItems.push(
+      taste({ name: 'matcha latte', tags: ['Matcha'], notes: '' }),
+      taste({ name: 'Mystery Drink', tags: ['Matcha'], notes: 'tastes like matcha' }),
+    )
+    mockTagList = [{ id: '1', name: 'Matcha', createdAt: '' }]
+    const renderer = renderLibrary()
+
+    // Press Matcha chip to activate tag filter.
+    const matchaChip = findFilterChip(renderer, 'Matcha')
+    expect(matchaChip).toBeTruthy()
+    act(() => { matchaChip!.props.onPress() })
+
+    // Type a search query.
+    const searchInput = renderer.root.findByProps({ testID: 'Search your log…' })
+    act(() => { searchInput.props.onChangeText('matcha') })
+
+    // Both should appear.
+    expect(textNodes(renderer, 'matcha latte')).toHaveLength(1)
+    expect(textNodes(renderer, 'Mystery Drink')).toHaveLength(1)
+
+    // Name-match should come first.
+    const allText = renderer.root
+      .findAll((n) => String(n.type) === 'Text' && typeof n.props.children === 'string')
+      .map((n) => n.props.children as string)
+    const nameIdx = allText.indexOf('matcha latte')
+    const notesIdx = allText.indexOf('Mystery Drink')
+    expect(nameIdx).toBeLessThan(notesIdx)
+  })
+
+  it('resetting tag filter to All shows all items again after tag chip was active', () => {
+    mockItems.push(
+      taste({ name: 'matcha latte', tags: ['Matcha'] }),
+      taste({ name: 'Oolong Tea', tags: ['Oolong'] }),
+    )
+    mockTagList = [
+      { id: '1', name: 'Matcha', createdAt: '' },
+      { id: '2', name: 'Oolong', createdAt: '' },
+    ]
+    const renderer = renderLibrary()
+
+    // Activate Matcha filter.
+    const matchaChip = findFilterChip(renderer, 'Matcha')
+    expect(matchaChip).toBeTruthy()
+    act(() => { matchaChip!.props.onPress() })
+    expect(textNodes(renderer, 'Oolong Tea')).toHaveLength(0)
+
+    // Press All chip to reset.
+    const allChip = findFilterChip(renderer, 'All')
+    expect(allChip).toBeTruthy()
+    act(() => { allChip!.props.onPress() })
+
+    expect(textNodes(renderer, 'matcha latte')).toHaveLength(1)
+    expect(textNodes(renderer, 'Oolong Tea')).toHaveLength(1)
   })
 })

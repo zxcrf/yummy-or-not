@@ -82,7 +82,6 @@ export function IconButton({
     <Pressable
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
       onPressIn={(e) => {
         driver.onPressIn()
         callerPressIn?.(e)
@@ -92,6 +91,7 @@ export function IconButton({
         callerPressOut?.(e)
       }}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, disabled }}
     >
       {({ pressed }) => (
         <Animated.View
@@ -101,8 +101,9 @@ export function IconButton({
             styles[size],
             round && styles.round,
             disabled && styles.disabled,
-            driver.animatedStyle,
+            // Caller style before animated style so Reanimated transform wins.
             style,
+            driver.animatedStyle,
             // On iOS: shadow collapses 5x5 → 0x0 during nudge press.
             // Android: translate handles the visual; shadow unchanged.
             pressed && !disabled ? pressedShadow.button : undefined,

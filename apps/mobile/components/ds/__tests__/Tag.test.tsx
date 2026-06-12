@@ -141,6 +141,37 @@ describe('Tag — style? pass-through (FoodCard position-via-style path)', () =>
   })
 })
 
+describe('Tag — disabled + removable (CRITICAL regression)', () => {
+  it('does NOT render the remove × button when disabled=true (disabled chip must not delete)', () => {
+    const onRemove = jest.fn()
+    const renderer = render({
+      onPress: jest.fn(),
+      onRemove,
+      disabled: true,
+      children: 'Chip',
+    })
+    // The × Text node must not be in the tree when the tag is disabled.
+    const removeNodes = renderer.root.findAll(
+      (n) => String(n.type) === 'Text' && n.props.children === '×',
+    )
+    expect(removeNodes).toHaveLength(0)
+  })
+
+  it('renders the remove × button when NOT disabled', () => {
+    const onRemove = jest.fn()
+    const renderer = render({
+      onPress: jest.fn(),
+      onRemove,
+      disabled: false,
+      children: 'Chip',
+    })
+    const removeNodes = renderer.root.findAll(
+      (n) => String(n.type) === 'Text' && n.props.children === '×',
+    )
+    expect(removeNodes).toHaveLength(1)
+  })
+})
+
 describe('Tag — disabled (§1.3b rule 2)', () => {
   it('sets accessibilityState.disabled=true when disabled', () => {
     const renderer = render({

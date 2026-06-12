@@ -116,10 +116,12 @@ export function FoodCard({
     <View
       style={[
         styles.frame,
+        // Caller style placed BEFORE the press transform so that a caller
+        // transform cannot silently override the pressed-scale visual.
+        style,
         pressed
           ? { transform: [{ scale: 0.98 }], shadowOffset: { width: 3, height: 3 } }
           : { transform: [{ scale: 1 }], shadowOffset: { width: 5, height: 5 } },
-        style,
       ]}
       {...safeRest}
     >

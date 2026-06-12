@@ -9,7 +9,7 @@
    the app.
    ============================================================ */
 
-import { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
@@ -426,6 +426,11 @@ function SocialButtons({
   const shown = providers.filter((p) => p.audience === audience)
   if (shown.length === 0) return null
 
+  // Per-provider in-flight guard: prevents duplicate openAuthSessionAsync
+  // sessions when the user taps a social button multiple times rapidly.
+  // A ref (not state) avoids a re-render on toggle.
+  const oauthInFlight = useRef<Record<string, boolean>>({})
+
   return (
     <View style={styles.socialSection}>
       <View style={styles.orDivider}>
@@ -459,6 +464,8 @@ function SocialButtons({
               variant="secondary"
               block
               onPress={() => {
+                if (oauthInFlight.current[p.id]) return
+                oauthInFlight.current[p.id] = true
                 void handleOAuth(
                   oauthStartUrl(p.id),
                   async (token) => {
@@ -468,7 +475,9 @@ function SocialButtons({
                     await onDone()
                   },
                   (reason) => setError(t(errKey(reason))),
-                )
+                ).finally(() => {
+                  oauthInFlight.current[p.id] = false
+                })
               }}
               iconLeft={<Icon name="user" size={16} color="#3a2f43" />}
             >

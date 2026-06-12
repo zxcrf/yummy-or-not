@@ -12,7 +12,6 @@ type Ctx = { params: Promise<{ provider: string }> };
 export async function GET(req: NextRequest, { params }: Ctx) {
   const { provider: id } = await params;
   const provider = getProvider(id);
-  const origin = req.nextUrl.origin;
 
   if (!provider || !isConfigured(provider)) {
     // Return a structured JSON error instead of bouncing to the now-deleted web
@@ -26,6 +25,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
   const state = randomBytes(16).toString('hex');
   // The callback runs on THIS api origin (where the state cookie lives).
+  const origin = req.nextUrl.origin;
   const redirectUri = `${origin}/api/auth/oauth/${id}/callback`;
   const res = NextResponse.redirect(buildAuthorizeUrl(provider, redirectUri, state));
   res.cookies.set(`yon_oauth_state_${id}`, state, {

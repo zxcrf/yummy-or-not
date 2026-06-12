@@ -130,6 +130,10 @@ describe('radius', () => {
   it('radius.lg = 16', () => { expect(radius.lg).toBe(16) })
   it('radius.xl = 22', () => { expect(radius.xl).toBe(22) })
   it('radius.pill = 999', () => { expect(radius.pill).toBe(999) })
+  it('radius.true is defined and a valid number (Tamagui compat, maps to md=10)', () => {
+    expect(typeof (radius as Record<string, unknown>).true).toBe('number')
+    expect((radius as Record<string, unknown>).true).toBe(10)
+  })
 })
 
 describe('borderWidths', () => {
@@ -144,6 +148,13 @@ describe('zIndex', () => {
   it('overlay = 1000, toast = 2000', () => {
     expect(zIndex.overlay).toBe(1000)
     expect(zIndex.toast).toBe(2000)
+  })
+  it('zIndex[0] = 0 (Tamagui compat)', () => {
+    expect((zIndex as Record<string | number, unknown>)[0]).toBe(0)
+  })
+  it('zIndex.true is defined and maps to base=1 (Tamagui compat)', () => {
+    expect(typeof (zIndex as Record<string, unknown>).true).toBe('number')
+    expect((zIndex as Record<string, unknown>).true).toBe(1)
   })
 })
 
