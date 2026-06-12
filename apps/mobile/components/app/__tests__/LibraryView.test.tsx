@@ -94,16 +94,16 @@ jest.mock('@/components/ds', () => {
       <View testID={testID ?? `card-${name}`}><Text>{name}</Text></View>
     ),
     Icon: () => null,
-    Input: ({ onChangeText, value, placeholder, 'aria-label': al }: {
+    Input: ({ onChangeText, value, placeholder, accessibilityLabel }: {
       onChangeText?: (v: string) => void
       value?: string
       placeholder?: string
-      'aria-label'?: string
+      accessibilityLabel?: string
     }) => {
       const { TextInput } = require('react-native')
       return (
         <TextInput
-          testID={al ?? placeholder}
+          testID={accessibilityLabel ?? placeholder}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}

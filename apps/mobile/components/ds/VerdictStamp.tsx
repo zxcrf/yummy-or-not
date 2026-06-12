@@ -5,7 +5,8 @@
    the verdict word. No motion (static stamp).
    ============================================================ */
 
-import { View, Text, StyleSheet, type StyleProp, type ViewStyle, type ViewProps } from 'react-native'
+import { View, StyleSheet, type StyleProp, type ViewStyle, type ViewProps } from 'react-native'
+import { Text } from '@/theme'
 import { colors, radius, space } from '@/theme'
 import type { Verdict } from '@yon/shared'
 

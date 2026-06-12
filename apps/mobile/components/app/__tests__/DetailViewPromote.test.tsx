@@ -179,18 +179,24 @@ jest.mock('@/components/ds', () => ({
   ),
   Input: ({ value, onChangeText, label, testID }: {
     value: string; onChangeText?: (t: string) => void; label?: string; testID?: string
-  }) => (
-    <input aria-label={label} value={value} onChange={(e) => onChangeText?.(e.target.value)} data-testid={testID} />
-  ),
+  }) => {
+    const { TextInput } = require('react-native')
+    return (
+      <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} testID={testID} />
+    )
+  },
   Switch: ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
     <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
   ),
   Tag: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Textarea: ({ value, onChangeText, label }: {
     value: string; onChangeText?: (t: string) => void; label?: string
-  }) => (
-    <textarea aria-label={label} value={value} onChange={(e) => onChangeText?.(e.target.value)} />
-  ),
+  }) => {
+    const { TextInput } = require('react-native')
+    return (
+      <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} multiline />
+    )
+  },
   VerdictPicker: ({ value, onChange }: { value: string | null; onChange: (v: string) => void }) => (
     <div data-testid="promote-verdict-picker">
       {(['yum', 'meh', 'nah'] as const).map((v) => (

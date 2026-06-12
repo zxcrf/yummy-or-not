@@ -7,7 +7,7 @@
    3. disabled sets accessibilityState.disabled === true (§1.3b rule 2).
    4. Caller-supplied onPressIn spy fires when not disabled (§1.3b rule 1).
    5. Caller-supplied onPressIn spy does NOT fire when disabled (§1.3b rule 2).
-   6. accessibilityLabel pass-through (replaces aria-label).
+   6. accessibilityLabel pass-through.
    ============================================================ */
 
 import React from 'react'

@@ -145,17 +145,17 @@ jest.mock('@/components/ds', () => ({
     onChangeText,
     value,
     placeholder,
-    'aria-label': ariaLabel,
+    accessibilityLabel,
   }: {
     onChangeText?: (next: string) => void
     value?: string
     placeholder?: string
-    'aria-label'?: string
+    accessibilityLabel?: string
   }) => {
     const { TextInput } = require('react-native')
     return (
       <TextInput
-        testID={ariaLabel ?? placeholder}
+        testID={accessibilityLabel ?? placeholder}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
