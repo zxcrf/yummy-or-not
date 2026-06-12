@@ -11,6 +11,21 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { Alert } from 'react-native'
 import TagManageView from '../TagManageView'
 
+// The shared jest.setup.js mock aliases KeyboardStickyView to a plain RN View,
+// so it can't be told apart from any other View by type. Override it here with
+// an identifiable wrapper (carrying a dedicated testID) so the keyboard test can
+// assert the rename sheet content actually lives INSIDE the sticky view — and
+// fails if the wrapper is ever removed.
+const KEYBOARD_STICKY_TESTID = 'rename-keyboard-sticky'
+jest.mock('react-native-keyboard-controller', () => {
+  const React = require('react')
+  const { View } = require('react-native')
+  return {
+    KeyboardStickyView: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(View, { testID: 'rename-keyboard-sticky' }, children),
+  }
+})
+
 const mockRenameTag = jest.fn()
 const mockDeleteTag = jest.fn()
 const mockInvalidateTagsCache = jest.fn()
@@ -103,6 +118,33 @@ describe('TagManageView — rename', () => {
     expect(errorEl.props.children).toBe('A tag with that name already exists')
     // invalidateTagsCache must NOT be called on conflict
     expect(mockInvalidateTagsCache).not.toHaveBeenCalled()
+  })
+})
+
+describe('TagManageView — rename sheet keyboard handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  // Regression: the rename bottom-sheet had no keyboard handling, so when the
+  // soft keyboard opened it covered the rename input and the save/cancel
+  // buttons (the "标签管理" page bug). The fix wraps the sheet content in
+  // react-native-keyboard-controller's KeyboardStickyView so it rides up with
+  // the keyboard — the same strategy AddModal's footer / AuthScreen use. This
+  // test fails if the sheet content is no longer inside a KeyboardStickyView.
+  it('renders the rename input and save button inside a KeyboardStickyView', () => {
+    const renderer = renderTagManageView()
+
+    act(() => {
+      renderer.root.findByProps({ testID: 'rename-tag-tag-1' }).props.onPress()
+    })
+
+    // findByProps throws if the sticky wrapper is absent — i.e. if the sheet
+    // content is rendered bare (the original bug). The input and confirm button
+    // must be descendants so they float above the keyboard, not behind it.
+    const sticky = renderer.root.findByProps({ testID: KEYBOARD_STICKY_TESTID })
+    expect(sticky.findByProps({ testID: 'rename-tag-input' })).toBeTruthy()
+    expect(sticky.findByProps({ testID: 'rename-confirm-btn' })).toBeTruthy()
   })
 })
 
