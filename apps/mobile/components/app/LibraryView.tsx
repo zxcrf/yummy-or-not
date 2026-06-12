@@ -1,14 +1,14 @@
 /* ============================================================
-   YUMMY OR NOT — LibraryView (Tamagui / React Native)
+   YUMMY OR NOT — LibraryView (plain RN + theme)
    Browse logged tastes: search by name/place/notes (ranked), filter
    chips from the user's tag candidate set, and a grid/list of FoodCards.
    Loading + empty states. Tapping a card routes to /taste/[id].
    ============================================================ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, RefreshControl, ScrollView, View, useWindowDimensions } from 'react-native'
 import * as ExpoRouter from 'expo-router'
-import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
+import { colors, space, Text } from '@/theme'
 import { searchTastes } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
@@ -30,7 +30,7 @@ export default function LibraryView() {
       ? ExpoRouter.useLocalSearchParams<{ verdict?: string | string[] }>()
       : {}
   const { width } = useWindowDimensions()
-  const isDesktop = width >= 768
+  const isWide = width >= 768
 
   const { items, loading, refresh } = useRefreshableTastes()
   const { tags } = useTags()
@@ -89,46 +89,45 @@ export default function LibraryView() {
 
   return (
     <ScrollView
-      flex={1}
-      backgroundColor="$background"
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#191017"
-          colors={['#191017']}
+          tintColor={colors.ink900}
+          colors={[colors.ink900]}
         />
       }
     >
       {/* header */}
-      <YStack gap="$3">
-        <XStack alignItems="center" justifyContent="space-between" gap="$2">
-          <Text color="$color" fontWeight="700" fontSize={28}>
+      <View style={{ gap: space[3] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
+          <Text style={{ fontWeight: '700', fontSize: 28 }}>
             {t('my_tastes')}
           </Text>
-          <Text color="$colorMuted" fontSize={13}>
+          <Text style={{ color: colors.colorMuted, fontSize: 13 }}>
             {t('count_logged', { n: items.length })}
           </Text>
-        </XStack>
+        </View>
 
         {/* search box */}
-        <View position="relative" justifyContent="center">
-          <View position="absolute" left={12} zIndex={1}>
+        <View style={{ position: 'relative', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', left: 12, zIndex: 1 }}>
             <Icon name="search" size={18} color="#857a82" />
           </View>
           <Input
             value={query}
             onChangeText={setQuery}
             placeholder={t('search_log')}
-            paddingLeft={38}
-            aria-label={t('search_log')}
+            accessibilityLabel={t('search_log')}
+            style={{ paddingLeft: 38 }}
           />
         </View>
-      </YStack>
+      </View>
 
       {/* filter chips — sourced from user's tag candidate set */}
-      <XStack flexWrap="wrap" gap="$2">
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
         <Tag
           active={filter === 'All' && verdictFilter == null}
           onPress={() => {
@@ -160,26 +159,28 @@ export default function LibraryView() {
             {f}
           </Tag>
         ))}
-      </XStack>
+      </View>
 
       {/* grid */}
       {loading ? (
-        <YStack alignItems="center" paddingVertical={48}>
-          <ActivityIndicator color="#191017" />
-        </YStack>
+        <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+          <ActivityIndicator color={colors.ink900} />
+        </View>
       ) : shown.length === 0 ? (
-        <YStack alignItems="center" paddingVertical={48} gap="$2">
-          <Icon name="reciept" size={40} color="#b8aeb4" />
-          <Text color="$colorMuted">{t('nothing_here')}</Text>
-        </YStack>
+        <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+          <Icon name="reciept" size={40} color={colors.ink300} />
+          <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+        </View>
       ) : (
         <View
-          flexDirection={isDesktop ? 'row' : 'column'}
-          flexWrap={isDesktop ? 'wrap' : 'nowrap'}
-          gap="$3"
+          style={{
+            flexDirection: isWide ? 'row' : 'column',
+            flexWrap: isWide ? 'wrap' : 'nowrap',
+            gap: space[3],
+          }}
         >
           {shown.map((it) => (
-            <View key={it.id} style={isDesktop ? { width: '48%' } : undefined}>
+            <View key={it.id} style={isWide ? { width: '48%' } : undefined}>
               <FoodCard
                 imageThumb={it.imageThumb || undefined}
                 image={it.image || undefined}

@@ -27,13 +27,16 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 
-jest.mock('tamagui', () => {
-  const ReactLib = require('react')
-  return {
-    View: ({ children, ...props }: { children?: React.ReactNode }) =>
-      ReactLib.createElement('View', props, children),
-    useMedia: () => ({ gtMd: false }),
-  }
+// Screen reads `useWindowDimensions().width` for the wide-layout gutter.
+// Pin a narrow width so the test exercises the phone layout (no sidebar gutter).
+jest.mock('react-native', () => {
+  const RN = jest.requireActual('react-native')
+  return new Proxy(RN, {
+    get: (target, prop) =>
+      prop === 'useWindowDimensions'
+        ? () => ({ width: 390, height: 844 })
+        : target[prop],
+  })
 })
 
 // Capture what TabsLayout passes to expo-router's <Tabs>.

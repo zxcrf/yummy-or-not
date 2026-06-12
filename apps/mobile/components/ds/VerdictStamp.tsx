@@ -1,48 +1,41 @@
 /* ============================================================
-   YUMMY OR NOT — VerdictStamp (Tamagui / React Native)
-   The slap-on verdict label (yum / meh / nah). Ported from the web DS:
-   a chunky bordered pill in the verdict color with a kaomoji face and
-   the verdict word. Verdict token colors come from tamagui.config.ts.
+   YUMMY OR NOT — VerdictStamp (plain RN + StyleSheet)
+   The slap-on verdict label (yum / meh / nah). Chunky bordered
+   pill in the verdict color with an optional kaomoji face and
+   the verdict word. No motion (static stamp).
    ============================================================ */
 
-import { type GetProps, View, styled, Text } from 'tamagui'
+import { View, StyleSheet, type StyleProp, type ViewStyle, type ViewProps } from 'react-native'
+import { Text } from '@/theme'
+import { colors, radius, space } from '@/theme'
 import type { Verdict } from '@yon/shared'
 
 const FACES: Record<Verdict, string> = { yum: '◕‿◕', meh: '•_•', nah: '×_×' }
 const LABELS: Record<Verdict, string> = { yum: 'YUM', meh: 'MEH', nah: 'NAH' }
 
-const StampFrame = styled(View, {
-  name: 'VerdictStamp',
-  flexDirection: 'row',
-  alignItems: 'center',
-  alignSelf: 'flex-start',
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$sm',
-  backgroundColor: '$verdictYum',
+// Resolved colors per verdict
+const BG: Record<Verdict, string> = {
+  yum: colors.verdictYum,
+  meh: colors.verdictMeh,
+  nah: colors.verdictNah,
+}
+const BORDER: Record<Verdict, string> = {
+  yum: colors.verdictYum2,
+  meh: colors.verdictMeh2,
+  nah: colors.verdictNah2,
+}
 
-  variants: {
-    verdict: {
-      yum: { backgroundColor: '$verdictYum', borderColor: '$verdictYum2' },
-      meh: { backgroundColor: '$verdictMeh', borderColor: '$verdictMeh2' },
-      nah: { backgroundColor: '$verdictNah', borderColor: '$verdictNah2' },
-    },
-    size: {
-      sm: { paddingHorizontal: '$2', paddingVertical: '$1', gap: 4 },
-      md: { paddingHorizontal: '$3', paddingVertical: '$2', gap: 6 },
-      lg: { paddingHorizontal: '$4', paddingVertical: '$3', gap: 8 },
-    },
-  } as const,
-
-  defaultVariants: {
-    verdict: 'yum',
-    size: 'md',
-  },
-})
-
+// Size → font size
 const SIZE_FONT = { sm: 11, md: 14, lg: 18 } as const
 
-export type VerdictStampProps = Omit<GetProps<typeof StampFrame>, 'verdict' | 'size' | 'rotate'> & {
+// Size → padding/gap
+const SIZE_PADDING = {
+  sm: { paddingHorizontal: space[2], paddingVertical: space[1], gap: 4 },
+  md: { paddingHorizontal: space[3], paddingVertical: space[2], gap: 6 },
+  lg: { paddingHorizontal: space[4], paddingVertical: space[3], gap: 8 },
+} as const
+
+export interface VerdictStampProps extends Omit<ViewProps, 'style'> {
   verdict?: Verdict
   size?: 'sm' | 'md' | 'lg'
   /** Override the verdict word text. */
@@ -50,6 +43,8 @@ export type VerdictStampProps = Omit<GetProps<typeof StampFrame>, 'verdict' | 's
   /** Rotation in degrees; 0 = upright. */
   rotate?: number
   showFace?: boolean
+  /** Style pass-through — caller can set position:'absolute', top, right, etc. */
+  style?: StyleProp<ViewStyle>
 }
 
 /**
@@ -61,33 +56,61 @@ export function VerdictStamp({
   showFace = true,
   rotate = 0,
   label,
+  style,
   ...rest
 }: VerdictStampProps) {
   const fontSize = SIZE_FONT[size]
+  const sizePad = SIZE_PADDING[size]
 
   return (
-    <StampFrame
-      verdict={verdict}
-      size={size}
-      rotate={rotate ? `${rotate}deg` : undefined}
+    <View
+      style={[
+        styles.base,
+        {
+          backgroundColor: BG[verdict],
+          borderColor: BORDER[verdict],
+          paddingHorizontal: sizePad.paddingHorizontal,
+          paddingVertical: sizePad.paddingVertical,
+          gap: sizePad.gap,
+          transform: rotate ? [{ rotate: `${rotate}deg` }] : [],
+        },
+        style,
+      ]}
       {...rest}
     >
       {showFace ? (
-        <Text color="$ink900" fontSize={fontSize} lineHeight={fontSize + 2}>
+        <Text style={[styles.text, { fontSize, lineHeight: fontSize + 2 }]}>
           {FACES[verdict]}
         </Text>
       ) : null}
       <Text
-        color="$ink900"
-        fontWeight="700"
-        fontSize={fontSize}
-        lineHeight={fontSize + 2}
-        letterSpacing={1}
+        style={[
+          styles.text,
+          styles.label,
+          { fontSize, lineHeight: fontSize + 2 },
+        ]}
       >
         {label || LABELS[verdict]}
       </Text>
-    </StampFrame>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: 3,
+    borderRadius: radius.sm,
+  },
+  text: {
+    color: colors.ink900,
+  },
+  label: {
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+})
 
 export default VerdictStamp

@@ -54,6 +54,7 @@ jest.mock('@/providers/AuthProvider', () => ({
       displayName: 'Mina Park',
       plan: 'free',
       warningsEnabled: false,
+      locationEnabled: false,
     },
     signOut: mockSignOut,
     patchUser: mockPatchUser,
@@ -163,8 +164,8 @@ describe('YouView warnings switch', () => {
     mockPatchUser.mockImplementation(() => {})
   })
 
-  // The real Switch component renders a Track (styled View) with
-  // accessibilityRole="switch" and aria-checked reflecting the checked prop.
+  // The real Switch component renders a Pressable track with
+  // accessibilityRole="switch" and accessibilityState.checked reflecting the checked prop.
   // Find it by accessibilityRole; there is exactly one switch in YouView (the
   // warnings row — location/private rows have no switch yet).
   function findSwitch(renderer: TestRenderer.ReactTestRenderer) {
@@ -177,7 +178,7 @@ describe('YouView warnings switch', () => {
     const renderer = renderYouView()
     const sw = findSwitch(renderer)
     expect(sw).toBeTruthy()
-    expect(sw.props['aria-checked']).toBe(false)
+    expect(sw.props.accessibilityState?.checked).toBe(false)
   })
 
   it('calls updateUser({ warningsEnabled: true }) when switch is pressed', async () => {
@@ -217,6 +218,74 @@ describe('YouView warnings switch', () => {
       await sw.props.onPress()
     })
     // Should revert to false (user.warningsEnabled was false)
-    expect(findSwitch(renderer).props['aria-checked']).toBe(false)
+    expect(findSwitch(renderer).props.accessibilityState?.checked).toBe(false)
+  })
+})
+
+describe('YouView location toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFormatMoney.mockImplementation((n: number) => `$${n.toFixed(2)}`)
+    mockUpdateUser.mockResolvedValue({ user: { locationEnabled: true } })
+    mockPatchUser.mockImplementation(() => {})
+  })
+
+  // The location Switch is rendered with testID="location-switch" in YouView.
+  // We find its Pressable track by matching testID, then walk up to the Pressable
+  // (or directly use the node if it carries onPress).
+  function findLocationSwitch(renderer: TestRenderer.ReactTestRenderer) {
+    // The Switch Pressable track carries testID via ...rest spread.
+    const nodes = renderer.root.findAll(
+      (n) => n.props.testID === 'location-switch',
+    )
+    // Prefer the node that has onPress (the Pressable, not an inner View).
+    return nodes.find((n) => typeof n.props.onPress === 'function') ?? nodes[0]
+  }
+
+  it('renders the location switch seeded from user.locationEnabled=false', () => {
+    const renderer = renderYouView()
+    const sw = findLocationSwitch(renderer)
+    expect(sw).toBeTruthy()
+    expect(sw.props.accessibilityState?.checked).toBe(false)
+  })
+
+  it('calls updateUser({ locationEnabled: true }) when location switch is pressed', async () => {
+    const renderer = renderYouView()
+    const sw = findLocationSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockUpdateUser).toHaveBeenCalledWith({ locationEnabled: true })
+  })
+
+  it('calls patchUser with server response when location toggle succeeds', async () => {
+    mockUpdateUser.mockResolvedValue({ user: { locationEnabled: true } })
+    const renderer = renderYouView()
+    const sw = findLocationSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockPatchUser).toHaveBeenCalledWith({ locationEnabled: true })
+  })
+
+  it('does NOT call patchUser when updateUser rejects (location toggle failure)', async () => {
+    mockUpdateUser.mockRejectedValueOnce(new Error('network'))
+    const renderer = renderYouView()
+    const sw = findLocationSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    expect(mockPatchUser).not.toHaveBeenCalled()
+  })
+
+  it('reverts optimistic locationEnabled state when updateUser rejects', async () => {
+    mockUpdateUser.mockRejectedValueOnce(new Error('network'))
+    const renderer = renderYouView()
+    const sw = findLocationSwitch(renderer)
+    await act(async () => {
+      await sw.props.onPress()
+    })
+    // Should revert to false (user.locationEnabled was false)
+    expect(findLocationSwitch(renderer).props.accessibilityState?.checked).toBe(false)
   })
 })

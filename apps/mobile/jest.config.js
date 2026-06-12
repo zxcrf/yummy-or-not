@@ -16,11 +16,6 @@ module.exports = {
     // → "Invalid hook call". Pin both to one resolved copy.
     '^react$': require.resolve('react'),
     '^@/(.*)$': '<rootDir>/$1',
-    // Redirect Tamagui to a CJS stub — pnpm stores Tamagui as ESM which Jest
-    // cannot transform. The stub is sufficient for unit tests that only exercise
-    // non-UI logic or exported constants.
-    '^tamagui$': '<rootDir>/__mocks__/tamagui.js',
-    '^@tamagui/(.*)$': '<rootDir>/__mocks__/tamagui.js',
     '^react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.js',
     // Redirect dynamic import('expo-secure-store') to our CJS stub so
     // writeStoredToken in AuthProvider works under Jest without

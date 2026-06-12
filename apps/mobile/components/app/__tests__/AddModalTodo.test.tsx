@@ -123,14 +123,17 @@ jest.mock('@/components/ds', () => ({
   ),
   Input: ({ value, onChangeText, label, testID }: {
     value: string; onChangeText?: (t: string) => void; label?: string; testID?: string
-  }) => (
-    <input
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChangeText?.(e.target.value)}
-      data-testid={testID}
-    />
-  ),
+  }) => {
+    const { TextInput } = require('react-native')
+    return (
+      <TextInput
+        accessibilityLabel={label}
+        value={value}
+        onChangeText={onChangeText}
+        testID={testID}
+      />
+    )
+  },
   Tag: ({ children, active, onPress }: {
     children: React.ReactNode; active?: boolean; onPress?: () => void
   }) => (
@@ -239,11 +242,11 @@ describe('AddModal A2 — to-taste mode', () => {
 
     // Type a name
     const nameInput = renderer.root.findAll(
-      (n) => n.type === 'input' && n.props['aria-label'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'What?',
     )
     expect(nameInput.length).toBeGreaterThan(0)
     act(() => {
-      nameInput[0].props.onChange({ target: { value: 'Matcha Latte' } })
+      nameInput[0].props.onChangeText('Matcha Latte')
     })
 
     // VerdictPicker should NOT be in the tree in todo mode
@@ -267,10 +270,10 @@ describe('AddModal A2 — to-taste mode', () => {
 
     // Type a name
     const nameInput = renderer.root.findAll(
-      (n) => n.type === 'input' && n.props['aria-label'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'What?',
     )
     act(() => {
-      nameInput[0].props.onChange({ target: { value: 'Matcha Latte' } })
+      nameInput[0].props.onChangeText('Matcha Latte')
     })
 
     // Press Save
@@ -292,10 +295,10 @@ describe('AddModal A2 — to-taste mode', () => {
 
     // Default tasted mode — type name only
     const nameInput = renderer.root.findAll(
-      (n) => n.type === 'input' && n.props['aria-label'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'What?',
     )
     act(() => {
-      nameInput[0].props.onChange({ target: { value: 'Espresso' } })
+      nameInput[0].props.onChangeText('Espresso')
     })
 
     const saveButtons = findSaveButton(renderer)
@@ -313,10 +316,10 @@ describe('AddModal A2 — to-taste mode', () => {
 
     // Type name (debounce fires immediately in test via jest fake timer or just act)
     const nameInput = renderer.root.findAll(
-      (n) => n.type === 'input' && n.props['aria-label'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'What?',
     )
     act(() => {
-      nameInput[0].props.onChange({ target: { value: 'Matcha' } })
+      nameInput[0].props.onChangeText('Matcha')
     })
 
     // Switch to todo mode

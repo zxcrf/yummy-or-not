@@ -1,5 +1,5 @@
 /* ============================================================
-   YUMMY OR NOT — RecallView (Tamagui / React Native)
+   YUMMY OR NOT — RecallView (plain RN + theme)
    "Tasted it before?" search. Shows scored results from searchTastes:
    - top match → big verdict card (with warn styling if warnBeforeBuy and
      user.warningsEnabled)
@@ -9,11 +9,11 @@
    ============================================================ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, RefreshControl, useWindowDimensions } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, View, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import * as Location from 'expo-location'
-import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
+import { colors, space, radius, Text } from '@/theme'
 import { searchTastes, haversineMeters, formatDistance, type Taste, type Verdict } from '@yon/shared'
 import { Button, Card, Icon, Input, Tag, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
@@ -23,11 +23,11 @@ import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 const NEARBY_TASTED_CAP = 5
 const NEARBY_TODO_CAP = 3
 
-const ACCENT_BG = {
-  yum: '$verdictYum',
-  meh: '$verdictMeh',
-  nah: '$verdictNah',
-} as const satisfies Record<Verdict, string>
+const ACCENT_BG: Record<Verdict, string> = {
+  yum: colors.verdictYum,
+  meh: colors.verdictMeh,
+  nah: colors.verdictNah,
+}
 
 const VERDICT_KEY: Record<Verdict, string> = {
   yum: 'loved_it',
@@ -69,34 +69,38 @@ function RecallRow({
   const { t } = useI18n()
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={{ width: '100%' }}>
-      <XStack
-        cursor="pointer"
-        alignItems="center"
-        gap="$3"
-        width="100%"
-        backgroundColor={flat ? 'transparent' : '$white'}
-        borderWidth={flat ? 0 : 3}
-        borderColor={warnActive ? '$verdictNah2' : '$ink900'}
-        borderRadius="$md"
-        padding={flat ? 0 : 10}
-        {...(flat
-          ? {}
-          : {
-              shadowColor: warnActive ? '$verdictNah2' : '$ink900',
-              shadowOffset: { width: 3, height: 3 },
-              shadowOpacity: 1,
-              shadowRadius: 0,
-            })}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: space[3],
+          width: '100%',
+          backgroundColor: flat ? 'transparent' : colors.white,
+          borderWidth: flat ? 0 : 3,
+          borderColor: warnActive ? colors.verdictNah2 : colors.ink900,
+          borderRadius: radius.md,
+          padding: flat ? 0 : 10,
+          ...(flat
+            ? {}
+            : {
+                shadowColor: warnActive ? colors.verdictNah2 : colors.ink900,
+                shadowOffset: { width: 3, height: 3 },
+                shadowOpacity: 1,
+                shadowRadius: 0,
+              }),
+        }}
       >
         <View
-          width={54}
-          height={54}
-          borderRadius="$sm"
-          borderWidth={2}
-          borderColor="$ink900"
-          backgroundColor="$paper2"
-          overflow="hidden"
-          flexShrink={0}
+          style={{
+            width: 54,
+            height: 54,
+            borderRadius: radius.sm,
+            borderWidth: 2,
+            borderColor: colors.ink900,
+            backgroundColor: colors.paper2,
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
         >
           {(item.imageThumb || item.image) ? (
             <Image
@@ -111,23 +115,23 @@ function RecallRow({
             />
           ) : null}
         </View>
-        <YStack flex={1} minWidth={0}>
-          <Text color="$ink900" fontWeight="700" fontSize={16}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontWeight: '700', fontSize: 16 }}>
             {item.name}
           </Text>
-          <Text color="$ink500" fontSize={13}>
+          <Text style={{ color: colors.ink500, fontSize: 13 }}>
             {item.place} · {item.date}
           </Text>
           {distanceLabel ? (
-            <Text color="$ink400" fontSize={12}>{distanceLabel}</Text>
+            <Text style={{ color: colors.ink400, fontSize: 12 }}>{distanceLabel}</Text>
           ) : null}
-        </YStack>
+        </View>
         {isTodo ? (
           <Tag testID="todo-badge">{t('todo_badge')}</Tag>
         ) : item.verdict != null ? (
           <VerdictStamp verdict={item.verdict} size="sm" label={t('v_' + item.verdict)} />
         ) : null}
-      </XStack>
+      </View>
     </Pressable>
   )
 }
@@ -231,8 +235,7 @@ export default function RecallView() {
 
   return (
     <ScrollView
-      flex={1}
-      backgroundColor="$background"
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 40 }}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
@@ -240,47 +243,42 @@ export default function RecallView() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#191017"
-          colors={['#191017']}
+          tintColor={colors.ink900}
+          colors={[colors.ink900]}
         />
       }
     >
       {/* header */}
-      <YStack gap="$2">
-        <Text color="$color" fontWeight="700" fontSize={36} lineHeight={38}>
+      <View style={{ gap: space[2] }}>
+        <Text style={{ fontWeight: '700', fontSize: 36, lineHeight: 38 }}>
           {t('recall_title')}
         </Text>
-        <Text color="$ink500" fontSize={17}>
+        <Text style={{ color: colors.ink500, fontSize: 17 }}>
           {t('recall_sub')}
         </Text>
-        <View position="relative" justifyContent="center" marginTop="$2">
-          <View position="absolute" left={14} zIndex={1}>
+        <View style={{ position: 'relative', justifyContent: 'center', marginTop: space[2] }}>
+          <View style={{ position: 'absolute', left: 14, zIndex: 1 }}>
             <Icon name="search" size={22} color="#857a82" />
           </View>
           <Input
             value={q}
             onChangeText={setQ}
             placeholder={t('recall_placeholder')}
-            aria-label={t('recall_placeholder')}
-            fontSize={18}
-            paddingLeft={46}
-            paddingVertical={16}
+            accessibilityLabel={t('recall_placeholder')}
+            style={{ fontSize: 18, paddingLeft: 46, paddingVertical: 16 }}
           />
         </View>
-      </YStack>
+      </View>
 
       {/* results */}
-      <YStack gap="$3">
+      <View style={{ gap: space[3] }}>
         {!q ? (
-          <YStack gap="$3">
+          <View style={{ gap: space[3] }}>
             {/* 附近你想吃的 — todo + coords, cap 3 (shown first) */}
             {nearbyTodo.length > 0 ? (
-              <YStack gap="$3">
+              <View style={{ gap: space[3] }}>
                 <Text
-                  color="$ink400"
-                  fontSize={10}
-                  letterSpacing={1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
                 >
                   {t('nearby_todo')}
                 </Text>
@@ -293,16 +291,13 @@ export default function RecallView() {
                     isTodo
                   />
                 ))}
-              </YStack>
+              </View>
             ) : null}
             {/* 附近吃过的 — tasted + coords, cap 5 */}
             {nearbyTasted.length > 0 ? (
-              <YStack gap="$3">
+              <View style={{ gap: space[3] }}>
                 <Text
-                  color="$ink400"
-                  fontSize={10}
-                  letterSpacing={1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
                 >
                   {t('nearby_eaten')}
                 </Text>
@@ -314,13 +309,10 @@ export default function RecallView() {
                     distanceLabel={formatDistance(distance)}
                   />
                 ))}
-              </YStack>
+              </View>
             ) : null}
             <Text
-              color="$ink400"
-              fontSize={10}
-              letterSpacing={1}
-              textTransform="uppercase"
+              style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
             >
               {t('recently_recalled')}
             </Text>
@@ -331,56 +323,50 @@ export default function RecallView() {
                 onPress={() => router.push(`/taste/${it.id}`)}
               />
             ))}
-          </YStack>
+          </View>
         ) : topMatch ? (
-          <YStack gap="$3">
+          <View style={{ gap: space[3] }}>
             {/* top result — big verdict card */}
             <Card variant="raised">
-              <YStack
-                backgroundColor={topWarn ? '$verdictNah' : (topMatch.verdict ? ACCENT_BG[topMatch.verdict] : '$paper2')}
-                paddingHorizontal={22}
-                paddingTop={22}
-                paddingBottom={20}
-                borderBottomWidth={3}
-                borderColor={topWarn ? '$verdictNah2' : '$ink900'}
+              <View
+                style={{
+                  backgroundColor: topWarn ? colors.verdictNah : (topMatch.verdict ? ACCENT_BG[topMatch.verdict] : colors.paper2),
+                  paddingHorizontal: 22,
+                  paddingTop: 22,
+                  paddingBottom: 20,
+                  borderBottomWidth: 3,
+                  borderColor: topWarn ? colors.verdictNah2 : colors.ink900,
+                }}
               >
                 {topWarn ? (
                   <>
                     <Text
-                      color="$ink900"
-                      fontSize={11}
-                      letterSpacing={1.3}
-                      textTransform="uppercase"
-                      opacity={0.9}
+                      style={{ fontSize: 11, letterSpacing: 1.3, textTransform: 'uppercase', opacity: 0.9 }}
                     >
                       {t('verdict_on_file')}
                     </Text>
-                    <Text color="$ink900" fontWeight="700" fontSize={28} marginTop="$1">
+                    <Text style={{ fontWeight: '700', fontSize: 28, marginTop: space[1] }}>
                       {t('recall_warn_skip')}
                     </Text>
                   </>
                 ) : topMatch.verdict != null ? (
                   <>
                     <Text
-                      color="$ink900"
-                      fontSize={11}
-                      letterSpacing={1.3}
-                      textTransform="uppercase"
-                      opacity={0.9}
+                      style={{ fontSize: 11, letterSpacing: 1.3, textTransform: 'uppercase', opacity: 0.9 }}
                     >
                       {t('verdict_on_file')}
                     </Text>
-                    <Text color="$ink900" fontWeight="700" fontSize={46} marginTop="$1">
+                    <Text style={{ fontWeight: '700', fontSize: 46, marginTop: space[1] }}>
                       {t(VERDICT_KEY[topMatch.verdict])}
                     </Text>
                   </>
                 ) : (
-                  <Text color="$ink900" fontWeight="700" fontSize={28} marginTop="$1">
+                  <Text style={{ fontWeight: '700', fontSize: 28, marginTop: space[1] }}>
                     {t('todo_badge')}
                   </Text>
                 )}
-              </YStack>
-              <View padding={18}>
+              </View>
+              <View style={{ padding: 18 }}>
                 <RecallRow
                   item={topMatch}
                   onPress={() => router.push(`/taste/${topMatch.id}`)}
@@ -392,12 +378,9 @@ export default function RecallView() {
 
             {/* additional matches */}
             {otherMatches.length > 0 ? (
-              <YStack gap="$2">
+              <View style={{ gap: space[2] }}>
                 <Text
-                  color="$ink400"
-                  fontSize={10}
-                  letterSpacing={1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
                 >
                   {t('recall_other_matches')}
                 </Text>
@@ -412,17 +395,14 @@ export default function RecallView() {
                     />
                   )
                 })}
-              </YStack>
+              </View>
             ) : null}
 
             {/* todo hint — "在你的想吃清单里" */}
             {todoHints.length > 0 ? (
-              <YStack gap="$2">
+              <View style={{ gap: space[2] }}>
                 <Text
-                  color="$ink400"
-                  fontSize={10}
-                  letterSpacing={1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
                   testID="recall-in-todo-header"
                 >
                   {t('recall_in_todo')}
@@ -435,31 +415,31 @@ export default function RecallView() {
                     isTodo
                   />
                 ))}
-              </YStack>
+              </View>
             ) : null}
-          </YStack>
+          </View>
         ) : (
           <Card padded>
-            <YStack alignItems="center" gap="$2" paddingVertical={24}>
-              <Icon name="info-box" size={40} color="#b8aeb4" />
-              <Text color="$ink900" fontWeight="600" fontSize={18} textAlign="center">
+            <View style={{ alignItems: 'center', gap: space[2], paddingVertical: 24 }}>
+              <Icon name="info-box" size={40} color={colors.ink300} />
+              <Text style={{ fontWeight: '600', fontSize: 18, textAlign: 'center' }}>
                 {t('no_record', { q: debouncedQ })}
               </Text>
-              <Text color="$ink500" textAlign="center">
+              <Text style={{ color: colors.ink500, textAlign: 'center' }}>
                 {t('try_then_log')}
               </Text>
               <Button
                 variant="primary"
-                marginTop="$3"
+                style={{ marginTop: 12 }}
                 onPress={() => router.push('/add')}
                 iconLeft={<Icon name="plus" size={18} color="#fff" />}
               >
                 {t('log_it_now')}
               </Button>
-            </YStack>
+            </View>
           </Card>
         )}
-      </YStack>
+      </View>
     </ScrollView>
   )
 }

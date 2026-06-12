@@ -8,21 +8,24 @@
    ============================================================ */
 
 import { type ReactNode } from 'react'
+import { View, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn } from 'react-native-reanimated'
-import { View, useMedia } from 'tamagui'
+import { colors } from '@/theme'
 
 import { SIDEBAR_W } from './_nav'
 
 export function Screen({ children }: { children: ReactNode }) {
-  const media = useMedia()
+  const { width } = useWindowDimensions()
   const insets = useSafeAreaInsets()
   return (
     <View
-      flex={1}
-      backgroundColor="$background"
-      paddingTop={insets.top}
-      paddingLeft={media.gtMd ? SIDEBAR_W : 0}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+        paddingTop: insets.top,
+        paddingLeft: width >= 769 ? SIDEBAR_W : 0,
+      }}
     >
       {/* Restrained content entrance: a soft fade-through on first focus so a
           page never appears as an instant snap. Per-switch positional motion

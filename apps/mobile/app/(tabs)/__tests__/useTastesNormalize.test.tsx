@@ -23,7 +23,14 @@ jest.mock('@yon/shared', () => ({
   listTastes: (...args: []) => mockListTastes(...args),
 }))
 
-function mountProbe() {
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+afterEach(() => {
+  act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+  mountedRenderers.length = 0
+})
+
+async function mountProbe() {
   const seen: Taste[][] = []
   function Probe() {
     const { items } = useRefreshableTastes()
@@ -31,9 +38,10 @@ function mountProbe() {
     return null
   }
   let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<Probe />)
   })
+  mountedRenderers.push(renderer)
   return { seen, renderer }
 }
 
@@ -102,7 +110,7 @@ describe('normalizeHydrated — AsyncStorage hydrate backward compat', () => {
       new Promise<Taste[]>((r) => { resolveNet = r }),
     )
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
 
@@ -152,7 +160,7 @@ describe('normalizeHydrated — AsyncStorage hydrate backward compat', () => {
       new Promise<Taste[]>((r) => { resolveNet = r }),
     )
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
 
@@ -196,7 +204,7 @@ describe('normalizeHydrated — AsyncStorage hydrate backward compat', () => {
       new Promise<Taste[]>((r) => { resolveNet = r }),
     )
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
 

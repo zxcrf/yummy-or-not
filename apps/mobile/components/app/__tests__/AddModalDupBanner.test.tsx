@@ -261,7 +261,7 @@ describe('AddModal — same-name detection banner', () => {
     // Find the close button inside the banner and press it
     const banner = nodesByTestId(renderer, 'dup-banner')[0]
     const closeButtons = banner.findAll(
-      (n) => typeof n.props['aria-label'] === 'string' && n.props['aria-label'] === 'Cancel',
+      (n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel === 'Cancel',
     )
     expect(closeButtons.length).toBeGreaterThan(0)
     act(() => { closeButtons[0].props.onPress?.() })
@@ -286,7 +286,7 @@ describe('AddModal — same-name detection banner', () => {
 
     const banner = nodesByTestId(renderer, 'dup-banner')[0]
     const closeButtons = banner.findAll(
-      (n) => typeof n.props['aria-label'] === 'string' && n.props['aria-label'] === 'Cancel',
+      (n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel === 'Cancel',
     )
     act(() => { closeButtons[0].props.onPress?.() })
     expect(nodesByTestId(renderer, 'dup-banner')).toHaveLength(0)
@@ -343,7 +343,7 @@ describe('AddModal — same-name detection banner', () => {
     // Dismiss
     const banner = nodesByTestId(renderer, 'dup-banner')[0]
     const closeBtn = banner.findAll(
-      (n) => typeof n.props['aria-label'] === 'string' && n.props['aria-label'] === 'Cancel',
+      (n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel === 'Cancel',
     )
     act(() => { closeBtn[0].props.onPress?.() })
     expect(nodesByTestId(renderer, 'dup-banner')).toHaveLength(0)

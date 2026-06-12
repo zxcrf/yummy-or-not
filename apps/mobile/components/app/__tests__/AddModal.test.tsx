@@ -152,18 +152,20 @@ describe('AddModal', () => {
   it('insets the sticky header below the status bar so the title is not overlapped', () => {
     const renderer = renderAddModal()
 
-    // The sticky header is the only node carrying a 3px bottom border.
-    const headers = renderer.root.findAllByProps({ borderBottomWidth: 3 })
-    expect(headers.length).toBeGreaterThan(0)
+    // The sticky header now carries its layout in a style object (post-Tamagui migration).
+    const header = renderer.root.findByProps({ testID: 'add-modal-header' })
+    expect(header).toBeTruthy()
     // Regression: header top padding must clear the safe-area top inset
     // (status bar). The old code used a fixed paddingVertical and overlapped.
-    expect(headers.some((n) => n.props.paddingTop === mockSafeAreaTop + 16)).toBe(true)
+    const st = header.props.style as Record<string, unknown>
+    expect(st.borderBottomWidth).toBe(3)
+    expect(st.paddingTop).toBe(mockSafeAreaTop + 16)
   })
 
   it('shows a real permission error instead of another Add a photo label', async () => {
     mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: false })
     const renderer = renderAddModal()
-    const dropzone = renderer.root.findByProps({ 'aria-label': 'Add a photo' })
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
 
     await act(async () => {
       await dropzone.props.onPress()
@@ -332,5 +334,98 @@ describe('AddModal', () => {
     expect(textNodes(renderer, 'Midnight Snack')).toHaveLength(1)
     // Built-in chips still appear.
     expect(textNodes(renderer, 'Boba')).toHaveLength(1)
+  })
+})
+
+describe('AddModal photo picker teardown', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.clearAllTimers()
+    jest.useRealTimers()
+  })
+
+  it('does not set photo/preview when picker is cancelled', async () => {
+    mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true })
+    mockLaunchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: [] })
+
+    const renderer = renderAddModal()
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
+
+    await act(async () => {
+      await dropzone.props.onPress()
+    })
+
+    // After a cancelled pick, the dropzone still shows the camera icon placeholder
+    // (no PhotoPreview rendered), so the "Add a photo" label remains the only one.
+    expect(textNodes(renderer, 'Add a photo')).toHaveLength(1)
+    // launchImageLibraryAsync was called but returned cancelled
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the permission error message when library permission is denied', async () => {
+    mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: false })
+
+    const renderer = renderAddModal()
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
+
+    await act(async () => {
+      await dropzone.props.onPress()
+    })
+
+    // launchImageLibraryAsync must NOT be called when permission was denied.
+    expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
+    // The permission error message must be visible.
+    expect(
+      textNodes(renderer, 'Photo access is needed to choose a picture.'),
+    ).toHaveLength(1)
+  })
+
+  it('falls back gracefully when manipulateAsync throws during compress', async () => {
+    const { manipulateAsync } = require('expo-image-manipulator')
+    ;(manipulateAsync as jest.Mock).mockRejectedValueOnce(new Error('oom'))
+
+    mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true })
+    mockLaunchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file://photo.jpg', width: 1000, mimeType: 'image/jpeg', fileName: 'photo.jpg' }],
+    })
+
+    const renderer = renderAddModal()
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
+
+    // Should not throw even when manipulateAsync fails
+    await act(async () => {
+      await dropzone.props.onPress()
+    })
+
+    // The component must still be alive (no unmount crash).
+    expect(renderer.root).toBeTruthy()
+  })
+
+  it('does not fire duplicate picks if the dropzone is pressed rapidly', async () => {
+    mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true })
+    // Resolve immediately so the async chain completes without hanging.
+    mockLaunchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: [] })
+
+    const renderer = renderAddModal()
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
+
+    // Fire two rapid presses before the first async chain can complete.
+    // The in-flight guard must absorb the second press so launchImageLibraryAsync
+    // is only called once.
+    await act(async () => {
+      dropzone.props.onPress()
+      dropzone.props.onPress()
+      await Promise.resolve()
+    })
+
+    // Exactly 1 call: the guard blocked the second press.
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledTimes(1)
+    // Component remains alive — no crash from duplicate async chains.
+    expect(renderer.root).toBeTruthy()
   })
 })

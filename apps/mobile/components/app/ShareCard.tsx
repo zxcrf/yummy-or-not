@@ -9,7 +9,8 @@
    ============================================================ */
 
 import { forwardRef, useEffect } from 'react'
-import { Image, StyleSheet, Text, View } from 'react-native'
+import { Image, StyleSheet, View } from 'react-native'
+import { Text } from '@/theme'
 import { Image as ExpoImage } from 'expo-image'
 import type { Taste, Verdict } from '@yon/shared'
 import { VerdictStamp } from '@/components/ds'

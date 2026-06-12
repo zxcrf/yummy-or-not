@@ -1,99 +1,96 @@
 /* ============================================================
-   YUMMY OR NOT — Button (Tamagui / React Native)
-   The primary action control. Ported from the web DS: a chunky
-   ink-bordered button with a hard offset pop-shadow that presses
-   into the page on :active. Five variants × three sizes.
+   YUMMY OR NOT — Button (plain RN + Reanimated)
+   Pressable → Animated.View frame with usePressNudge(bouncy).
+   Five variants × three sizes. §1.3b event-composition contract.
    ============================================================ */
 
-import { type GetProps, styled, Text, View } from 'tamagui'
-import { bouncy } from './animation'
+import React from 'react'
+import {
+  Pressable,
+  Text,
+  StyleSheet,
+  type PressableProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
+import Animated from 'react-native-reanimated'
+import { colors, radius, space, popShadow, pressedShadow, bouncy, usePressNudge } from '@/theme'
 
-const Frame = styled(View, {
-  name: 'Button',
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  alignSelf: 'flex-start',
-  gap: '$2',
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$md',
-  backgroundColor: '$brand',
-  cursor: 'pointer',
-  // hard pop-shadow (3px offset, no blur)
-  shadowColor: '$ink900',
-  shadowOffset: { width: 3, height: 3 },
-  shadowOpacity: 1,
-  shadowRadius: 0,
-  // press nudges into the shadow
-  pressStyle: {
-    x: 3,
-    y: 3,
-    shadowOffset: { width: 0, height: 0 },
-  },
-
-  variants: {
-    variant: {
-      primary: { backgroundColor: '$brand' },
-      secondary: { backgroundColor: '$white' },
-      accent: { backgroundColor: '$candyYellow' },
-      dark: { backgroundColor: '$ink900' },
-      ghost: {
-        backgroundColor: 'transparent',
-        borderColor: 'transparent',
-        shadowOpacity: 0,
-        pressStyle: { backgroundColor: '$ink200', x: 0, y: 1 },
-      },
-    },
-    size: {
-      sm: { paddingHorizontal: '$3', paddingVertical: 7, borderRadius: '$sm' },
-      md: { paddingHorizontal: 18, paddingVertical: 11 },
-      lg: { paddingHorizontal: 26, paddingVertical: 15, borderRadius: '$lg' },
-    },
-    block: {
-      true: { alignSelf: 'stretch', width: '100%' },
-    },
-    disabled: {
-      true: { opacity: 0.45, cursor: 'not-allowed', pressStyle: { x: 0, y: 0 } },
-    },
-  } as const,
-
-  defaultVariants: {
-    variant: 'primary',
-    size: 'md',
-  },
-})
-
-const LABEL_COLOR = {
-  primary: '$onBrand',
-  secondary: '$ink900',
-  accent: '$ink900',
-  dark: '$paper',
-  ghost: '$ink900',
-} as const
-
-const LABEL_FONT = { sm: 14, md: 16, lg: 18 } as const
+// ---------- Public types ----------
 
 export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'dark' | 'ghost'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
-export type ButtonProps = Omit<GetProps<typeof Frame>, 'variant' | 'size'> & {
+export type ButtonProps = Omit<PressableProps, 'style' | 'children'> & {
   /** Visual style. */
   variant?: ButtonVariant
   /** Control size. */
   size?: ButtonSize
   /** Stretch to full width. */
   block?: boolean
+  /** Disabled — suppresses press animation AND sets accessibilityState.disabled */
+  disabled?: boolean
   /** Element rendered before the label (e.g. an <Icon/>). */
   iconLeft?: React.ReactNode
   /** Element rendered after the label. */
   iconRight?: React.ReactNode
   children?: React.ReactNode
+  /** Pass-through style applied to the Animated.View frame. */
+  style?: StyleProp<ViewStyle>
 }
 
+// ---------- Style maps ----------
+
+const LABEL_COLOR: Record<ButtonVariant, string> = {
+  primary: colors.onBrand,
+  secondary: colors.ink900,
+  accent: colors.ink900,
+  dark: colors.paper,
+  ghost: colors.ink900,
+}
+
+const LABEL_FONT: Record<ButtonSize, number> = { sm: 14, md: 16, lg: 18 }
+
+const styles = StyleSheet.create({
+  // base frame — shared by all variants/sizes
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    gap: space[2],
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.md,
+    // pop-shadow (iOS; Android = translate only per material-motion.md)
+    ...popShadow.sm,
+  },
+  // --- variant backgrounds ---
+  primary: { backgroundColor: colors.brand },
+  secondary: { backgroundColor: colors.white },
+  accent: { backgroundColor: colors.candyYellow },
+  dark: { backgroundColor: colors.ink900 },
+  ghost: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+  },
+  // --- sizes ---
+  sm: { paddingHorizontal: space[3], paddingVertical: 7, borderRadius: radius.sm },
+  md: { paddingHorizontal: 18, paddingVertical: 11 },
+  lg: { paddingHorizontal: 26, paddingVertical: 15, borderRadius: radius.lg },
+  // --- block ---
+  block: { alignSelf: 'stretch', width: '100%' },
+  // --- disabled ---
+  disabled: { opacity: 0.45 },
+})
+
+// ---------- Component ----------
+
 /**
- * Button — the primary action control. Chunky border + pop shadow that
- * presses into the page on press.
+ * Button — primary action control. Chunky border + pop-shadow that
+ * nudges into the page on press (usePressNudge, bouncy spring).
+ * Follows §1.3b event-composition contract.
  */
 export function Button({
   variant = 'primary',
@@ -103,28 +100,64 @@ export function Button({
   iconLeft,
   iconRight,
   children,
+  style,
+  onPressIn: callerPressIn,
+  onPressOut: callerPressOut,
   ...rest
 }: ButtonProps) {
+  const driver = usePressNudge({ spring: bouncy }, disabled)
+
   return (
-    <Frame
-      {...bouncy}
-      variant={variant}
-      size={size}
-      block={block}
+    <Pressable
       disabled={disabled}
       accessibilityRole="button"
+      onPressIn={(e) => {
+        driver.onPressIn()
+        callerPressIn?.(e)
+      }}
+      onPressOut={(e) => {
+        driver.onPressOut()
+        callerPressOut?.(e)
+      }}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, disabled }}
     >
-      {iconLeft}
-      {typeof children === 'string' || typeof children === 'number' ? (
-        <Text color={LABEL_COLOR[variant]} fontWeight="700" fontSize={LABEL_FONT[size]}>
-          {children}
-        </Text>
-      ) : (
-        children
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.base,
+            styles[variant],
+            styles[size],
+            block && styles.block,
+            disabled && styles.disabled,
+            // Caller style placed BEFORE animated style so that any caller
+            // transform is overridden by the Reanimated transform, not the
+            // other way around (prevents silent press-motion disappearance).
+            style,
+            driver.animatedStyle,
+            // On iOS: shadow collapses 5x5 → 0x0 during nudge press.
+            // Android: translate handles the visual; shadow unchanged.
+            pressed && !disabled ? pressedShadow.button : undefined,
+          ]}
+        >
+          {iconLeft}
+          {typeof children === 'string' || typeof children === 'number' ? (
+            <Text
+              style={{
+                color: LABEL_COLOR[variant],
+                fontWeight: '700',
+                fontSize: LABEL_FONT[size],
+              }}
+            >
+              {children}
+            </Text>
+          ) : (
+            children
+          )}
+          {iconRight}
+        </Animated.View>
       )}
-      {iconRight}
-    </Frame>
+    </Pressable>
   )
 }
 

@@ -12,12 +12,9 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
-    "e2e": "playwright test",
-    "e2e:mobile": "playwright test e2e/mobile"
+    "test": "turbo run test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
     "turbo": "^2.3.3"
   },
   "pnpm": {

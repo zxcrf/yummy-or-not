@@ -4,11 +4,9 @@
    name / place / price, verdict picker, tag chips, notes.
 
    Photo capture:
-     - Native (iOS/Android): expo-image-picker — pick from library. The
-       picked asset's { uri, name, type } is passed to createTaste() as an
-       RNFile (multipart).
-     - Web: a hidden <input type="file"> file picker; the browser File
-       is passed straight to createTaste().
+     - expo-image-picker — pick from library. The picked asset's
+       { uri, name, type } is passed to createTaste() as an RNFile (multipart).
+     - Compressed via expo-image-manipulator before upload.
 
    Same-name detection:
      - Debounces 500ms after typing stops in the "What?" field.
@@ -26,7 +24,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useMemo, useState } from 'react'
-import { Platform } from 'react-native'
+import { Pressable, View } from 'react-native'
 import {
   KeyboardAwareScrollView,
   KeyboardStickyView,
@@ -36,7 +34,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
-import { Text, View, XStack, YStack } from 'tamagui'
+import { Text, colors, space, radius } from '@/theme'
 import {
   TAG_CHOICES,
   createTaste,
@@ -75,11 +73,11 @@ interface Props {
 }
 
 const KICKER = {
-  color: '$ink700',
+  color: colors.ink700,
   fontSize: 11,
   letterSpacing: 1.32,
-  textTransform: 'uppercase',
-} as const
+  textTransform: 'uppercase' as const,
+}
 
 /** Pull a sane filename + mime type off a picked native asset. */
 function rnFileFromAsset(asset: ImagePicker.ImagePickerAsset): PhotoInput {
@@ -143,7 +141,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const { user } = useAuth()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { tags: userTags } = useTags()
   const { items } = useRefreshableTastes()
 
@@ -196,6 +193,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // name changes stop so we don't hammer searchTastes on every keystroke.
   const [debouncedName, setDebouncedName] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pickInFlight = useRef(false)
 
   const handleNameChange = (text: string) => {
     setName(text)
@@ -281,35 +279,26 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   // --- Native photo capture ------------------------------------------------
   const pickFromLibrary = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      setError(t('photo_permission_denied'))
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 1,
-    })
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0]
-      setPhotoPreview(asset.uri)
-      setPhoto(await compressAsset(asset))
-    }
-  }
-
-  // --- Web photo capture (hidden file input) -------------------------------
-  const onWebFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setPhoto(file)
-    setPhotoPreview(file ? URL.createObjectURL(file) : null)
-  }
-
-  const onPhotoPress = () => {
-    if (Platform.OS === 'web') {
-      fileInputRef.current?.click()
-    } else {
-      void pickFromLibrary()
+    if (pickInFlight.current) return
+    pickInFlight.current = true
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        setError(t('photo_permission_denied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      })
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0]
+        setPhotoPreview(asset.uri)
+        setPhoto(await compressAsset(asset))
+      }
+    } finally {
+      pickInFlight.current = false
     }
   }
 
@@ -482,27 +471,30 @@ export default function AddModal({ onClose, onSaved }: Props) {
   }
 
   // --- Banner colours ------------------------------------------------------
-  const bannerBg = bannerVariant === 'warn' ? '$verdictNah' : '$verdictMeh'
-  const bannerBorder = bannerVariant === 'warn' ? '$verdictNah2' : '$ink900'
+  const bannerBg = bannerVariant === 'warn' ? colors.verdictNah : colors.verdictMeh
+  const bannerBorder = bannerVariant === 'warn' ? colors.verdictNah2 : colors.ink900
   const bannerIcon = bannerVariant === 'warn' ? 'alert' : 'info-box'
 
   return (
-    <View flex={1} backgroundColor="$background">
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* sticky header */}
       <View
-        flexDirection="row"
-        alignItems="center"
-        justifyContent="space-between"
-        paddingHorizontal="$5"
-        paddingTop={insets.top + 16}
-        paddingBottom="$4"
-        borderBottomWidth={3}
-        borderBottomColor="$ink900"
+        testID="add-modal-header"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: space[5],
+          paddingTop: insets.top + 16,
+          paddingBottom: space[4],
+          borderBottomWidth: 3,
+          borderBottomColor: colors.ink900,
+        }}
       >
-        <Text color="$ink900" fontWeight="700" fontSize={24}>
+        <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 24 }}>
           {t('log_taste')}
         </Text>
-        <IconButton aria-label={t('cancel')} onPress={onClose}>
+        <IconButton accessibilityLabel={t('cancel')} onPress={onClose}>
           <Icon name="close" size={18} />
         </IconButton>
       </View>
@@ -528,71 +520,60 @@ export default function AddModal({ onClose, onSaved }: Props) {
         contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: footerHeight + 16 }}
       >
         {/* mode selector — 吃过了 / 还没吃，先记下 */}
-        <XStack
-          borderWidth={2}
-          borderColor="$ink900"
-          borderRadius="$md"
-          overflow="hidden"
+        <View
+          style={{
+            flexDirection: 'row',
+            borderWidth: 2,
+            borderColor: colors.ink900,
+            borderRadius: radius.md,
+            overflow: 'hidden',
+          }}
           testID="add-mode-selector"
         >
-          <View
-            flex={1}
-            paddingVertical={10}
-            alignItems="center"
-            backgroundColor={mode === 'tasted' ? '$ink900' : '$paper2'}
+          <Pressable
+            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: mode === 'tasted' ? colors.ink900 : colors.paper2 }}
             onPress={() => setMode('tasted')}
             accessibilityRole="button"
-            cursor="pointer"
           >
             <Text
-              color={mode === 'tasted' ? '#fff' : '$ink900'}
-              fontWeight="600"
-              fontSize={14}
+              style={{ color: mode === 'tasted' ? '#fff' : colors.ink900, fontWeight: '600', fontSize: 14 }}
             >
               {t('add_mode_tasted')}
             </Text>
-          </View>
-          <View
-            width={2}
-            backgroundColor="$ink900"
-          />
-          <View
-            flex={1}
-            paddingVertical={10}
-            alignItems="center"
-            backgroundColor={mode === 'todo' ? '$ink900' : '$paper2'}
+          </Pressable>
+          <View style={{ width: 2, backgroundColor: colors.ink900 }} />
+          <Pressable
+            style={{ flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: mode === 'todo' ? colors.ink900 : colors.paper2 }}
             onPress={() => setMode('todo')}
             accessibilityRole="button"
-            cursor="pointer"
             testID="add-mode-todo-btn"
           >
             <Text
-              color={mode === 'todo' ? '#fff' : '$ink900'}
-              fontWeight="600"
-              fontSize={14}
+              style={{ color: mode === 'todo' ? '#fff' : colors.ink900, fontWeight: '600', fontSize: 14 }}
             >
               {t('add_mode_todo')}
             </Text>
-          </View>
-        </XStack>
+          </Pressable>
+        </View>
 
         {/* photo + basic fields */}
-        <View gap="$4">
+        <View style={{ gap: space[4] }}>
           {/* photo dropzone */}
-          <View
-            onPress={onPhotoPress}
+          <Pressable
+            onPress={() => void pickFromLibrary()}
             accessibilityRole="button"
-            aria-label={t('add_photo')}
-            height={160}
-            alignItems="center"
-            justifyContent="center"
-            gap="$2"
-            borderWidth={3}
-            borderColor="$ink900"
-            borderRadius="$md"
-            backgroundColor="$paper2"
-            overflow="hidden"
-            cursor="pointer"
+            accessibilityLabel={t('add_photo')}
+            style={{
+              height: 160,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: space[2],
+              borderWidth: 3,
+              borderColor: colors.ink900,
+              borderRadius: radius.md,
+              backgroundColor: colors.paper2,
+              overflow: 'hidden',
+            }}
           >
             {photoPreview ? (
               <PhotoPreview uri={photoPreview} />
@@ -600,29 +581,13 @@ export default function AddModal({ onClose, onSaved }: Props) {
               <>
                 <Icon name="camera" size={32} color="#a89fae" />
                 <Text
-                  color="$ink500"
-                  fontSize={9}
-                  letterSpacing={1.1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink500, fontSize: 9, letterSpacing: 1.1, textTransform: 'uppercase' }}
                 >
                   {t('add_photo')}
                 </Text>
               </>
             )}
-          </View>
-
-          {/* web-only: hidden native file input */}
-          {Platform.OS === 'web' ? (
-            <View height={0} overflow="hidden">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={onWebFileChange}
-              />
-            </View>
-          ) : null}
+          </Pressable>
 
           {/* text fields */}
           <Input
@@ -640,84 +605,79 @@ export default function AddModal({ onClose, onSaved }: Props) {
             >
               <View
                 testID="dup-banner"
-                borderWidth={2}
-                borderColor={bannerBorder}
-                borderRadius="$md"
-                backgroundColor={bannerBg}
-                overflow="hidden"
+                style={{
+                  borderWidth: 2,
+                  borderColor: bannerBorder,
+                  borderRadius: radius.md,
+                  backgroundColor: bannerBg,
+                  overflow: 'hidden',
+                }}
               >
-                {/* banner header row */}
-                <XStack
-                  alignItems="center"
-                  gap="$2"
-                  padding={12}
-                  onPress={() => setBannerExpanded((e) => !e)}
-                  cursor="pointer"
-                  accessibilityRole="button"
-                >
-                  <Icon name={bannerIcon} size={18} color="#191017" />
-                  <Text flex={1} color="$ink900" fontSize={14} fontWeight="600">
-                    {t(bannerVariant === 'warn' ? 'add_warn_hint' : 'add_duplicate_hint')}
-                  </Text>
-                  <Icon
-                    name={bannerExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color="#191017"
-                  />
-                  <View
+                {/* banner header row — non-pressable container with two independent
+                    press targets to avoid nested Pressable propagation issues */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2], paddingLeft: 12, paddingRight: 4, paddingVertical: 12 }}>
+                  {/* expand/collapse tappable area — fills the row except the close button */}
+                  <Pressable
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space[2] }}
+                    onPress={() => setBannerExpanded((e) => !e)}
+                    accessibilityRole="button"
+                  >
+                    <Icon name={bannerIcon} size={18} color="#191017" />
+                    <Text style={{ flex: 1, color: colors.ink900, fontSize: 14, fontWeight: '600' }}>
+                      {t(bannerVariant === 'warn' ? 'add_warn_hint' : 'add_duplicate_hint')}
+                    </Text>
+                    <Icon
+                      name={bannerExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color="#191017"
+                    />
+                  </Pressable>
+                  {/* close button — separate Pressable so it doesn't bubble into the expand handler */}
+                  <Pressable
                     onPress={dismissBanner}
                     accessibilityRole="button"
-                    aria-label={t('cancel')}
-                    padding={4}
+                    accessibilityLabel={t('cancel')}
+                    style={{ padding: 4 }}
                   >
                     <Icon name="close" size={14} color="#191017" />
-                  </View>
-                </XStack>
+                  </Pressable>
+                </View>
 
                 {/* expanded match rows */}
                 {bannerExpanded ? (
-                  <YStack
-                    borderTopWidth={2}
-                    borderTopColor={bannerBorder}
-                    gap={0}
-                  >
+                  <View style={{ borderTopWidth: 2, borderTopColor: bannerBorder }}>
                     {dupMatches.map((match) => (
-                      <XStack
+                      <Pressable
                         key={match.id}
-                        alignItems="center"
-                        gap="$3"
-                        padding={12}
-                        borderTopWidth={1}
-                        borderTopColor="$ink200"
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], padding: 12, borderTopWidth: 1, borderTopColor: colors.ink200 }}
                         onPress={() => {
                           onClose()
                           router.push(`/taste/${match.id}`)
                         }}
-                        cursor="pointer"
                         accessibilityRole="button"
                       >
-                        <YStack flex={1} minWidth={0}>
-                          <Text color="$ink900" fontWeight="600" fontSize={14}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={{ color: colors.ink900, fontWeight: '600', fontSize: 14 }}>
                             {match.name}
                           </Text>
                           {match.place ? (
-                            <Text color="$ink500" fontSize={12}>
+                            <Text style={{ color: colors.ink500, fontSize: 12 }}>
                               {match.place}
                             </Text>
                           ) : null}
-                        </YStack>
+                        </View>
                         {match.verdict != null ? (
                           <VerdictStamp verdict={match.verdict} size="sm" label={t('v_' + match.verdict)} />
                         ) : null}
-                      </XStack>
+                      </Pressable>
                     ))}
-                  </YStack>
+                  </View>
                 ) : null}
               </View>
             </Animated.View>
           ) : null}
 
-          <View gap="$2">
+          <View style={{ gap: space[2] }}>
             <Input
               label={t('f_where')}
               placeholder="Tiger Sugar · Hongdae"
@@ -759,8 +719,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
         {/* verdict picker — hidden in todo mode */}
         {mode === 'tasted' ? (
-          <View gap="$2">
-            <Text {...KICKER}>{t('how_was_it')}</Text>
+          <View style={{ gap: space[2] }}>
+            <Text style={KICKER}>{t('how_was_it')}</Text>
             <VerdictPicker
               value={verdict}
               onChange={setVerdict}
@@ -770,9 +730,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
         ) : null}
 
         {/* tag chips */}
-        <View gap="$2">
-          <Text {...KICKER}>{t('tags')}</Text>
-          <View flexDirection="row" flexWrap="wrap" gap="$2">
+        <View style={{ gap: space[2] }}>
+          <Text style={KICKER}>{t('tags')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
             {tagChoices.map((tg) => (
               <Tag key={tg} active={picked.includes(tg)} onPress={() => toggle(tg)}>
                 {tg}
@@ -791,8 +751,8 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 </Tag>
               ))}
           </View>
-          <View flexDirection="row" alignItems="center" gap="$2">
-            <View flex={1}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+            <View style={{ flex: 1 }}>
               <Input
                 placeholder={t('add_tag')}
                 value={customTag}
@@ -818,7 +778,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
         {error ? (
           <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-            <Text color="$verdictNah2" fontSize={14}>
+            <Text style={{ color: colors.verdictNah2, fontSize: 14 }}>
               {error}
             </Text>
           </Animated.View>
@@ -836,15 +796,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
         <View
           testID="add-actions-footer"
           onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-          flexDirection="row"
-          justifyContent="flex-end"
-          gap="$3"
-          backgroundColor="$background"
-          borderTopWidth={3}
-          borderTopColor="$ink900"
-          paddingHorizontal="$5"
-          paddingTop="$4"
-          paddingBottom={insets.bottom + 16}
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            gap: space[3],
+            backgroundColor: colors.background,
+            borderTopWidth: 3,
+            borderTopColor: colors.ink900,
+            paddingHorizontal: space[5],
+            paddingTop: space[4],
+            paddingBottom: insets.bottom + 16,
+          }}
         >
           <Button variant="ghost" onPress={onClose}>
             {t('cancel')}

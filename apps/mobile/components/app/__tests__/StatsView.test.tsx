@@ -372,7 +372,7 @@ describe('StatsView AnimatedNumber', () => {
     })
 
     const scrollView = renderer.root.find(
-      (n) => (n.type as unknown) === 'ScrollView',
+      (n) => n.props.testID === 'stats-scroll',
     )
     await act(async () => {
       await scrollView.props.refreshControl.props.onRefresh()

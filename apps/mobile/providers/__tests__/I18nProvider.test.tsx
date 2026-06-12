@@ -6,7 +6,6 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { Platform } from 'react-native'
 
 import { I18nProvider, useI18n } from '../I18nProvider'
 import type { Lang } from '@yon/shared'
@@ -23,33 +22,11 @@ function MoneyProbe() {
 }
 
 describe('I18nProvider money formatting', () => {
-  let realOS: typeof Platform.OS
-  let realLocalStorage: PropertyDescriptor | undefined
-
   beforeEach(() => {
-    realOS = Platform.OS
-    realLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' })
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: {
-        getItem: jest.fn(() => null),
-        setItem: jest.fn(),
-      },
-    })
     Object.keys(formattedByLang).forEach((key) => {
       delete formattedByLang[key]
     })
     setLangRef = null
-  })
-
-  afterEach(() => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
-    if (realLocalStorage) {
-      Object.defineProperty(globalThis, 'localStorage', realLocalStorage)
-    } else {
-      delete (globalThis as { localStorage?: Storage }).localStorage
-    }
   })
 
   it('formats money with the active language currency symbol', () => {

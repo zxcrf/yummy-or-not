@@ -1,51 +1,51 @@
 /* ============================================================
-   YUMMY OR NOT — Switch (Tamagui / React Native)
+   YUMMY OR NOT — Switch (React Native)
    Pixel toggle switch; verdict-green when on. Ported from the web
    DS: a chunky ink-bordered pill track (56×30) with a round knob
    that slides 1 → 27px. Controlled via `checked` + `onChange`.
    ============================================================ */
 
 import { useEffect } from 'react'
-import { type GetProps, styled, View } from 'tamagui'
+import { Pressable, StyleSheet, type StyleProp, type ViewProps, type ViewStyle } from 'react-native'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated'
+import { colors, radius } from '@/theme'
 
 const KNOB_OFF = 1
 const KNOB_ON = 27
 const SPRING = { damping: 15, stiffness: 200 }
 
-const Track = styled(View, {
-  name: 'Switch',
-  position: 'relative',
-  width: 56,
-  height: 30,
-  flexShrink: 0,
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$pill',
-  backgroundColor: '$ink200',
-  cursor: 'pointer',
-
-  variants: {
-    checked: {
-      true: { backgroundColor: '$verdictYum' },
-    },
-    disabled: {
-      true: { opacity: 0.45, cursor: 'not-allowed' },
-    },
-  } as const,
+const styles = StyleSheet.create({
+  track: {
+    position: 'relative',
+    width: 56,
+    height: 30,
+    flexShrink: 0,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.pill,
+    backgroundColor: colors.ink200,
+  },
+  trackChecked: {
+    backgroundColor: colors.verdictYum,
+  },
+  trackDisabled: {
+    opacity: 0.45,
+  },
 })
 
-export type SwitchProps = Omit<GetProps<typeof Track>, 'checked' | 'onChange'> & {
+export interface SwitchProps extends Omit<ViewProps, 'style'> {
   checked?: boolean
   onChange?: (next: boolean) => void
   disabled?: boolean
+  /** Optional style applied to the track Pressable (e.g. margin, alignSelf). */
+  style?: StyleProp<ViewStyle>
 }
 
-export function Switch({ checked = false, onChange, disabled = false, ...rest }: SwitchProps) {
+export function Switch({ checked = false, onChange, disabled = false, style, ...rest }: SwitchProps) {
   const knobX = useSharedValue(checked ? KNOB_ON : KNOB_OFF)
 
   useEffect(() => {
@@ -57,15 +57,22 @@ export function Switch({ checked = false, onChange, disabled = false, ...rest }:
   }))
 
   return (
-    <Track
-      checked={checked}
-      disabled={disabled}
+    <Pressable
       accessibilityRole="switch"
-      aria-checked={checked}
+      disabled={disabled}
       onPress={() => {
         if (!disabled) onChange?.(!checked)
       }}
+      style={[
+        styles.track,
+        checked && styles.trackChecked,
+        disabled && styles.trackDisabled,
+        // Caller style goes last so it can add margin/alignSelf, but the track
+        // dimensions and colors above always win via StyleSheet specificity.
+        style,
+      ]}
       {...rest}
+      accessibilityState={{ ...(rest as { accessibilityState?: object }).accessibilityState, checked, disabled }}
     >
       <Animated.View
         style={[
@@ -83,7 +90,7 @@ export function Switch({ checked = false, onChange, disabled = false, ...rest }:
           knobStyle,
         ]}
       />
-    </Track>
+    </Pressable>
   )
 }
 

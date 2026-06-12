@@ -17,14 +17,19 @@
    ============================================================ */
 
 import { type ComponentProps, useCallback, useEffect, useRef } from 'react'
-import { Pressable, type View as RNView } from 'react-native'
+import {
+  Pressable,
+  View,
+  useWindowDimensions,
+  type View as RNView,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated'
-import { Text, View, useMedia } from 'tamagui'
+import { Text, colors, radius } from '@/theme'
 import { LANGS } from '@yon/shared'
 
 import { router, Tabs } from 'expo-router'
@@ -86,35 +91,45 @@ function Sidebar({ props }: { props: TabBarProps }) {
 
   return (
     <View
-      position="absolute"
-      top={0}
-      bottom={0}
-      left={0}
-      width={SIDEBAR_W}
-      backgroundColor="$white"
-      borderRightWidth={3}
-      borderRightColor="$ink900"
-      paddingTop={18 + insets.top}
-      paddingBottom={18 + insets.bottom}
-      paddingHorizontal={18}
-      gap={6}
+      style={{
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        width: SIDEBAR_W,
+        backgroundColor: colors.white,
+        borderRightWidth: 3,
+        borderRightColor: colors.ink900,
+        paddingTop: 18 + insets.top,
+        paddingBottom: 18 + insets.bottom,
+        paddingHorizontal: 18,
+        gap: 6,
+      }}
     >
       {/* logo */}
-      <View flexDirection="row" alignItems="center" gap={10} paddingHorizontal={6} paddingBottom={14}>
-        <Text fontWeight="700" fontSize={19} lineHeight={19} color="$ink900">
-          yummy <Text color="$candyPink">or</Text> not
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingHorizontal: 6,
+          paddingBottom: 14,
+        }}
+      >
+        <Text style={{ fontWeight: '700', fontSize: 19, lineHeight: 19, color: colors.ink900 }}>
+          yummy <Text style={{ color: colors.candyPink }}>or</Text> not
         </Text>
       </View>
 
       {/* lang switcher */}
       {showGlobalLangSwitcher ? (
-        <View paddingHorizontal={2} paddingBottom={14}>
+        <View style={{ paddingHorizontal: 2, paddingBottom: 14 }}>
           <LangSwitcher
             value={lang}
             onChange={setLang}
             languages={LANGS}
             align="left"
-            tone="$candyPink"
+            tone={colors.candyPink}
           />
         </View>
       ) : null}
@@ -123,39 +138,41 @@ function Sidebar({ props }: { props: TabBarProps }) {
       {NAV.map((n) => {
         const on = activeRoute === n.route
         return (
-          <View
+          <Pressable
             key={n.route}
             accessibilityRole="button"
+            accessibilityState={{ selected: on }}
             onPress={() => go(n.route)}
-            flexDirection="row"
-            alignItems="center"
-            gap={12}
-            width="100%"
-            paddingVertical={11}
-            paddingHorizontal={14}
-            borderRadius="$md"
-            borderWidth={3}
-            borderColor={on ? '$ink900' : 'transparent'}
-            backgroundColor={on ? '$candyYellow' : 'transparent'}
-            cursor="pointer"
-            {...(on
-              ? {
-                  shadowColor: '$ink900',
-                  shadowOffset: { width: 3, height: 3 },
-                  shadowOpacity: 1,
-                  shadowRadius: 0,
-                }
-              : {})}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              width: '100%',
+              paddingVertical: 11,
+              paddingHorizontal: 14,
+              borderRadius: radius.md,
+              borderWidth: 3,
+              borderColor: on ? colors.ink900 : 'transparent',
+              backgroundColor: on ? colors.candyYellow : 'transparent',
+              ...(on
+                ? {
+                    shadowColor: colors.ink900,
+                    shadowOffset: { width: 3, height: 3 },
+                    shadowOpacity: 1,
+                    shadowRadius: 0,
+                  }
+                : null),
+            }}
           >
             <Icon name={n.icon} size={20} color="#191017" />
-            <Text fontWeight="600" fontSize={15} color="$ink900">
+            <Text style={{ fontWeight: '600', fontSize: 15, color: colors.ink900 }}>
               {t(n.labelKey)}
             </Text>
-          </View>
+          </Pressable>
         )
       })}
 
-      <View flex={1} />
+      <View style={{ flex: 1 }} />
 
       {/* log a taste CTA */}
       <Button
@@ -169,21 +186,23 @@ function Sidebar({ props }: { props: TabBarProps }) {
 
       {/* user footer */}
       <View
-        flexDirection="row"
-        alignItems="center"
-        gap={10}
-        marginTop={14}
-        paddingTop={10}
-        paddingHorizontal={6}
-        borderTopWidth={2}
-        borderTopColor="$ink200"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          marginTop: 14,
+          paddingTop: 10,
+          paddingHorizontal: 6,
+          borderTopWidth: 2,
+          borderTopColor: colors.ink200,
+        }}
       >
         <Avatar name="Mina Park" size="sm" />
         <View>
-          <Text fontWeight="700" fontSize={14} color="$ink900">
+          <Text style={{ fontWeight: '700', fontSize: 14, color: colors.ink900 }}>
             Mina Park
           </Text>
-          <Text fontSize={12} color="$ink500">
+          <Text style={{ fontSize: 12, color: colors.ink500 }}>
             {t('free_plan')}
           </Text>
         </View>
@@ -225,6 +244,7 @@ function AnimatedTab({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={{ flex: 1, alignItems: 'center', gap: 3, paddingVertical: 6 }}
     >
@@ -232,10 +252,12 @@ function AnimatedTab({
         <Icon name={icon} size={24} color={active ? '#ff5da2' : '#9a8e96'} />
       </Animated.View>
       <Text
-        fontSize={9}
-        letterSpacing={0.5}
-        textTransform="uppercase"
-        color={active ? '$candyPink' : '$ink400'}
+        style={{
+          fontSize: 9,
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
+          color: active ? colors.candyPink : colors.ink400,
+        }}
       >
         {label}
       </Text>
@@ -338,21 +360,23 @@ function TabBar({ props }: { props: TabBarProps }) {
 
   return (
     <View
-      flexDirection="row"
-      alignItems="center"
-      gap={4}
-      borderTopWidth={3}
-      borderTopColor="$ink900"
-      backgroundColor="$white"
-      paddingHorizontal={8}
-      paddingTop={6}
-      paddingBottom={Math.max(insets.bottom, 12)}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        borderTopWidth: 3,
+        borderTopColor: colors.ink900,
+        backgroundColor: colors.white,
+        paddingHorizontal: 8,
+        paddingTop: 6,
+        paddingBottom: Math.max(insets.bottom, 12),
+      }}
     >
       {tab(NAV[0])}
       {tab(NAV[1])}
 
       {/* center FAB → add route */}
-      <View flex={1} alignItems="center" justifyContent="center">
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <AnimatedFab label={t('log_taste')} />
       </View>
 
@@ -366,10 +390,10 @@ function TabBar({ props }: { props: TabBarProps }) {
 /*  AppNav — responsive switch                                         */
 /* ------------------------------------------------------------------ */
 export function AppNav(props: TabBarProps) {
-  const media = useMedia()
-  // gtMd ≈ ≥ 769px → desktop/tablet sidebar; narrower → bottom tab bar.
-  // Mirrors the web AppShell 900px breakpoint closely enough on RN media keys.
-  if (media.gtMd) {
+  const { width } = useWindowDimensions()
+  // width ≥ 769px → desktop/tablet sidebar; narrower → bottom tab bar.
+  // Replaces the old responsive media breakpoint (~769px).
+  if (width >= 769) {
     return <Sidebar props={props} />
   }
   return <TabBar props={props} />

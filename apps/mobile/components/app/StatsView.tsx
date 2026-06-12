@@ -1,5 +1,5 @@
 /* ============================================================
-   YUMMY OR NOT -- StatsView (Tamagui / React Native + RN Web)
+   YUMMY OR NOT -- StatsView (plain RN + theme, no Tamagui)
    RN port of the web StatsView: three verdict tiles, a money-saved
    card, and a verdict-breakdown bar chart.
 
@@ -9,12 +9,12 @@
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, RefreshControl } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { getStats, type Stats, type Taste } from '@yon/shared'
 
 import { Card, Icon } from '@/components/ds'
+import { colors, space, radius, Text, textBase } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
 import AnimatedNumber from '@/components/app/AnimatedNumber'
 
@@ -22,13 +22,6 @@ interface Props {
   items: Taste[]
   onRefresh?: () => Promise<void> | void
 }
-
-const KICKER = {
-  color: '$ink400',
-  fontSize: 11,
-  letterSpacing: 1.32,
-  textTransform: 'uppercase',
-} as const
 
 // Sentinel injected into the saved_amt translation template so we can split
 // the sentence at the {amt} boundary. Plain ASCII so the source file stays
@@ -56,34 +49,28 @@ function SavedAmountRow({ t, symbolPrefix, symbolSuffix, savedNumeric }: SavedAm
   // Handles both "$3 saved" (en) and "xia Y3" (zh) as well as
   // hypothetical suffix-symbol locales like "3E ahorrados".
   return (
-    <View flexDirection="row" alignItems="baseline" flexWrap="wrap">
+    <View style={styles.savedAmtRow}>
       {sentencePre ? (
-        <Text color="$ink900" fontWeight="700" fontSize={24}>
-          {sentencePre}
-        </Text>
+        <Text style={styles.savedAmtText}>{sentencePre}</Text>
       ) : null}
       {symbolPrefix ? (
-        <Text color="$ink900" fontWeight="700" fontSize={24} testID="saved-currency-symbol">
+        <Text style={styles.savedAmtText} testID="saved-currency-symbol">
           {symbolPrefix}
         </Text>
       ) : null}
       <AnimatedNumber
         value={savedNumeric}
         decimals={decimals}
-        color="$ink900"
-        fontWeight="700"
-        fontSize={24}
+        style={[textBase, { color: colors.ink900, fontWeight: '700', fontSize: 24 }]}
         testID="saved-animated-number"
       />
       {symbolSuffix ? (
-        <Text color="$ink900" fontWeight="700" fontSize={24} testID="saved-currency-symbol">
+        <Text style={styles.savedAmtText} testID="saved-currency-symbol">
           {symbolSuffix}
         </Text>
       ) : null}
       {sentencePost ? (
-        <Text color="$ink900" fontWeight="700" fontSize={24}>
-          {sentencePost}
-        </Text>
+        <Text style={styles.savedAmtText}>{sentencePost}</Text>
       ) : null}
     </View>
   )
@@ -153,8 +140,6 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
   const symbolPrefix = numericIndex > 0 ? formattedSaved.slice(0, numericIndex) : ''
   const symbolSuffix = numericIndex >= 0 ? formattedSaved.slice(numericIndex + numericToken.length) : formattedSaved
 
-  type Color = GetProps<typeof View>['backgroundColor']
-
   const openVerdict = useCallback(
     (verdict: 'yum' | 'meh' | 'nah') => {
       router.push({ pathname: '/(tabs)', params: { verdict } })
@@ -162,65 +147,36 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
     [router],
   )
 
-  const tile = (label: string, value: number, color: Color, verdict: 'yum' | 'meh' | 'nah') => (
+  const tile = (label: string, value: number, color: string, verdict: 'yum' | 'meh' | 'nah') => (
     <Pressable
       accessibilityRole="button"
       onPress={() => openVerdict(verdict)}
-      style={{ flex: 1, cursor: 'pointer' }}
+      style={{ flex: 1 }}
     >
-      <View
-        paddingVertical={22}
-        paddingHorizontal={18}
-        alignItems="center"
-        borderWidth={3}
-        borderColor="$ink900"
-        borderRadius="$lg"
-        backgroundColor={color}
-        shadowColor="$ink900"
-        shadowOffset={{ width: 5, height: 5 }}
-        shadowOpacity={1}
-        shadowRadius={0}
-      >
+      <View style={[styles.tile, { backgroundColor: color }]}>
         <AnimatedNumber
           value={value}
-          color="#fff"
-          fontWeight="700"
-          fontSize={48}
-          lineHeight={48}
+          style={[textBase, { color: '#fff', fontWeight: '700', fontSize: 48, lineHeight: 48 }]}
         />
-        <Text
-          color="#fff"
-          fontSize={10}
-          letterSpacing={1.1}
-          textTransform="uppercase"
-          marginTop="$2"
-        >
-          {label}
-        </Text>
+        <Text style={styles.tileLabel}>{label}</Text>
       </View>
     </Pressable>
   )
 
-  const bar = (label: string, verdict: 'yum' | 'meh' | 'nah', color: Color) => {
+  const bar = (label: string, verdict: 'yum' | 'meh' | 'nah', color: string) => {
     const n = count(verdict)
     const pct = total > 0 ? (n / total) * 100 : 0
     return (
-      <View marginBottom="$4">
-        <View flexDirection="row" justifyContent="space-between" marginBottom="$2">
-          <Text color="$ink900" fontWeight="600">
-            {label}
-          </Text>
-          <AnimatedNumber value={n} color="$ink900" fontWeight="600" />
+      <View style={styles.barRow}>
+        <View style={styles.barHeader}>
+          <Text style={styles.barLabel}>{label}</Text>
+          <AnimatedNumber
+            value={n}
+            style={[textBase, { color: colors.ink900, fontWeight: '600' }]}
+          />
         </View>
-        <View
-          height={22}
-          backgroundColor="$white"
-          borderWidth={3}
-          borderColor="$ink900"
-          borderRadius="$pill"
-          overflow="hidden"
-        >
-          <View width={`${pct}%`} height="100%" backgroundColor={color} />
+        <View style={styles.barTrack}>
+          <View style={[styles.barFill, { width: `${pct}%` as `${number}%`, backgroundColor: color }]} />
         </View>
       </View>
     )
@@ -228,9 +184,9 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
 
   return (
     <ScrollView
-      flex={1}
-      backgroundColor="$background"
-      contentContainerStyle={{ padding: 20 }}
+      testID="stats-scroll"
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -241,53 +197,139 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
       }
     >
       {/* page heading */}
-      <Text color="$ink900" fontWeight="700" fontSize={40} lineHeight={40}>
-        {t('stats_title')}
-      </Text>
+      <Text style={styles.heading}>{t('stats_title')}</Text>
 
       {/* verdict tiles */}
-      <View flexDirection="row" gap="$4" marginTop={22} maxWidth={720}>
-        {tile(t('yum'), count('yum'), '$verdictYum', 'yum')}
-        {tile(t('meh'), count('meh'), '$verdictMeh', 'meh')}
-        {tile(t('nah'), count('nah'), '$verdictNah', 'nah')}
+      <View style={styles.tileRow}>
+        {tile(t('yum'), count('yum'), colors.verdictYum, 'yum')}
+        {tile(t('meh'), count('meh'), colors.verdictMeh, 'meh')}
+        {tile(t('nah'), count('nah'), colors.verdictNah, 'nah')}
       </View>
 
       {/* saved card */}
       <Card
         padded
-        marginTop="$4"
-        maxWidth={720}
-        flexDirection="row"
-        alignItems="center"
-        gap={14}
+        style={{ marginTop: space[4] }}
       >
-        <Icon name="coin" size={36} color="#ff5ca8" />
-        <View>
-          {/* Split the translated template at the {amt} position so only
-              the numeric portion participates in the rolling animation.
-              The currency symbol stays as static sibling text outside
-              AnimatedNumber -- it must never roll. */}
-          <SavedAmountRow
-            t={t}
-            symbolPrefix={symbolPrefix}
-            symbolSuffix={symbolSuffix}
-            savedNumeric={savedNumeric}
-          />
-          <Text color="$ink500" fontSize={14}>
-            {t('saved_sub')}
-          </Text>
+        <View style={styles.savedRow}>
+          <Icon name="coin" size={36} color="#ff5ca8" />
+          <View>
+            {/* Split the translated template at the {amt} position so only
+                the numeric portion participates in the rolling animation.
+                The currency symbol stays as static sibling text outside
+                AnimatedNumber -- it must never roll. */}
+            <SavedAmountRow
+              t={t}
+              symbolPrefix={symbolPrefix}
+              symbolSuffix={symbolSuffix}
+              savedNumeric={savedNumeric}
+            />
+            <Text style={styles.savedSub}>{t('saved_sub')}</Text>
+          </View>
         </View>
       </Card>
 
       {/* breakdown bars */}
-      <Card padded marginTop="$6" maxWidth={720}>
-        <Text {...KICKER}>{t('verdict_breakdown')}</Text>
-        <View marginTop="$4">
-          {bar(t('yum_buy_again'), 'yum', '$verdictYum')}
-          {bar(t('meh_maybe'), 'meh', '$verdictMeh')}
-          {bar(t('nah_skip'), 'nah', '$verdictNah')}
+      <Card padded style={{ marginTop: space[6], maxWidth: 720 }}>
+        <Text style={styles.kicker}>{t('verdict_breakdown')}</Text>
+        <View style={{ marginTop: space[4] }}>
+          {bar(t('yum_buy_again'), 'yum', colors.verdictYum)}
+          {bar(t('meh_maybe'), 'meh', colors.verdictMeh)}
+          {bar(t('nah_skip'), 'nah', colors.verdictNah)}
         </View>
       </Card>
     </ScrollView>
   )
 }
+
+const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    padding: 20,
+  },
+  heading: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 40,
+    lineHeight: 40,
+  },
+  kicker: {
+    color: colors.ink400,
+    fontSize: 11,
+    letterSpacing: 1.32,
+    textTransform: 'uppercase',
+  },
+  // verdict tiles
+  tileRow: {
+    flexDirection: 'row',
+    gap: space[4],
+    marginTop: 22,
+    maxWidth: 720,
+  },
+  tile: {
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.lg,
+    shadowColor: colors.ink900,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  tileLabel: {
+    color: '#fff',
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginTop: space[2],
+  },
+  // saved card
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  savedAmtRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+  },
+  savedAmtText: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 24,
+  },
+  savedSub: {
+    color: colors.ink500,
+    fontSize: 14,
+  },
+  // breakdown bars
+  barRow: {
+    marginBottom: space[4],
+  },
+  barHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: space[2],
+  },
+  barLabel: {
+    color: colors.ink900,
+    fontWeight: '600',
+  },
+  barTrack: {
+    height: 22,
+    backgroundColor: colors.white,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+  },
+})

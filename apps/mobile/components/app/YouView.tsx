@@ -1,5 +1,5 @@
 /* ============================================================
-   YUMMY OR NOT — YouView (Tamagui / React Native + RN Web)
+   YUMMY OR NOT — YouView (plain RN + theme, no Tamagui)
    RN port of the web YouView: profile header (avatar + name), verdict
    stat tiles, money-saved card, a language switcher wired to the i18n
    provider, and a settings list.
@@ -10,12 +10,12 @@
    ============================================================ */
 
 import { useCallback, useState } from 'react'
-import { Modal, Pressable, StyleSheet } from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { LANGS, updateUser, type Taste } from '@yon/shared'
 
 import { Avatar, Button, Card, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
+import { colors, space, radius, Text } from '@/theme'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -40,19 +40,13 @@ function SettingRow({
       accessibilityRole="button"
     >
       <View
-        flexDirection="row"
-        alignItems="center"
-        gap="$3"
-        paddingVertical={14}
-        paddingHorizontal={2}
-        borderBottomWidth={last ? 0 : 2}
-        borderBottomColor="$ink200"
-        borderStyle="dotted"
+        style={[
+          styles.settingRow,
+          last ? styles.settingRowLast : styles.settingRowBorder,
+        ]}
       >
         <Icon name={icon} size={20} color="#5a4f63" />
-        <Text flex={1} color="$ink900" fontWeight="500">
-          {label}
-        </Text>
+        <Text style={styles.settingRowLabel}>{label}</Text>
         <Icon name="chevron-right" size={18} color="#cfc7d4" />
       </View>
     </Pressable>
@@ -166,39 +160,17 @@ export default function YouView({ items }: Props) {
   const stat = (
     label: string,
     value: number,
-    color: GetProps<typeof View>['backgroundColor'],
+    color: string,
     verdict: 'yum' | 'meh' | 'nah',
   ) => (
     <Pressable
       accessibilityRole="button"
       onPress={() => openVerdict(verdict)}
-      style={{ flex: 1, cursor: 'pointer' }}
+      style={{ flex: 1 }}
     >
-      <View
-        paddingVertical={14}
-        paddingHorizontal={10}
-        alignItems="center"
-        borderWidth={3}
-        borderColor="$ink900"
-        borderRadius="$lg"
-        backgroundColor={color}
-        shadowColor="$ink900"
-        shadowOffset={{ width: 5, height: 5 }}
-        shadowOpacity={1}
-        shadowRadius={0}
-      >
-        <Text color="#fff" fontWeight="700" fontSize={34} lineHeight={34}>
-          {value}
-        </Text>
-        <Text
-          color="#fff"
-          fontSize={9}
-          letterSpacing={1.1}
-          textTransform="uppercase"
-          marginTop={6}
-        >
-          {label}
-        </Text>
+      <View style={[styles.statTile, { backgroundColor: color }]}>
+        <Text style={styles.statValue}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
       </View>
     </Pressable>
   )
@@ -207,42 +179,31 @@ export default function YouView({ items }: Props) {
   const bar = (
     label: string,
     verdict: 'yum' | 'meh' | 'nah',
-    color: GetProps<typeof View>['backgroundColor'],
+    color: string,
   ) => {
     const n = count(verdict)
     const pct = total > 0 ? (n / total) * 100 : 0
     return (
-      <View marginBottom="$4">
-        <View flexDirection="row" justifyContent="space-between" marginBottom="$2">
-          <Text color="$ink900" fontWeight="600">
-            {label}
-          </Text>
-          <Text color="$ink900" fontWeight="600">
-            {n}
-          </Text>
+      <View style={styles.barRow}>
+        <View style={styles.barHeader}>
+          <Text style={styles.barLabel}>{label}</Text>
+          <Text style={styles.barLabel}>{n}</Text>
         </View>
-        <View
-          height={22}
-          backgroundColor="$white"
-          borderWidth={3}
-          borderColor="$ink900"
-          borderRadius="$pill"
-          overflow="hidden"
-        >
-          <View width={`${pct}%`} height="100%" backgroundColor={color} />
+        <View style={styles.barTrack}>
+          <View style={[styles.barFill, { width: `${pct}%` as `${number}%`, backgroundColor: color }]} />
         </View>
       </View>
     )
   }
 
   return (
-    <ScrollView flex={1} backgroundColor="$background" contentContainerStyle={{ padding: 20 }}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* avatar header */}
-      <View flexDirection="row" alignItems="center" gap={14} marginTop="$1">
+      <View style={styles.header}>
         <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
-        <View flex={1}>
-          <View flexDirection="row" alignItems="center" gap={8} flexWrap="wrap">
-            <Text color="$ink900" fontWeight="700" fontSize={22} testID="display-name">
+        <View style={styles.headerInfo}>
+          <View style={styles.nameRow}>
+            <Text style={styles.displayName} testID="display-name">
               {displayName}
             </Text>
             <Pressable
@@ -254,23 +215,8 @@ export default function YouView({ items }: Props) {
               <Icon name="edit" size={16} color="#9b8fa4" />
             </Pressable>
             {user?.plan === 'pro' ? (
-              <View
-                backgroundColor="$candyYellow"
-                borderWidth={2}
-                borderColor="$ink900"
-                borderRadius="$sm"
-                paddingHorizontal={8}
-                paddingVertical={2}
-              >
-                <Text
-                  color="$ink900"
-                  fontWeight="700"
-                  fontSize={10}
-                  letterSpacing={0.8}
-                  textTransform="uppercase"
-                >
-                  {t('pro_plan')}
-                </Text>
+              <View style={styles.proBadge}>
+                <Text style={styles.proBadgeText}>{t('pro_plan')}</Text>
               </View>
             ) : null}
           </View>
@@ -280,7 +226,7 @@ export default function YouView({ items }: Props) {
             accessibilityRole="button"
             testID="tastes-logged-btn"
           >
-            <Text color="$ink500">{t('tastes_logged', { n: tastedItems.length })}</Text>
+            <Text style={styles.tastesLogged}>{t('tastes_logged', { n: tastedItems.length })}</Text>
           </Pressable>
         </View>
         <LangSwitcher
@@ -293,91 +239,49 @@ export default function YouView({ items }: Props) {
       </View>
 
       {/* verdict stat tiles */}
-      <View flexDirection="row" gap="$3" marginTop={18}>
-        {stat(t('yum'), count('yum'), '$verdictYum', 'yum')}
-        {stat(t('meh'), count('meh'), '$verdictMeh', 'meh')}
-        {stat(t('nah'), count('nah'), '$verdictNah', 'nah')}
+      <View style={styles.statRow}>
+        {stat(t('yum'), count('yum'), colors.verdictYum, 'yum')}
+        {stat(t('meh'), count('meh'), colors.verdictMeh, 'meh')}
+        {stat(t('nah'), count('nah'), colors.verdictNah, 'nah')}
       </View>
 
       {/* saved card — informational (formerly tapped to the removed Stats tab) */}
       <Card
         padded
-        marginTop="$4"
-        flexDirection="row"
-        alignItems="center"
-        gap={14}
+        style={{ marginTop: space[4] }}
         testID="savings-card"
       >
-        <Icon name="coin" size={36} color="#ff5ca8" />
-        <View>
-          <Text color="$ink900" fontWeight="700" fontSize={24}>
-            {t('saved_amt', { amt: savedAmount })}
-          </Text>
-          <Text color="$ink500" fontSize={14}>
-            {t('saved_sub')}
-          </Text>
+        <View style={styles.savingsRow}>
+          <Icon name="coin" size={36} color="#ff5ca8" />
+          <View>
+            <Text style={styles.savingsAmt}>{t('saved_amt', { amt: savedAmount })}</Text>
+            <Text style={styles.savingsSub}>{t('saved_sub')}</Text>
+          </View>
         </View>
       </Card>
 
       {/* verdict breakdown — ported from the removed Stats tab so 我的 retains
           all former stats content. */}
-      <Card padded marginTop="$4" testID="verdict-breakdown-card">
-        <Text
-          color="$ink400"
-          fontSize={11}
-          letterSpacing={1.32}
-          textTransform="uppercase"
-        >
-          {t('verdict_breakdown')}
-        </Text>
-        <View marginTop={18}>
-          {bar(t('yum_buy_again'), 'yum', '$verdictYum')}
-          {bar(t('meh_maybe'), 'meh', '$verdictMeh')}
-          {bar(t('nah_skip'), 'nah', '$verdictNah')}
+      <Card padded style={{ marginTop: space[4] }} testID="verdict-breakdown-card">
+        <Text style={styles.sectionKicker}>{t('verdict_breakdown')}</Text>
+        <View style={{ marginTop: 18 }}>
+          {bar(t('yum_buy_again'), 'yum', colors.verdictYum)}
+          {bar(t('meh_maybe'), 'meh', colors.verdictMeh)}
+          {bar(t('nah_skip'), 'nah', colors.verdictNah)}
         </View>
       </Card>
 
       {/* settings list */}
-      <View marginTop={18}>
-        <Text
-          color="$ink400"
-          fontSize={10}
-          letterSpacing={1.1}
-          textTransform="uppercase"
-          marginBottom={10}
-        >
-          {t('settings')}
-        </Text>
-        <View
-          flexDirection="row"
-          alignItems="center"
-          gap="$3"
-          paddingVertical={14}
-          paddingHorizontal={2}
-          borderBottomWidth={2}
-          borderBottomColor="$ink200"
-          borderStyle="dotted"
-        >
+      <View style={{ marginTop: 18 }}>
+        <Text style={styles.settingsKicker}>{t('settings')}</Text>
+        <View style={styles.settingRow}>
           <Icon name="alert" size={20} color="#5a4f63" />
-          <Text flex={1} color="$ink900" fontWeight="500">
-            {t('set_warnings')}
-          </Text>
+          <Text style={styles.settingRowLabel}>{t('set_warnings')}</Text>
           <Switch checked={warningsEnabled} onChange={toggleWarnings} testID="warnings-switch" />
         </View>
-        <View
-          flexDirection="row"
-          alignItems="center"
-          gap="$3"
-          paddingVertical={14}
-          paddingHorizontal={2}
-          borderBottomWidth={2}
-          borderBottomColor="$ink200"
-          borderStyle="dotted"
-        >
+        <View style={styles.settingRow}>
           <Icon name="map" size={20} color="#5a4f63" />
-          <Text flex={1} color="$ink900" fontWeight="500">
-            {t('set_location')}
-          </Text>
+          <Text style={styles.settingRowLabel}>{t('set_location')}</Text>
           <Switch checked={locationEnabled} onChange={toggleLocation} testID="location-switch" />
         </View>
         {/* Tag management — navigates to /tags stack screen */}
@@ -385,6 +289,7 @@ export default function YouView({ items }: Props) {
           icon="tag"
           label={t('tag_manage')}
           onPress={() => router.push('/tags')}
+          last
         />
         {/* set_private row removed until S3 */}
       </View>
@@ -393,7 +298,7 @@ export default function YouView({ items }: Props) {
       <Button
         variant="secondary"
         block
-        marginTop={18}
+        style={{ marginTop: 18 }}
         onPress={() => {
           void signOut()
         }}
@@ -409,11 +314,9 @@ export default function YouView({ items }: Props) {
         animationType="slide"
         onRequestClose={closeEditName}
       >
-        <Pressable style={styles.sheetOverlay} onPress={closeEditName}>
-          <Pressable style={styles.sheetContent} onPress={() => {}}>
-            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
-              {t('edit_profile')}
-            </Text>
+        <Pressable style={modalStyles.sheetOverlay} onPress={closeEditName}>
+          <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
+            <Text style={modalStyles.modalTitle}>{t('edit_profile')}</Text>
             <Input
               label={t('display_name_label')}
               value={nameInput}
@@ -424,11 +327,11 @@ export default function YouView({ items }: Props) {
               testID="display-name-input"
             />
             {nameError ? (
-              <Text color="$verdictNah2" fontSize={13} marginTop={8} testID="name-error">
+              <Text style={modalStyles.errorText} testID="name-error">
                 {nameError}
               </Text>
             ) : null}
-            <View flexDirection="row" gap="$3" marginTop={20}>
+            <View style={modalStyles.buttonRow}>
               <Button variant="ghost" onPress={closeEditName}>
                 {t('cancel')}
               </Button>
@@ -449,6 +352,163 @@ export default function YouView({ items }: Props) {
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    padding: 20,
+  },
+  // header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: space[1],
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  displayName: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 22,
+  },
+  proBadge: {
+    backgroundColor: colors.candyYellow,
+    borderWidth: 2,
+    borderColor: colors.ink900,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  proBadgeText: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  tastesLogged: {
+    color: colors.ink500,
+  },
+  // stat tiles
+  statRow: {
+    flexDirection: 'row',
+    gap: space[3],
+    marginTop: 18,
+  },
+  statTile: {
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.lg,
+    shadowColor: colors.ink900,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  statValue: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 34,
+    lineHeight: 34,
+  },
+  statLabel: {
+    color: '#fff',
+    fontSize: 9,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginTop: 6,
+  },
+  // savings card
+  savingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  savingsAmt: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 24,
+  },
+  savingsSub: {
+    color: colors.ink500,
+    fontSize: 14,
+  },
+  // section headers
+  sectionKicker: {
+    color: colors.ink400,
+    fontSize: 11,
+    letterSpacing: 1.32,
+    textTransform: 'uppercase',
+  },
+  settingsKicker: {
+    color: colors.ink400,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  // verdict breakdown bars
+  barRow: {
+    marginBottom: space[4],
+  },
+  barHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: space[2],
+  },
+  barLabel: {
+    color: colors.ink900,
+    fontWeight: '600',
+  },
+  barTrack: {
+    height: 22,
+    backgroundColor: colors.white,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+  },
+  // settings rows
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.ink200,
+    borderStyle: 'dotted',
+  },
+  settingRowBorder: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.ink200,
+    borderStyle: 'dotted',
+  },
+  settingRowLast: {
+    borderBottomWidth: 0,
+  },
+  settingRowLabel: {
+    flex: 1,
+    color: colors.ink900,
+    fontWeight: '500',
+  },
+})
+
+const modalStyles = StyleSheet.create({
   sheetOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -460,5 +520,21 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     padding: 24,
     paddingBottom: 40,
+  },
+  modalTitle: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: colors.verdictNah2,
+    fontSize: 13,
+    marginTop: 8,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: space[3],
+    marginTop: 20,
   },
 })
