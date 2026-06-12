@@ -55,6 +55,13 @@ jest.mock('expo-router', () => ({
   }),
 }))
 
+// Stub useAuth so RecallView's location useEffect short-circuits immediately
+// (locationEnabled is false) — no async IIFE is ever started, so there is no
+// in-flight setUserCoords that could fire after environment teardown.
+jest.mock('@/providers/AuthProvider', () => ({
+  useAuth: () => ({ user: { warningsEnabled: false, locationEnabled: false } }),
+}))
+
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
     lang: 'en',
@@ -125,37 +132,72 @@ function stats(overrides: Partial<Stats> = {}): Stats {
   }
 }
 
-async function render(element: React.ReactElement): Promise<TestRenderer.ReactTestRenderer> {
-  let renderer!: TestRenderer.ReactTestRenderer
-  await act(async () => {
-    renderer = TestRenderer.create(element)
-  })
-  return renderer
-}
-
-function refreshControl(renderer: TestRenderer.ReactTestRenderer) {
-  const scroll = renderer.root.find((node) => (node.type as unknown) === 'ScrollView')
-  const control = scroll.props.refreshControl
-
-  expect(control).toBeTruthy()
-  expect(control.type).toBe(RefreshControl)
-  expect(control.props.refreshing).toBe(false)
-
-  return control
-}
-
-function textContent(renderer: TestRenderer.ReactTestRenderer): string {
-  return renderer.root
-    .findAll((node) => typeof node.children[0] === 'string')
-    .map((node) => node.children.join(''))
-    .join('\n')
-}
-
 describe('mobile pull-to-refresh', () => {
+  // Each renderer created in a test is stored here so afterEach can clean up.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
   beforeEach(() => {
     jest.clearAllMocks()
     mockFormatMoney.mockImplementation((amount: number | string) => formatMoneyLikeProvider(amount))
+    // Fake timers prevent the 250 ms debounce setTimeout (armed on every
+    // RecallView mount via useEffect) from firing in real wall-clock time after
+    // the test ends. Without fake timers the timer fires after environment
+    // teardown on Linux, triggers a React re-render via scheduler setImmediate,
+    // and crashes the worker — flipping jest's exit code to 1 even though all
+    // assertions passed.
+    jest.useFakeTimers()
   })
+
+  afterEach(() => {
+    // Each async-act drain turn in render()/drain() causes React's scheduler
+    // to queue work via setTimeout(fn,0) — these accumulate as fake timers.
+    // Fire ALL of them inside act() so state updates are processed before
+    // environment teardown. runAllTimers() covers both scheduler Timeouts and
+    // the 250 ms debounce. Unmount after so cleanup (clearTimeout) runs last.
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
+  })
+
+  // Drain in-flight async microtask chains (e.g. listTastes resolving →
+  // setItems/setLoading state updates). 6 Promise.resolve() turns cover the
+  // full chain. Must be called inside fake-timer context (Promise microtasks
+  // are not affected by fake timers).
+  async function drain() {
+    for (let i = 0; i < 6; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => { await Promise.resolve() })
+    }
+  }
+
+  async function render(element: React.ReactElement): Promise<TestRenderer.ReactTestRenderer> {
+    let renderer!: TestRenderer.ReactTestRenderer
+    // Synchronous act() for create (same pattern as RecallViewNearbyTodo which
+    // is proven clean on Linux); then drain async microtask chain.
+    act(() => { renderer = TestRenderer.create(element) })
+    await drain()
+    mountedRenderers.push(renderer)
+    return renderer
+  }
+
+  function refreshControl(renderer: TestRenderer.ReactTestRenderer) {
+    const scroll = renderer.root.find((node) => (node.type as unknown) === 'ScrollView')
+    const control = scroll.props.refreshControl
+
+    expect(control).toBeTruthy()
+    expect(control.type).toBe(RefreshControl)
+    expect(control.props.refreshing).toBe(false)
+
+    return control
+  }
+
+  function textContent(renderer: TestRenderer.ReactTestRenderer): string {
+    return renderer.root
+      .findAll((node) => typeof node.children[0] === 'string')
+      .map((node) => node.children.join(''))
+      .join('\n')
+  }
 
   it('refreshes the Your tastes library list from the API', async () => {
     mockedListTastes.mockResolvedValueOnce([taste({ id: 'old', name: 'Old tea' })])
@@ -168,6 +210,7 @@ describe('mobile pull-to-refresh', () => {
     await act(async () => {
       await refreshControl(renderer).props.onRefresh()
     })
+    await drain()
 
     expect(mockedListTastes).toHaveBeenCalledTimes(2)
     const cards = renderer.root.findAll((node) => (node.type as unknown) === 'FoodCard')
@@ -188,6 +231,7 @@ describe('mobile pull-to-refresh', () => {
     await act(async () => {
       await refreshControl(renderer).props.onRefresh()
     })
+    await drain()
 
     expect(mockedListTastes).toHaveBeenCalledTimes(2)
     expect(textContent(renderer)).toContain('Fresh toast')
@@ -202,12 +246,11 @@ describe('mobile pull-to-refresh', () => {
     await act(async () => {
       await refreshControl(renderer).props.onRefresh()
     })
+    await drain()
 
     expect(refreshItems).toHaveBeenCalledTimes(1)
     expect(mockedGetStats).toHaveBeenCalledTimes(2)
     expect(mockFormatMoney).toHaveBeenCalledWith(3)
-    // The saved card renders symbol and number as separate Text nodes.
-    // Pin both by testID so the assertion targets the saved card specifically.
     const symbolNode = renderer.root.find(
       (n) => (n.type as unknown) === 'Text' && n.props.testID === 'saved-currency-symbol',
     )
@@ -215,7 +258,6 @@ describe('mobile pull-to-refresh', () => {
     const animNode = renderer.root.find(
       (n) => (n.type as unknown) === 'Text' && n.props.testID === 'saved-animated-number',
     )
-    // After refresh the animated number should display the refreshed value "3".
     expect(animNode.props.children).toBe('3')
   })
 })
