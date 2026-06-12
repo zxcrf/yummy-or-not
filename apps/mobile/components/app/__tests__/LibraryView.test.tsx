@@ -87,7 +87,7 @@ jest.mock('@/providers/I18nProvider', () => ({
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), setParams: jest.fn() }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: jest.fn(() => ({})),
 }))
 
 jest.mock('@/components/ds', () => {
@@ -281,11 +281,13 @@ describe('LibraryView verdict jump + filter reset composition', () => {
       taste({ name: 'Yummy Ramen', verdict: 'yum' }),
       taste({ name: 'Nah Burger', verdict: 'nah' }),
     )
-    // LibraryView reads useLocalSearchParams; the mock returns {} so no verdict
-    // filter is active. Both items should appear in the unfiltered list.
+    // Override the module-level mock to inject an active verdictFilter param.
+    const ExpoRouter = require('expo-router')
+    ExpoRouter.useLocalSearchParams.mockReturnValueOnce({ verdict: 'yum' })
     const renderer = renderLibrary()
+    // Only the yum item should be visible; nah item must be hidden.
     expect(textNodes(renderer, 'Yummy Ramen')).toHaveLength(1)
-    expect(textNodes(renderer, 'Nah Burger')).toHaveLength(1)
+    expect(textNodes(renderer, 'Nah Burger')).toHaveLength(0)
   })
 
   it('search ranking composes with tag filter: non-matching tag hides items', () => {

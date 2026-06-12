@@ -421,15 +421,15 @@ function SocialButtons({
   setError: (e: string | null) => void
   onDone: () => Promise<void>
 }) {
+  // Shared in-flight guard: prevents any two concurrent openAuthSessionAsync
+  // sessions (same or different providers) from racing each other.
+  // Must be declared before any early return to satisfy Rules of Hooks.
+  const oauthInFlight = useRef(false)
+
   // Surface the providers that match the current habit.
   const audience = method === 'phone' ? 'domestic' : 'international'
   const shown = providers.filter((p) => p.audience === audience)
   if (shown.length === 0) return null
-
-  // Per-provider in-flight guard: prevents duplicate openAuthSessionAsync
-  // sessions when the user taps a social button multiple times rapidly.
-  // A ref (not state) avoids a re-render on toggle.
-  const oauthInFlight = useRef<Record<string, boolean>>({})
 
   return (
     <View style={styles.socialSection}>
@@ -464,8 +464,8 @@ function SocialButtons({
               variant="secondary"
               block
               onPress={() => {
-                if (oauthInFlight.current[p.id]) return
-                oauthInFlight.current[p.id] = true
+                if (oauthInFlight.current) return
+                oauthInFlight.current = true
                 void handleOAuth(
                   oauthStartUrl(p.id),
                   async (token) => {
@@ -476,7 +476,7 @@ function SocialButtons({
                   },
                   (reason) => setError(t(errKey(reason))),
                 ).finally(() => {
-                  oauthInFlight.current[p.id] = false
+                  oauthInFlight.current = false
                 })
               }}
               iconLeft={<Icon name="user" size={16} color="#3a2f43" />}

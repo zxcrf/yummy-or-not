@@ -414,18 +414,17 @@ describe('AddModal photo picker teardown', () => {
     const renderer = renderAddModal()
     const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
 
-    // Fire two rapid presses; both go to the async pickFromLibrary.
-    // The Pressable itself has no guard — this test documents the current
-    // behaviour (both calls go through) rather than asserting a guard exists,
-    // since the real protection is the OS picker showing only once.
+    // Fire two rapid presses before the first async chain can complete.
+    // The in-flight guard must absorb the second press so launchImageLibraryAsync
+    // is only called once.
     await act(async () => {
       dropzone.props.onPress()
       dropzone.props.onPress()
       await Promise.resolve()
     })
 
-    // Both calls reached launchImageLibraryAsync (native OS handles dedup).
-    expect(mockLaunchImageLibraryAsync.mock.calls.length).toBeGreaterThanOrEqual(1)
+    // Exactly 1 call: the guard blocked the second press.
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledTimes(1)
     // Component remains alive — no crash from duplicate async chains.
     expect(renderer.root).toBeTruthy()
   })

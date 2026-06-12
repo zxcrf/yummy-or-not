@@ -193,6 +193,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // name changes stop so we don't hammer searchTastes on every keystroke.
   const [debouncedName, setDebouncedName] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pickInFlight = useRef(false)
 
   const handleNameChange = (text: string) => {
     setName(text)
@@ -278,20 +279,26 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   // --- Native photo capture ------------------------------------------------
   const pickFromLibrary = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      setError(t('photo_permission_denied'))
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 1,
-    })
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0]
-      setPhotoPreview(asset.uri)
-      setPhoto(await compressAsset(asset))
+    if (pickInFlight.current) return
+    pickInFlight.current = true
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        setError(t('photo_permission_denied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      })
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0]
+        setPhotoPreview(asset.uri)
+        setPhoto(await compressAsset(asset))
+      }
+    } finally {
+      pickInFlight.current = false
     }
   }
 
