@@ -343,6 +343,15 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
     setLocationDenied(false)
     try {
+      // Early-out when location services are disabled at the OS level — no
+      // point waiting 15s for a fix that can never arrive.
+      const servicesEnabled = await Location.hasServicesEnabledAsync()
+      if (!servicesEnabled) {
+        setLocFailed(true)
+        setLocating(false)
+        return
+      }
+
       // Acquire a fix from the most reliable source available. On a fresh build
       // / cold GPS, getCurrentPositionAsync can stall well past 10s and was the
       // sole driver of the "定位失败" banner. So we try sources in order and only
@@ -369,7 +378,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
         // event loop alive and, after the race resolves, its reject becomes an
         // unhandled rejection).
         const positionPromise = Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.High,
         })
         let timeoutId: ReturnType<typeof setTimeout> | undefined
         const timeoutPromise = new Promise<never>((_, reject) => {
@@ -830,6 +839,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
           flexDirection="row"
           justifyContent="flex-end"
           gap="$3"
+          backgroundColor="$background"
           borderTopWidth={3}
           borderTopColor="$ink900"
           paddingHorizontal="$5"

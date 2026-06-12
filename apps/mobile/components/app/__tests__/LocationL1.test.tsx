@@ -27,9 +27,11 @@ jest.mock('expo-image-manipulator', () => ({
 }))
 
 jest.mock('expo-location', () => ({
-  Accuracy: { Balanced: 'balanced' },
+  Accuracy: { Balanced: 'balanced', High: 'high' },
   requestForegroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestForegroundPermissionsAsync(...args),
+  hasServicesEnabledAsync: () => Promise.resolve(true),
+  getLastKnownPositionAsync: () => Promise.resolve(null),
   getCurrentPositionAsync: (...args: unknown[]) => mockGetCurrentPositionAsync(...args),
   reverseGeocodeAsync: (...args: unknown[]) => mockReverseGeocodeAsync(...args),
 }))
@@ -163,7 +165,7 @@ describe('Location L1', () => {
     })
 
     expect(placeField.props.value).toBe('Tiger Sugar · Perth, WA')
-    expect(mockGetCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: 'balanced' })
+    expect(mockGetCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: 'high' })
     expect(mockReverseGeocodeAsync).toHaveBeenCalledWith({
       latitude: -31.9523,
       longitude: 115.8613,
