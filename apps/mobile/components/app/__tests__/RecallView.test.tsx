@@ -421,6 +421,15 @@ describe('search debouncing', () => {
   })
 
   afterEach(() => {
+    // Unmount all renderers BEFORE flushing timers so that the component's
+    // useEffect cleanup (clearTimeout) cancels the debounce timer. This
+    // prevents jest.runOnlyPendingTimers() from firing setDebouncedQ outside
+    // of act(), which on Linux/CI surfaces as an uncaught exception after
+    // all suites complete and flips jest's exit code to 1.
+    act(() => {
+      mountedRenderers.forEach((r) => r.unmount())
+    })
+    mountedRenderers.length = 0
     jest.runOnlyPendingTimers()
     jest.useRealTimers()
   })
