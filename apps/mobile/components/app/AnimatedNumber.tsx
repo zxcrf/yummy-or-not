@@ -14,7 +14,8 @@
    ============================================================ */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Text } from 'tamagui'
+import Animated from 'react-native-reanimated'
+import { textBase } from '@/theme'
 import {
   useSharedValue,
   useAnimatedReaction,
@@ -40,8 +41,9 @@ export interface AnimatedNumberProps {
 export default function AnimatedNumber({
   value,
   decimals = 0,
+  testID,
   ...textProps
-}: AnimatedNumberProps) {
+}: AnimatedNumberProps & { testID?: string }) {
   const reducedMotion = useReducedMotion()
   const shared = useSharedValue(0)
   const [display, setDisplay] = useState('0')
@@ -83,5 +85,5 @@ export default function AnimatedNumber({
     [decimals, onDisplay],
   )
 
-  return <Text {...textProps}>{display}</Text>
+  return <Animated.Text testID={testID} style={[textBase, (textProps as { style?: object }).style]}>{display}</Animated.Text>
 }

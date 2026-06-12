@@ -1,13 +1,10 @@
 /* ============================================================
-   YUMMY OR NOT — I18nProvider (React Native + RN Web)
+   YUMMY OR NOT — I18nProvider (React Native, mobile-only)
    Port of the web src/lib/i18n/I18nProvider.tsx context to RN.
 
    Exposes { lang, setLang, t } built on @yon/shared translate/LANGS/
-   DEFAULT_LANG. Persists the chosen lang across launches:
-     • web   → localStorage (synchronous, available immediately)
-     • native → @react-native-async-storage/async-storage (async)
-   Persistence is Platform-gated so the web bundle never pulls the
-   AsyncStorage native module and native never touches `window`.
+   DEFAULT_LANG. Persists the chosen lang across launches via
+   @react-native-async-storage/async-storage.
    ============================================================ */
 
 import {
@@ -19,7 +16,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Platform } from 'react-native'
 import { DEFAULT_LANG, LANG_CURRENCY, LANGS, translate, type Lang } from '@yon/shared'
 
 // ----------------------------------------------------------------
@@ -60,17 +56,13 @@ function formatMoneyValue(amount: number | string, lang: Lang): string {
   return Number.isInteger(value) ? `${symbol}${value}` : `${symbol}${value.toFixed(2)}`
 }
 
-/** Read the persisted lang (or null). Async to accommodate AsyncStorage. */
+/** Read the persisted lang (or null). */
 async function readStoredLang(): Promise<Lang | null> {
   try {
-    if (Platform.OS === 'web') {
-      const stored = globalThis.localStorage?.getItem(STORAGE_KEY)
-      return stored && isValidLang(stored) ? stored : null
-    }
-    // Native: lazy-require so the web bundle never loads the native module.
-    const AsyncStorage = (
-      await import('@react-native-async-storage/async-storage')
-    ).default
+    // Use require() so jest.mock in jest.setup.js can intercept it (dynamic
+    // import() bypasses jest.mock without --experimental-vm-modules).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AsyncStorage = (require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage')).default
     const stored = await AsyncStorage.getItem(STORAGE_KEY)
     return stored && isValidLang(stored) ? stored : null
   } catch {
@@ -81,13 +73,9 @@ async function readStoredLang(): Promise<Lang | null> {
 /** Persist the lang. Fire-and-forget; failures are non-fatal. */
 function writeStoredLang(lang: Lang): void {
   try {
-    if (Platform.OS === 'web') {
-      globalThis.localStorage?.setItem(STORAGE_KEY, lang)
-      return
-    }
-    void import('@react-native-async-storage/async-storage').then(
-      ({ default: AsyncStorage }) => AsyncStorage.setItem(STORAGE_KEY, lang),
-    )
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AsyncStorage = (require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage')).default
+    void AsyncStorage.setItem(STORAGE_KEY, lang)
   } catch {
     // ignore — persistence is best-effort.
   }

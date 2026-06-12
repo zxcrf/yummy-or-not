@@ -9,7 +9,7 @@
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
-import { RefreshControl } from 'react-native'
+import { RefreshControl, ScrollView } from 'react-native'
 import { getStats, listTastes, type Stats, type Taste } from '@yon/shared'
 
 import LibraryView from '../LibraryView'
@@ -134,7 +134,7 @@ async function render(element: React.ReactElement): Promise<TestRenderer.ReactTe
 }
 
 function refreshControl(renderer: TestRenderer.ReactTestRenderer) {
-  const scroll = renderer.root.find((node) => (node.type as unknown) === 'ScrollView')
+  const scroll = renderer.root.find((node) => node.type === ScrollView)
   const control = scroll.props.refreshControl
 
   expect(control).toBeTruthy()

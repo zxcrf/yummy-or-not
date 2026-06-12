@@ -6,16 +6,24 @@
    fetch / close / delete flow.
    ============================================================ */
 
+import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { View } from 'tamagui'
 
+import { colors } from '@/theme'
 import DetailView from '@/components/app/DetailView'
 
 export default function TasteDetailRoute() {
   const insets = useSafeAreaInsets()
   return (
-    <View flex={1} backgroundColor="$background" paddingTop={insets.top}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <DetailView />
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+})

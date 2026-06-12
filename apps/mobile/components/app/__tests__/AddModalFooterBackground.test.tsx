@@ -111,9 +111,9 @@ describe('AddModal footer background regression', () => {
     expect(footer).toBeTruthy()
 
     // backgroundColor must be defined (not undefined/null/transparent).
-    // The Tamagui token "$background" resolves to a concrete color value at
-    // render time; in the test environment the prop itself must be non-empty.
-    const bg = footer.props.backgroundColor
+    // Post-Tamagui migration: layout is in style object, not flat props.
+    const st = footer.props.style as Record<string, unknown>
+    const bg = st?.backgroundColor
     expect(bg).toBeDefined()
     expect(bg).not.toBeNull()
     expect(bg).not.toBe('')

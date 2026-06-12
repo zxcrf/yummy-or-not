@@ -1,5 +1,5 @@
 /* ============================================================
-   YUMMY OR NOT — TodoView (Tamagui / React Native)
+   YUMMY OR NOT — TodoView (plain RN + theme)
    The 想吃 (to-try / wishlist) tab: a grid of the user's `status='todo'`
    records. Mirrors LibraryView's card grid + search, but is locked to
    todo items (LibraryView is now tasted-only). Tapping a card routes to
@@ -7,9 +7,9 @@
    ============================================================ */
 
 import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, RefreshControl, ScrollView, View, useWindowDimensions } from 'react-native'
 import * as ExpoRouter from 'expo-router'
-import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
+import { colors, space, Text } from '@/theme'
 import { searchTastes } from '@yon/shared'
 import { FoodCard, Icon, Input } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
@@ -19,7 +19,7 @@ export default function TodoView() {
   const { t, formatMoney } = useI18n()
   const router = ExpoRouter.useRouter()
   const { width } = useWindowDimensions()
-  const isDesktop = width >= 768
+  const isWide = width >= 768
 
   const { items, loading, refresh } = useRefreshableTastes()
   const [refreshing, setRefreshing] = useState(false)
@@ -46,32 +46,31 @@ export default function TodoView() {
 
   return (
     <ScrollView
-      flex={1}
-      backgroundColor="$background"
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor="#191017"
-          colors={['#191017']}
+          tintColor={colors.ink900}
+          colors={[colors.ink900]}
         />
       }
     >
       {/* header */}
-      <YStack gap="$3">
-        <XStack alignItems="center" justifyContent="space-between" gap="$2">
-          <Text color="$color" fontWeight="700" fontSize={28}>
+      <View style={{ gap: space[3] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
+          <Text style={{ fontWeight: '700', fontSize: 28 }}>
             {t('nav_todo')}
           </Text>
-          <Text color="$colorMuted" fontSize={13}>
+          <Text style={{ color: colors.colorMuted, fontSize: 13 }}>
             {t('count_logged', { n: items.filter((it) => (it.status ?? 'tasted') === 'todo').length })}
           </Text>
-        </XStack>
+        </View>
 
         {/* search box */}
-        <View position="relative" justifyContent="center">
-          <View position="absolute" left={12} zIndex={1}>
+        <View style={{ position: 'relative', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', left: 12, zIndex: 1 }}>
             <Icon name="search" size={18} color="#857a82" />
           </View>
           <Input
@@ -82,26 +81,28 @@ export default function TodoView() {
             style={{ paddingLeft: 38 }}
           />
         </View>
-      </YStack>
+      </View>
 
       {/* grid */}
       {loading ? (
-        <YStack alignItems="center" paddingVertical={48}>
-          <ActivityIndicator color="#191017" />
-        </YStack>
+        <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+          <ActivityIndicator color={colors.ink900} />
+        </View>
       ) : shown.length === 0 ? (
-        <YStack alignItems="center" paddingVertical={48} gap="$2">
-          <Icon name="bookmark" size={40} color="#b8aeb4" />
-          <Text color="$colorMuted">{t('nothing_here')}</Text>
-        </YStack>
+        <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+          <Icon name="bookmark" size={40} color={colors.ink300} />
+          <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+        </View>
       ) : (
         <View
-          flexDirection={isDesktop ? 'row' : 'column'}
-          flexWrap={isDesktop ? 'wrap' : 'nowrap'}
-          gap="$3"
+          style={{
+            flexDirection: isWide ? 'row' : 'column',
+            flexWrap: isWide ? 'wrap' : 'nowrap',
+            gap: space[3],
+          }}
         >
           {shown.map((it) => (
-            <View key={it.id} style={isDesktop ? { width: '48%' } : undefined}>
+            <View key={it.id} style={isWide ? { width: '48%' } : undefined}>
               <FoodCard
                 imageThumb={it.imageThumb || undefined}
                 image={it.image || undefined}

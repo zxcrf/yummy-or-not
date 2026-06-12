@@ -1,14 +1,12 @@
 /* ============================================================
-   YUMMY OR NOT — AuthProvider (React Native + RN Web)
+   YUMMY OR NOT — AuthProvider (React Native, mobile-only)
    Holds the signed-in session and persists the bearer token across
    launches. The shared api-client keeps the token in module memory and
    sets it on a successful login/verify/register; this provider's job is
    to (a) reload that token on startup, (b) capture a freshly-issued one
    after refresh(), and (c) clear it on sign-out.
 
-   Token persistence is Platform-gated exactly like I18nProvider so the
-   web bundle never pulls the SecureStore native module and native never
-   touches `window`. Storage key: `yon_token`.
+   Token persistence uses expo-secure-store only. Storage key: `yon_token`.
    ============================================================ */
 
 import {
@@ -20,7 +18,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Platform } from 'react-native'
 import { Image } from 'expo-image'
 import {
   getAuthToken,
@@ -64,12 +61,9 @@ const AuthContext = createContext<AuthContextValue>({
 
 const STORAGE_KEY = 'yon_token'
 
-/** Read the persisted token (or null). Async to accommodate native secure storage. */
+/** Read the persisted token (or null). */
 async function readStoredToken(): Promise<string | null> {
   try {
-    if (Platform.OS === 'web') {
-      return globalThis.localStorage?.getItem(STORAGE_KEY) ?? null
-    }
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store')
     return await SecureStore.getItemAsync(STORAGE_KEY)
@@ -81,11 +75,6 @@ async function readStoredToken(): Promise<string | null> {
 /** Persist the token (or remove it when null). Best-effort. */
 function writeStoredToken(token: string | null): void {
   try {
-    if (Platform.OS === 'web') {
-      if (token) globalThis.localStorage?.setItem(STORAGE_KEY, token)
-      else globalThis.localStorage?.removeItem(STORAGE_KEY)
-      return
-    }
     // Use require() so jest moduleNameMapper can intercept it (dynamic
     // import() bypasses the mapper and requires --experimental-vm-modules).
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -128,28 +117,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  // Bootstrap: handle OAuth hash return (web) → else load persisted token,
-  // then refresh the session.
+  // Bootstrap: load persisted token then refresh the session.
   useEffect(() => {
     let active = true
     ;(async () => {
-      if (Platform.OS === 'web') {
-        const hash = globalThis.location?.hash ?? ''
-        const match = hash.match(/[#&]token=([^&]+)/)
-        if (match) {
-          const token = decodeURIComponent(match[1])
-          setAuthToken(token)
-          writeStoredToken(token)
-          // Strip the hash so the token isn't left in the URL bar / history.
-          globalThis.history?.replaceState(
-            null,
-            '',
-            globalThis.location.pathname + globalThis.location.search,
-          )
-          if (active) await refresh()
-          return
-        }
-      }
       const stored = await readStoredToken()
       if (stored) setAuthToken(stored)
       if (active) await refresh()

@@ -9,11 +9,12 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Image, Modal, Platform, Pressable, StyleSheet, View as RNView } from 'react-native'
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View, View as RNView } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
-import { ScrollView, Text, View, XStack, YStack } from 'tamagui'
+import { colors, radius, space } from '@/theme'
+import { Text } from '@/theme'
 import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
@@ -101,7 +102,6 @@ export default function DetailView() {
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    if (Platform.OS === 'web') return
     Sharing.isAvailableAsync().then(setSharingAvailable).catch(() => {})
   }, [])
 
@@ -399,45 +399,41 @@ export default function DetailView() {
 
   if (loading) {
     return (
-      <YStack flex={1} backgroundColor="$background" alignItems="center" justifyContent="center">
-        <ActivityIndicator color="#191017" />
-      </YStack>
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.ink900} />
+      </View>
     )
   }
 
   if (!item) {
     return (
-      <YStack
-        flex={1}
-        backgroundColor="$background"
-        alignItems="center"
-        justifyContent="center"
-        gap="$3"
-        padding={24}
+      <View
+        style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: space[3], padding: 24 }}
       >
-        <Icon name="info-box" size={40} color="#b8aeb4" />
-        <Text color="$ink500">{t('nothing_here')}</Text>
+        <Icon name="info-box" size={40} color={colors.ink300} />
+        <Text style={{ color: colors.ink500 }}>{t('nothing_here')}</Text>
         <Button variant="secondary" onPress={goBack}>
           {t('cancel')}
         </Button>
-      </YStack>
+      </View>
     )
   }
 
   return (
     <ScrollView
-      flex={1}
-      backgroundColor="$background"
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ paddingBottom: 40 }}
     >
       {/* photo + controls */}
-      <View position="relative">
+      <View style={{ position: 'relative' }}>
         <View
-          height={240}
-          backgroundColor="$paper2"
-          borderBottomWidth={3}
-          borderColor="$ink900"
-          overflow="hidden"
+          style={{
+            height: 240,
+            backgroundColor: colors.paper2,
+            borderBottomWidth: 3,
+            borderColor: colors.ink900,
+            overflow: 'hidden',
+          }}
         >
           {(item.imageThumb || item.image) ? (
             <ExpoImage
@@ -454,7 +450,7 @@ export default function DetailView() {
         </View>
 
         {/* back button */}
-        <View position="absolute" top={16} left={16}>
+        <View style={{ position: 'absolute', top: 16, left: 16 }}>
           <IconButton accessibilityLabel={t('cancel')} onPress={goBack}>
             <Icon name="arrow-left" size={20} />
           </IconButton>
@@ -462,7 +458,7 @@ export default function DetailView() {
 
         {/* verdict stamp — hidden for todo items */}
         {item.status !== 'todo' && item.verdict != null ? (
-          <View position="absolute" left={18} bottom={-22}>
+          <View style={{ position: 'absolute', left: 18, bottom: -22 }}>
             <VerdictStamp
               verdict={item.verdict}
               size="lg"
@@ -474,7 +470,7 @@ export default function DetailView() {
       </View>
 
       {/* content */}
-      <YStack padding={22} paddingTop={36} gap="$3">
+      <View style={{ padding: 22, paddingTop: 36, gap: space[3] }}>
         {editing ? (
           <>
             <Input
@@ -496,8 +492,8 @@ export default function DetailView() {
               placeholder="$5.80"
             />
 
-            <YStack gap="$2">
-              <Text color="$ink700" fontSize={11} letterSpacing={1.32} textTransform="uppercase">
+            <View style={{ gap: space[2] }}>
+              <Text style={{ color: colors.ink700, fontSize: 11, letterSpacing: 1.32, textTransform: 'uppercase' }}>
                 {t('how_was_it')}
               </Text>
               <VerdictPicker
@@ -505,20 +501,20 @@ export default function DetailView() {
                 onChange={setEditVerdict}
                 labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
               />
-            </YStack>
+            </View>
 
-            <YStack gap="$2">
-              <Text color="$ink700" fontSize={11} letterSpacing={1.32} textTransform="uppercase">
+            <View style={{ gap: space[2] }}>
+              <Text style={{ color: colors.ink700, fontSize: 11, letterSpacing: 1.32, textTransform: 'uppercase' }}>
                 {t('tags')}
               </Text>
-              <XStack flexWrap="wrap" gap="$2">
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
                 {tagChoices.map((tag) => (
                   <Tag key={tag} active={editTags.includes(tag)} onPress={() => toggleEditTag(tag)}>
                     {tag}
                   </Tag>
                 ))}
-              </XStack>
-            </YStack>
+              </View>
+            </View>
 
             <Textarea
               label={t('your_take')}
@@ -529,12 +525,12 @@ export default function DetailView() {
             />
 
             {saveError ? (
-              <Text color="$verdictNah2" fontSize={14}>
+              <Text style={{ color: colors.verdictNah2, fontSize: 14 }}>
                 {saveError}
               </Text>
             ) : null}
 
-            <XStack gap="$3" marginTop="$1">
+            <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[1] }}>
               <Button variant="ghost" onPress={cancelEditing}>
                 {t('cancel')}
               </Button>
@@ -546,47 +542,44 @@ export default function DetailView() {
               >
                 {t('save_taste_web')}
               </Button>
-            </XStack>
+            </View>
           </>
         ) : (
           <>
-            <XStack justifyContent="space-between" alignItems="flex-start" gap="$3">
-              <YStack flex={1}>
-                <Text color="$ink900" fontWeight="700" fontSize={24} lineHeight={26}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space[3] }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 24, lineHeight: 26 }}>
                   {item.name}
                 </Text>
-                <Text color="$ink500" marginTop="$1">
+                <Text style={{ color: colors.ink500, marginTop: space[1] }}>
                   {item.place}
                 </Text>
-              </YStack>
+              </View>
               {item.price ? (
-                <Text color="$ink900" fontWeight="700" fontSize={26}>
+                <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 26 }}>
                   {formatMoney(item.price)}
                 </Text>
               ) : null}
-            </XStack>
+            </View>
 
             {/* badges */}
-            <XStack gap="$2" flexWrap="wrap">
+            <View style={{ flexDirection: 'row', gap: space[2], flexWrap: 'wrap' }}>
               <Badge tone="dark">{t('bought_n', { n: item.boughtCount })}</Badge>
               {item.tags.map((tg) => (
                 <Badge key={tg}>{tg}</Badge>
               ))}
               {item.date ? <Badge>{item.date}</Badge> : null}
-            </XStack>
+            </View>
 
             {/* note */}
             {item.notes ? (
               <Card padded>
                 <Text
-                  color="$ink400"
-                  fontSize={10}
-                  letterSpacing={1}
-                  textTransform="uppercase"
+                  style={{ color: colors.ink400, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}
                 >
                   {t('your_note')}
                 </Text>
-                <Text color="$ink900" marginTop="$2" lineHeight={22}>
+                <Text style={{ color: colors.ink900, marginTop: space[2], lineHeight: 22 }}>
                   {item.notes}
                 </Text>
               </Card>
@@ -594,35 +587,38 @@ export default function DetailView() {
 
             {/* warn toggle — hidden for todo items */}
             {item.status !== 'todo' ? (
-              <XStack alignItems="center" justifyContent="space-between" paddingVertical="$1">
-                <XStack alignItems="center" gap="$3">
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space[1] }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
                   <Icon name="alert" size={20} color="#ff5d8f" />
-                  <Text color="$ink900" fontWeight="500">
+                  <Text style={{ color: colors.ink900, fontWeight: '500' }}>
                     {t('warn_before')}
                   </Text>
-                </XStack>
+                </View>
                 <Switch checked={remind} onChange={toggleRemind} />
-              </XStack>
+              </View>
             ) : null}
 
             {/* warn banner — shown when warnBeforeBuy is on and global warnings enabled (tasted only) */}
             {item.status !== 'todo' && remind && user?.warningsEnabled ? (
-              <XStack
-                alignItems="center"
-                gap="$2"
-                backgroundColor="$candyYellow"
-                borderWidth={2}
-                borderColor="$ink900"
-                borderRadius="$sm"
-                paddingHorizontal={12}
-                paddingVertical={10}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: space[2],
+                  backgroundColor: colors.candyYellow,
+                  borderWidth: 2,
+                  borderColor: colors.ink900,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                }}
                 testID="warn-banner"
               >
-                <Icon name="alert" size={16} color="#191017" />
-                <Text color="$ink900" fontSize={13} flex={1}>
+                <Icon name="alert" size={16} color={colors.ink900} />
+                <Text style={{ color: colors.ink900, fontSize: 13, flex: 1 }}>
                   {t('detail_warn_banner')}
                 </Text>
-              </XStack>
+              </View>
             ) : null}
 
             {/* promote CTA — only for todo items */}
@@ -638,7 +634,7 @@ export default function DetailView() {
             ) : null}
 
             {/* actions */}
-            <XStack gap="$3" marginTop="$1" flexWrap="wrap">
+            <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[1], flexWrap: 'wrap' }}>
               <Button variant="secondary" iconLeft={<Icon name="edit" size={18} />} onPress={startEditing}>
                 {t('edit')}
               </Button>
@@ -663,7 +659,7 @@ export default function DetailView() {
                 </Button>
               ) : null}
               {/* share only available for tasted items (verdict present for share card) */}
-              {item.status !== 'todo' && Platform.OS !== 'web' && sharingAvailable ? (
+              {item.status !== 'todo' && sharingAvailable ? (
                 <Button
                   variant="secondary"
                   iconLeft={<Icon name="arrow-right" size={18} />}
@@ -674,7 +670,7 @@ export default function DetailView() {
                   {t('share')}
                 </Button>
               ) : null}
-            </XStack>
+            </View>
 
             {/* Off-screen ShareCard mount for capture — A1 */}
             {sharing && item ? (
@@ -717,7 +713,7 @@ export default function DetailView() {
             ) : null}
           </>
         )}
-      </YStack>
+      </View>
 
       {/* +1 Again sheet */}
       <Modal
@@ -728,27 +724,30 @@ export default function DetailView() {
       >
         <Pressable style={styles.sheetOverlay} onPress={() => setBuySheetOpen(false)}>
           <Pressable style={styles.sheetContent} onPress={() => {}}>
-            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
+            <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 16 }}>
               {t('detail_buy_again_title')}
             </Text>
             {item.warnBeforeBuy && user?.warningsEnabled ? (
-              <XStack
-                alignItems="center"
-                gap="$2"
-                backgroundColor="$candyYellow"
-                borderWidth={2}
-                borderColor="$ink900"
-                borderRadius="$sm"
-                paddingHorizontal={12}
-                paddingVertical={10}
-                marginBottom={12}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: space[2],
+                  backgroundColor: colors.candyYellow,
+                  borderWidth: 2,
+                  borderColor: colors.ink900,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  marginBottom: 12,
+                }}
                 testID="buy-sheet-warn-banner"
               >
-                <Icon name="alert" size={16} color="#191017" />
-                <Text color="$ink900" fontSize={13} flex={1}>
+                <Icon name="alert" size={16} color={colors.ink900} />
+                <Text style={{ color: colors.ink900, fontSize: 13, flex: 1 }}>
                   {t('detail_warn_banner')}
                 </Text>
-              </XStack>
+              </View>
             ) : null}
             <Input
               label={t('f_price')}
@@ -757,7 +756,7 @@ export default function DetailView() {
               placeholder="5.80"
               testID="buy-price-input"
             />
-            <View marginTop={12}>
+            <View style={{ marginTop: 12 }}>
               <Input
                 label={t('f_where')}
                 value={buyPlace}
@@ -766,7 +765,7 @@ export default function DetailView() {
                 testID="buy-place-input"
               />
             </View>
-            <XStack gap="$3" marginTop={20}>
+            <View style={{ flexDirection: 'row', gap: space[3], marginTop: 20 }}>
               <Button variant="ghost" onPress={() => setBuySheetOpen(false)}>
                 {t('cancel')}
               </Button>
@@ -779,7 +778,7 @@ export default function DetailView() {
               >
                 {t('detail_buy_again_confirm')}
               </Button>
-            </XStack>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -794,13 +793,13 @@ export default function DetailView() {
       >
         <Pressable style={styles.sheetOverlay} onPress={() => setConfirmDeleteOpen(false)}>
           <Pressable style={styles.sheetContent} onPress={() => {}}>
-            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={8}>
+            <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 8 }}>
               {t('del')}
             </Text>
-            <Text color="$ink500" fontSize={15} marginBottom={20}>
+            <Text style={{ color: colors.ink500, fontSize: 15, marginBottom: 20 }}>
               {t('confirm_delete')}
             </Text>
-            <XStack gap="$3">
+            <View style={{ flexDirection: 'row', gap: space[3] }}>
               <Button variant="ghost" onPress={() => setConfirmDeleteOpen(false)}>
                 {t('cancel')}
               </Button>
@@ -813,7 +812,7 @@ export default function DetailView() {
               >
                 {t('del')}
               </Button>
-            </XStack>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -827,7 +826,7 @@ export default function DetailView() {
       >
         <Pressable style={styles.sheetOverlay} onPress={() => setPromoteSheetOpen(false)}>
           <Pressable style={styles.sheetContent} onPress={() => {}}>
-            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
+            <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 16 }}>
               {t('promote_title')}
             </Text>
             <VerdictPicker
@@ -835,7 +834,7 @@ export default function DetailView() {
               onChange={setPromoteVerdict}
               labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
             />
-            <View marginTop={12}>
+            <View style={{ marginTop: 12 }}>
               <Input
                 label={t('f_price')}
                 value={promotePrice}
@@ -844,7 +843,7 @@ export default function DetailView() {
                 testID="promote-price-input"
               />
             </View>
-            <XStack gap="$3" marginTop={20}>
+            <View style={{ flexDirection: 'row', gap: space[3], marginTop: 20 }}>
               <Button variant="ghost" onPress={() => setPromoteSheetOpen(false)}>
                 {t('cancel')}
               </Button>
@@ -857,7 +856,7 @@ export default function DetailView() {
               >
                 {t('promote_confirm')}
               </Button>
-            </XStack>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>

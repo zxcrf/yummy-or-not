@@ -152,12 +152,14 @@ describe('AddModal', () => {
   it('insets the sticky header below the status bar so the title is not overlapped', () => {
     const renderer = renderAddModal()
 
-    // The sticky header is the only node carrying a 3px bottom border.
-    const headers = renderer.root.findAllByProps({ borderBottomWidth: 3 })
-    expect(headers.length).toBeGreaterThan(0)
+    // The sticky header now carries its layout in a style object (post-Tamagui migration).
+    const header = renderer.root.findByProps({ testID: 'add-modal-header' })
+    expect(header).toBeTruthy()
     // Regression: header top padding must clear the safe-area top inset
     // (status bar). The old code used a fixed paddingVertical and overlapped.
-    expect(headers.some((n) => n.props.paddingTop === mockSafeAreaTop + 16)).toBe(true)
+    const st = header.props.style as Record<string, unknown>
+    expect(st.borderBottomWidth).toBe(3)
+    expect(st.paddingTop).toBe(mockSafeAreaTop + 16)
   })
 
   it('shows a real permission error instead of another Add a photo label', async () => {

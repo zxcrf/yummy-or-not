@@ -1,5 +1,5 @@
 /* ============================================================
-   YUMMY OR NOT — AuthScreen (Tamagui / React Native + RN Web)
+   YUMMY OR NOT — AuthScreen (plain RN + theme, no Tamagui)
    RN port of the web signed-out gate. Two onboarding habits side by
    side:
      • Phone + SMS code  (domestic / China default)
@@ -10,19 +10,11 @@
    ============================================================ */
 
 import { useState } from 'react'
-import { Alert, Platform, Pressable, StyleSheet } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from 'react-native-reanimated'
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
-const ReanimatedAnimatedView = Animated.View
 import * as WebBrowser from 'expo-web-browser'
-import { ScrollView, Text, View } from 'tamagui'
 import {
   LANGS,
   loginEmail,
@@ -36,7 +28,7 @@ import {
 } from '@yon/shared'
 
 import { Button, Icon, Input, LangSwitcher } from '@/components/ds'
-import { colors } from '@/theme'
+import { colors, radius, space, Text, usePressScale } from '@/theme'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -82,13 +74,9 @@ export function notifyPromo(res: AuthResponse, t: (k: string) => string): void {
   if (notice) Alert.alert(t('auth_promo_not_applied'), t(errKey(notice)))
 }
 
-/** Open an OAuth start URL: in-app browser on native, navigation on web. */
+/** Open an OAuth start URL via the in-app browser (native only). */
 function openOAuth(url: string): void {
-  if (Platform.OS === 'web') {
-    globalThis.location?.assign(url)
-  } else {
-    void WebBrowser.openBrowserAsync(url)
-  }
+  void WebBrowser.openBrowserAsync(url)
 }
 
 export default function AuthScreen() {
@@ -105,18 +93,13 @@ export default function AuthScreen() {
       behavior="padding"
     >
       <ScrollView
-        flex={1}
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 20,
-        }}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View width="100%" maxWidth={380}>
+        <View style={styles.inner}>
           {/* lang switcher */}
-          <View flexDirection="row" justifyContent="flex-end" marginBottom={14}>
+          <View style={styles.langRow}>
             <LangSwitcher
               value={lang}
               onChange={setLang}
@@ -127,40 +110,20 @@ export default function AuthScreen() {
           </View>
 
           {/* brand */}
-          <View alignItems="center" marginBottom={8}>
+          <View style={styles.brand}>
             <Icon name="heart" size={48} color="#ff2e88" />
-            <Text fontWeight="700" fontSize={26} color="$ink900" marginTop={8}>
-              yummy <Text color="$candyPink">or</Text> not
+            <Text style={styles.brandTitle}>
+              {'yummy '}
+              <Text style={styles.brandOr}>or</Text>
+              {' not'}
             </Text>
-            <Text color="$ink500" fontSize={14} marginTop={6}>
-              {t('auth_tagline')}
-            </Text>
+            <Text style={styles.brandTagline}>{t('auth_tagline')}</Text>
           </View>
 
           {/* card */}
-          <View
-            backgroundColor="$white"
-            borderWidth={3}
-            borderColor="$ink900"
-            borderRadius="$lg"
-            padding={20}
-            marginTop={18}
-            shadowColor="$ink900"
-            shadowOffset={{ width: 5, height: 5 }}
-            shadowOpacity={1}
-            shadowRadius={0}
-          >
+          <View style={styles.card}>
             {/* method toggle */}
-            <View
-              flexDirection="row"
-              gap={6}
-              marginBottom={18}
-              backgroundColor="$paper"
-              borderWidth={3}
-              borderColor="$ink900"
-              borderRadius="$md"
-              padding={4}
-            >
+            <View style={styles.methodToggle}>
               <MethodTab
                 active={method === 'phone'}
                 onPress={() => {
@@ -187,18 +150,8 @@ export default function AuthScreen() {
 
             {error ? (
               <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-                <View
-                  marginTop={14}
-                  paddingVertical={10}
-                  paddingHorizontal={12}
-                  borderRadius="$md"
-                  backgroundColor="$verdictNah"
-                  borderWidth={3}
-                  borderColor="$ink900"
-                >
-                  <Text color="#fff" fontSize={13} fontWeight="600">
-                    {error}
-                  </Text>
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
                 </View>
               </Animated.View>
             ) : null}
@@ -217,7 +170,7 @@ export default function AuthScreen() {
   )
 }
 
-/* ── tab (Material State Layer: translucent overlay, no scale/dim) ────── */
+/* ── tab (usePressScale: 0.95 scale + 0.8 opacity) ──────────────────── */
 function MethodTab({
   active,
   onPress,
@@ -227,36 +180,25 @@ function MethodTab({
   onPress: () => void
   label: string
 }) {
-  const pressed = useSharedValue(0)
-
-  const stateLayerStyle = useAnimatedStyle(() => ({
-    opacity: pressed.value,
-  }))
+  const press = usePressScale({ toScale: 0.95, toOpacity: 0.8 })
 
   return (
     <Pressable
       accessibilityRole="button"
-      onPressIn={() => { pressed.value = withTiming(0.12, { duration: 80 }) }}
-      onPressOut={() => { pressed.value = withTiming(0, { duration: 120 }) }}
+      onPressIn={() => { press.onPressIn() }}
+      onPressOut={() => { press.onPressOut() }}
       onPress={onPress}
       style={{ flex: 1 }}
     >
-      <View
-        paddingVertical={9}
-        borderRadius="$sm"
-        alignItems="center"
-        backgroundColor={active ? '$candyYellow' : 'transparent'}
-        overflow="hidden"
-        position="relative"
+      <Animated.View
+        style={[
+          styles.methodTab,
+          active ? styles.methodTabActive : styles.methodTabInactive,
+          press.animatedStyle,
+        ]}
       >
-        <ReanimatedAnimatedView
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: '#191017', borderRadius: 6 }, stateLayerStyle]}
-        />
-        <Text fontWeight="700" fontSize={14} color="$ink900">
-          {label}
-        </Text>
-      </View>
+        <Text style={styles.methodTabLabel}>{label}</Text>
+      </Animated.View>
     </Pressable>
   )
 }
@@ -307,7 +249,7 @@ function PhoneForm({
   }
 
   return (
-    <View gap={12}>
+    <View style={styles.formGap}>
       <Input
         label={t('auth_phone_label')}
         keyboardType="phone-pad"
@@ -337,9 +279,7 @@ function PhoneForm({
             {t('auth_verify')}
           </Button>
           <Button variant="ghost" block onPress={send} disabled={busy}>
-            <Text color="$candyPink" fontSize={13} fontWeight="600">
-              {t('auth_resend')}
-            </Text>
+            <Text style={styles.ghostBtnText}>{t('auth_resend')}</Text>
           </Button>
         </>
       )}
@@ -388,7 +328,7 @@ function EmailForm({
   }
 
   return (
-    <View gap={12}>
+    <View style={styles.formGap}>
       {mode === 'register' ? (
         <Input
           label={t('auth_name_label')}
@@ -436,7 +376,7 @@ function EmailForm({
           setError(null)
         }}
       >
-        <Text color="$candyPink" fontSize={13} fontWeight="600">
+        <Text style={styles.ghostBtnText}>
           {mode === 'login' ? t('auth_to_register') : t('auth_to_login')}
         </Text>
       </Button>
@@ -462,27 +402,14 @@ function SocialButtons({
   if (shown.length === 0) return null
 
   return (
-    <View marginTop={18}>
-      <View
-        flexDirection="row"
-        alignItems="center"
-        gap={10}
-        marginVertical={4}
-        marginBottom={14}
-      >
-        <View flex={1} height={2} backgroundColor="$ink200" />
-        <Text
-          color="$ink400"
-          fontSize={12}
-          letterSpacing={0.96}
-          textTransform="uppercase"
-        >
-          {t('auth_or')}
-        </Text>
-        <View flex={1} height={2} backgroundColor="$ink200" />
+    <View style={styles.socialSection}>
+      <View style={styles.orDivider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.orText}>{t('auth_or')}</Text>
+        <View style={styles.dividerLine} />
       </View>
 
-      <View gap={10}>
+      <View style={styles.socialButtons}>
         {shown.map((p) => {
           const label = t('auth_continue_with', { p: p.label })
           if (!p.configured) {
@@ -517,3 +444,131 @@ function SocialButtons({
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  inner: {
+    width: '100%',
+    maxWidth: 380,
+  },
+  // lang switcher row
+  langRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 14,
+  },
+  // brand block
+  brand: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  brandTitle: {
+    fontWeight: '700',
+    fontSize: 26,
+    color: colors.ink900,
+    marginTop: 8,
+  },
+  brandOr: {
+    color: colors.candyPink,
+  },
+  brandTagline: {
+    color: colors.ink500,
+    fontSize: 14,
+    marginTop: 6,
+  },
+  // auth card
+  card: {
+    backgroundColor: colors.white,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.lg,
+    padding: 20,
+    marginTop: 18,
+    shadowColor: colors.ink900,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  // method toggle
+  methodToggle: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 18,
+    backgroundColor: colors.paper,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.md,
+    padding: 4,
+  },
+  methodTab: {
+    paddingVertical: 9,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  methodTabActive: {
+    backgroundColor: colors.candyYellow,
+  },
+  methodTabInactive: {
+    backgroundColor: 'transparent',
+  },
+  methodTabLabel: {
+    fontWeight: '700',
+    fontSize: 14,
+    color: colors.ink900,
+  },
+  // error banner
+  errorBox: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.verdictNah,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // form
+  formGap: {
+    gap: 12,
+  },
+  ghostBtnText: {
+    color: colors.candyPink,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // social section
+  socialSection: {
+    marginTop: 18,
+  },
+  orDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 4,
+    marginBottom: 14,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: colors.ink200,
+  },
+  orText: {
+    color: colors.ink400,
+    fontSize: 12,
+    letterSpacing: 0.96,
+    textTransform: 'uppercase',
+  },
+  socialButtons: {
+    gap: 10,
+  },
+})

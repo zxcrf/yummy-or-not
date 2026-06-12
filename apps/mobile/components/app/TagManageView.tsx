@@ -1,17 +1,17 @@
 /* ============================================================
-   YUMMY OR NOT — TagManageView
+   YUMMY OR NOT — TagManageView (plain RN + theme, no Tamagui)
    Tag library management screen: rename and delete user tags.
    Uses the existing renameTag / deleteTag api-client functions
    and invalidateTagsCache to keep the shared tag cache consistent.
    ============================================================ */
 
 import { useState } from 'react'
-import { Alert, Modal, Pressable, StyleSheet } from 'react-native'
-import { ScrollView, Text, View } from 'tamagui'
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { renameTag, deleteTag, type UserTag } from '@yon/shared'
 
 import { Button, Icon, Input } from '@/components/ds'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
+import { colors, space, radius, Text } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function TagManageView() {
@@ -81,43 +81,27 @@ export default function TagManageView() {
   }
 
   return (
-    <ScrollView flex={1} backgroundColor="$background" contentContainerStyle={{ padding: 20 }}>
-      <Text
-        color="$ink400"
-        fontSize={10}
-        letterSpacing={1.1}
-        textTransform="uppercase"
-        marginBottom={10}
-      >
-        {t('tag_manage')}
-      </Text>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      <Text style={styles.kicker}>{t('tag_manage')}</Text>
 
       {!loading && tags.length === 0 ? (
-        <Text color="$ink500" fontSize={14} marginTop={8}>
-          {t('tag_empty')}
-        </Text>
+        <Text style={styles.emptyText}>{t('tag_empty')}</Text>
       ) : null}
 
       {tags.map((tag, idx) => (
         <View
           key={tag.id}
-          flexDirection="row"
-          alignItems="center"
-          gap="$3"
-          paddingVertical={14}
-          paddingHorizontal={2}
-          borderBottomWidth={idx === tags.length - 1 ? 0 : 2}
-          borderBottomColor="$ink200"
-          borderStyle="dotted"
+          style={[
+            styles.tagRow,
+            idx === tags.length - 1 ? styles.tagRowLast : styles.tagRowBorder,
+          ]}
         >
-          <Text flex={1} color="$ink900" fontWeight="500">
-            {tag.name}
-          </Text>
+          <Text style={styles.tagName}>{tag.name}</Text>
           <Pressable
             onPress={() => openRename(tag)}
             accessibilityRole="button"
             testID={`rename-tag-${tag.id}`}
-            style={{ padding: 6 }}
+            style={styles.iconBtn}
           >
             <Icon name="edit" size={18} color="#5a4f63" />
           </Pressable>
@@ -125,7 +109,7 @@ export default function TagManageView() {
             onPress={() => confirmDelete(tag)}
             accessibilityRole="button"
             testID={`delete-tag-${tag.id}`}
-            style={{ padding: 6 }}
+            style={styles.iconBtn}
           >
             <Icon name="del" size={18} color="#c0392b" />
           </Pressable>
@@ -139,11 +123,9 @@ export default function TagManageView() {
         animationType="slide"
         onRequestClose={closeRename}
       >
-        <Pressable style={styles.sheetOverlay} onPress={closeRename}>
-          <Pressable style={styles.sheetContent} onPress={() => {}}>
-            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={16}>
-              {t('tag_rename')}
-            </Text>
+        <Pressable style={modalStyles.sheetOverlay} onPress={closeRename}>
+          <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
+            <Text style={modalStyles.modalTitle}>{t('tag_rename')}</Text>
             <Input
               label={t('tag_rename')}
               value={renameValue}
@@ -154,11 +136,11 @@ export default function TagManageView() {
               testID="rename-tag-input"
             />
             {renameError ? (
-              <Text color="$verdictNah2" fontSize={13} marginTop={8} testID="rename-error">
+              <Text style={modalStyles.errorText} testID="rename-error">
                 {renameError}
               </Text>
             ) : null}
-            <View flexDirection="row" gap="$3" marginTop={20}>
+            <View style={modalStyles.buttonRow}>
               <Button variant="ghost" onPress={closeRename}>
                 {t('cancel')}
               </Button>
@@ -179,6 +161,51 @@ export default function TagManageView() {
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    padding: 20,
+  },
+  kicker: {
+    color: colors.ink400,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  emptyText: {
+    color: colors.ink500,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+  },
+  tagRowBorder: {
+    borderBottomWidth: 2,
+    borderBottomColor: colors.ink200,
+    borderStyle: 'dotted',
+  },
+  tagRowLast: {
+    borderBottomWidth: 0,
+  },
+  tagName: {
+    flex: 1,
+    color: colors.ink900,
+    fontWeight: '500',
+  },
+  iconBtn: {
+    padding: 6,
+  },
+})
+
+const modalStyles = StyleSheet.create({
   sheetOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -186,9 +213,25 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     padding: 24,
     paddingBottom: 40,
+  },
+  modalTitle: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: colors.verdictNah2,
+    fontSize: 13,
+    marginTop: 8,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: space[3],
+    marginTop: 20,
   },
 })
