@@ -145,6 +145,9 @@ export default function YouView({ items }: Props) {
   const count = (v: 'yum' | 'meh' | 'nah') =>
     tastedItems.filter((it) => it.verdict === v).length
 
+  // Total tasted records — denominator for the verdict-breakdown bars.
+  const total = tastedItems.length
+
   const saved = tastedItems
     .filter((it) => it.verdict === 'nah')
     .reduce((sum, it) => {
@@ -199,6 +202,38 @@ export default function YouView({ items }: Props) {
       </View>
     </Pressable>
   )
+
+  // Verdict-breakdown bar — ported from the removed Stats tab.
+  const bar = (
+    label: string,
+    verdict: 'yum' | 'meh' | 'nah',
+    color: GetProps<typeof View>['backgroundColor'],
+  ) => {
+    const n = count(verdict)
+    const pct = total > 0 ? (n / total) * 100 : 0
+    return (
+      <View marginBottom="$4">
+        <View flexDirection="row" justifyContent="space-between" marginBottom="$2">
+          <Text color="$ink900" fontWeight="600">
+            {label}
+          </Text>
+          <Text color="$ink900" fontWeight="600">
+            {n}
+          </Text>
+        </View>
+        <View
+          height={22}
+          backgroundColor="$white"
+          borderWidth={3}
+          borderColor="$ink900"
+          borderRadius="$pill"
+          overflow="hidden"
+        >
+          <View width={`${pct}%`} height="100%" backgroundColor={color} />
+        </View>
+      </View>
+    )
+  }
 
   return (
     <ScrollView flex={1} backgroundColor="$background" contentContainerStyle={{ padding: 20 }}>
@@ -264,30 +299,43 @@ export default function YouView({ items }: Props) {
         {stat(t('nah'), count('nah'), '$verdictNah', 'nah')}
       </View>
 
-      {/* saved card — taps to Stats tab */}
-      <Pressable
-        onPress={() => router.push('/(tabs)/stats')}
-        accessibilityRole="button"
-        testID="savings-card-btn"
+      {/* saved card — informational (formerly tapped to the removed Stats tab) */}
+      <Card
+        padded
+        marginTop="$4"
+        flexDirection="row"
+        alignItems="center"
+        gap={14}
+        testID="savings-card"
       >
-        <Card
-          padded
-          marginTop="$4"
-          flexDirection="row"
-          alignItems="center"
-          gap={14}
+        <Icon name="coin" size={36} color="#ff5ca8" />
+        <View>
+          <Text color="$ink900" fontWeight="700" fontSize={24}>
+            {t('saved_amt', { amt: savedAmount })}
+          </Text>
+          <Text color="$ink500" fontSize={14}>
+            {t('saved_sub')}
+          </Text>
+        </View>
+      </Card>
+
+      {/* verdict breakdown — ported from the removed Stats tab so 我的 retains
+          all former stats content. */}
+      <Card padded marginTop="$4" testID="verdict-breakdown-card">
+        <Text
+          color="$ink400"
+          fontSize={11}
+          letterSpacing={1.32}
+          textTransform="uppercase"
         >
-          <Icon name="coin" size={36} color="#ff5ca8" />
-          <View>
-            <Text color="$ink900" fontWeight="700" fontSize={24}>
-              {t('saved_amt', { amt: savedAmount })}
-            </Text>
-            <Text color="$ink500" fontSize={14}>
-              {t('saved_sub')}
-            </Text>
-          </View>
-        </Card>
-      </Pressable>
+          {t('verdict_breakdown')}
+        </Text>
+        <View marginTop={18}>
+          {bar(t('yum_buy_again'), 'yum', '$verdictYum')}
+          {bar(t('meh_maybe'), 'meh', '$verdictMeh')}
+          {bar(t('nah_skip'), 'nah', '$verdictNah')}
+        </View>
+      </Card>
 
       {/* settings list */}
       <View marginTop={18}>

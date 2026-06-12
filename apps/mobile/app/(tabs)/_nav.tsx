@@ -8,7 +8,7 @@
 
    Routing is driven by the navigation state passed in by <Tabs>; tapping
    a nav item navigates to that route. The five routes map to the shell
-   sections: index→Library, recall, add (FAB), stats, you.
+   sections: index→Library, recall, add (FAB), todo, you.
 
    The matching screen content is rendered by <Tabs> above this chrome.
    On wide layouts the Sidebar is absolutely docked to the left; the
@@ -51,7 +51,7 @@ interface NavMeta {
 const NAV: NavMeta[] = [
   { route: 'index', icon: 'grid', labelKey: 'my_tastes' },
   { route: 'recall', icon: 'search', labelKey: 'nav_recall' },
-  { route: 'stats', icon: 'chart-bar', labelKey: 'nav_stats' },
+  { route: 'todo', icon: 'bookmark', labelKey: 'nav_todo' },
   { route: 'you', icon: 'user', labelKey: 'nav_you' },
 ]
 

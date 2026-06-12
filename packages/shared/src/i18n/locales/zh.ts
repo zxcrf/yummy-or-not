@@ -1,7 +1,7 @@
 /* Yummy or Not — Chinese (zh, Simplified) translations.
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const zh: Record<string, string> = {
-  nav_tastes: "口味", nav_recall: "回忆", nav_saved: "收藏", nav_you: "我的", nav_stats: "统计",
+  nav_tastes: "口味", nav_recall: "回忆", nav_saved: "收藏", nav_you: "我的", nav_stats: "统计", nav_todo: "想吃",
   my_tastes: "我的口味", count_logged: "{n} 条记录", search_log: "搜索你的记录…",
   log_taste: "记录口味", recall_title: "以前吃过吗？",
   recall_sub: "花钱前先搜一下。我们会告诉你过去的你怎么想。",
