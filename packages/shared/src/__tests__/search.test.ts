@@ -10,7 +10,7 @@
  *  - Notes-content hit IS returned (regression — old LibraryView only searched name/place)
  *  - Normalization: case, punctuation
  *  - Empty query returns []
- *  - Single-character query returns []
+ *  - Single-character query returns results (not empty)
  */
 
 import { searchTastes, normalizeText, SCORE_THRESHOLD } from "../search";
@@ -77,12 +77,18 @@ describe("empty / short query guard", () => {
     expect(searchTastes(items, "")).toHaveLength(0);
   });
 
-  it("returns [] for single character", () => {
-    expect(searchTastes(items, "L")).toHaveLength(0);
+  it("returns results for single latin character", () => {
+    const item = taste({ name: "Latte" });
+    const results = searchTastes([item], "L");
+    expect(results).toHaveLength(1);
+    expect(results[0].item).toBe(item);
   });
 
-  it("returns [] for single CJK character", () => {
-    expect(searchTastes(items, "拉")).toHaveLength(0);
+  it("returns results for single CJK character", () => {
+    const item = taste({ name: "拉面" });
+    const results = searchTastes([item], "拉");
+    expect(results).toHaveLength(1);
+    expect(results[0].item).toBe(item);
   });
 
   it("returns results for two-character query", () => {
@@ -268,9 +274,11 @@ describe("CJK query", () => {
     expect(results[0].strength).toBe("strong");
   });
 
-  it("single CJK char (1-char query) returns empty", () => {
+  it("single CJK char (1-char query) returns results", () => {
     const item = taste({ name: "拉面" });
-    expect(searchTastes([item], "拉")).toHaveLength(0);
+    const results = searchTastes([item], "拉");
+    expect(results).toHaveLength(1);
+    expect(results[0].item).toBe(item);
   });
 });
 

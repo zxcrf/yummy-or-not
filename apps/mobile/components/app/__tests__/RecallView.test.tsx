@@ -117,13 +117,39 @@ function taste(overrides: Partial<{
   }
 }
 
+// Tracks every renderer created in a test so a global afterEach can unmount
+// them. RecallView schedules a 250ms debounce timer on every query change; an
+// un-unmounted renderer would keep that timer alive and fire stale state
+// updates into the next test under fake timers.
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
 function renderRecallView() {
   let renderer!: TestRenderer.ReactTestRenderer
   act(() => {
     renderer = TestRenderer.create(<RecallView />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
+
+// Type into the search box and flush the 250ms debounce so searchTastes runs.
+// Requires fake timers to be active.
+function typeSearch(renderer: TestRenderer.ReactTestRenderer, text: string) {
+  const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
+  act(() => {
+    input.props.onChangeText(text)
+  })
+  act(() => {
+    jest.advanceTimersByTime(250)
+  })
+}
+
+afterEach(() => {
+  act(() => {
+    mountedRenderers.forEach((r) => r.unmount())
+  })
+  mountedRenderers.length = 0
+})
 
 function textNodes(renderer: TestRenderer.ReactTestRenderer, text: string) {
   return renderer.root.findAll(
@@ -139,9 +165,14 @@ function textNodes(renderer: TestRenderer.ReactTestRenderer, text: string) {
 describe('RecallView', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    jest.useFakeTimers()
     mockUser = { warningsEnabled: true }
     mockItems = []
     mockSearchTastes.mockReturnValue([])
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
   })
 
   it('shows recently-recalled list when query is empty', () => {
@@ -166,8 +197,7 @@ describe('RecallView', () => {
 
     const renderer = renderRecallView()
     // Simulate typing in the search box
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('matcha') })
+    typeSearch(renderer, 'matcha')
 
     // Top result verdict card header
     expect(textNodes(renderer, 'Verdict on file')).toHaveLength(1)
@@ -192,8 +222,7 @@ describe('RecallView', () => {
     mockUser = { warningsEnabled: true }
 
     const renderer = renderRecallView()
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('matcha') })
+    typeSearch(renderer, 'matcha')
 
     // Warn banner text must appear, not the normal verdict label
     expect(textNodes(renderer, 'You marked this ×_× NAH last time — skip it')).toHaveLength(1)
@@ -217,8 +246,7 @@ describe('RecallView', () => {
     mockUser = { warningsEnabled: false }
 
     const renderer = renderRecallView()
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('matcha') })
+    typeSearch(renderer, 'matcha')
 
     // Warn text must NOT appear
     expect(textNodes(renderer, 'You marked this ×_× NAH last time — skip it')).toHaveLength(0)
@@ -231,8 +259,7 @@ describe('RecallView', () => {
     mockSearchTastes.mockReturnValue([])
 
     const renderer = renderRecallView()
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('xyz') })
+    typeSearch(renderer, 'xyz')
 
     expect(textNodes(renderer, 'No record of "xyz".')).toHaveLength(1)
     // Button renders as a native pressable — find it by its children string
@@ -250,8 +277,7 @@ describe('RecallView', () => {
     ])
 
     const renderer = renderRecallView()
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('boba') })
+    typeSearch(renderer, 'boba')
 
     expect(textNodes(renderer, 'Other matches')).toHaveLength(0)
   })
@@ -271,8 +297,7 @@ describe('RecallView', () => {
     )
 
     const renderer = renderRecallView()
-    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
-    act(() => { input.props.onChangeText('ramen') })
+    typeSearch(renderer, 'ramen')
 
     // searchTastes must have been called with a list that excludes the todo item.
     const [calledItems] = mockSearchTastes.mock.calls[0] as [Array<{ id: string; status?: string }>]
@@ -313,6 +338,7 @@ function renderRecallViewAt(height: number): TestRenderer.ReactTestRenderer {
   act(() => {
     renderer = TestRenderer.create(<RecallView />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
 
@@ -380,5 +406,87 @@ describe('library title locales', () => {
   it('keeps the renamed first-person titles in english and chinese', () => {
     expect(en.my_tastes).toBe('My Tastes')
     expect(zh.my_tastes).toBe('我的口味')
+  })
+})
+
+describe('search debouncing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.useFakeTimers()
+    mockUser = { warningsEnabled: true }
+    mockItems = [taste({ id: 'a', name: 'Matcha latte' })]
+    mockSearchTastes.mockReturnValue([
+      { item: mockItems[0], score: 10001, strength: 'exact' },
+    ])
+  })
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers()
+    jest.useRealTimers()
+  })
+
+  it('does not call searchTastes synchronously on keystroke', () => {
+    const renderer = renderRecallView()
+    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
+
+    act(() => {
+      input.props.onChangeText('m')
+    })
+
+    // searchTastes must not have been called yet
+    expect(mockSearchTastes).not.toHaveBeenCalled()
+  })
+
+  it('calls searchTastes after debounce timer (250ms)', () => {
+    const renderer = renderRecallView()
+    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
+
+    act(() => {
+      input.props.onChangeText('matcha')
+    })
+
+    expect(mockSearchTastes).not.toHaveBeenCalled()
+
+    act(() => {
+      jest.advanceTimersByTime(250)
+    })
+
+    expect(mockSearchTastes).toHaveBeenCalled()
+  })
+
+  it('cancels previous timer when user types before debounce expires', () => {
+    const renderer = renderRecallView()
+    const input = renderer.root.findByProps({ placeholder: 'Try matcha…' })
+
+    act(() => {
+      input.props.onChangeText('m')
+    })
+
+    act(() => {
+      jest.advanceTimersByTime(100)
+    })
+
+    expect(mockSearchTastes).not.toHaveBeenCalled()
+
+    // Type again before 250ms expires
+    act(() => {
+      input.props.onChangeText('ma')
+    })
+
+    act(() => {
+      jest.advanceTimersByTime(100)
+    })
+
+    // Still should not have been called (timer was reset)
+    expect(mockSearchTastes).not.toHaveBeenCalled()
+
+    act(() => {
+      jest.advanceTimersByTime(150)
+    })
+
+    // Now it should be called with the latest query
+    expect(mockSearchTastes).toHaveBeenCalled()
+    const [items, query] = mockSearchTastes.mock.calls[0] as [unknown[], string]
+    expect(query).toBe('ma')
   })
 })
