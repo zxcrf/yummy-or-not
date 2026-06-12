@@ -25,17 +25,6 @@ const nextConfig = {
   // external rather than bundling it, so the prebuilt @img/sharp-* binary
   // survives the standalone copy without a separate webpack loader.
   serverExternalPackages: ['sharp'],
-  async redirects() {
-    return [
-      { source: '/', destination: '/web', permanent: false },
-    ]
-  },
-  async rewrites() {
-    return [
-      { source: '/web', destination: '/web/index.html' },
-      { source: '/web/', destination: '/web/index.html' },
-    ]
-  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

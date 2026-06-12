@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:migrate": "node scripts/migrate.mjs",
-    "build:web": "cd ../.. && node apps/api/scripts/embed-web.mjs"
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
