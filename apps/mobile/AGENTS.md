@@ -10,3 +10,6 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
 - Adding press feedback / transitions / enter-exit animations:
   read `../../docs/product/material-motion.md` first (animation presets and
   per-component patterns already in use).
+- Writing jest tests that mount components, or debugging "all tests pass but
+  jest exits 1 on CI": read `../../docs/engineering/jest-async-leaks.md` first
+  (async-act mounts, afterEach unmount, act-warning gate, no --forceExit).
