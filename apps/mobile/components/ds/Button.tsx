@@ -14,7 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import Animated from 'react-native-reanimated'
-import { colors, radius, space, popShadow, bouncy, usePressNudge } from '@/theme'
+import { colors, radius, space, popShadow, pressedShadow, bouncy, usePressNudge } from '@/theme'
 
 // ---------- Public types ----------
 
@@ -107,16 +107,6 @@ export function Button({
 }: ButtonProps) {
   const driver = usePressNudge({ spring: bouncy }, disabled)
 
-  const frameStyle = [
-    styles.base,
-    styles[variant],
-    styles[size],
-    block && styles.block,
-    disabled && styles.disabled,
-    driver.animatedStyle,
-    style,
-  ]
-
   return (
     <Pressable
       disabled={disabled}
@@ -132,23 +122,38 @@ export function Button({
       }}
       {...rest}
     >
-      <Animated.View style={frameStyle}>
-        {iconLeft}
-        {typeof children === 'string' || typeof children === 'number' ? (
-          <Text
-            style={{
-              color: LABEL_COLOR[variant],
-              fontWeight: '700',
-              fontSize: LABEL_FONT[size],
-            }}
-          >
-            {children}
-          </Text>
-        ) : (
-          children
-        )}
-        {iconRight}
-      </Animated.View>
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.base,
+            styles[variant],
+            styles[size],
+            block && styles.block,
+            disabled && styles.disabled,
+            driver.animatedStyle,
+            style,
+            // On iOS: shadow collapses 5x5 → 0x0 during nudge press.
+            // Android: translate handles the visual; shadow unchanged.
+            pressed && !disabled ? pressedShadow.button : undefined,
+          ]}
+        >
+          {iconLeft}
+          {typeof children === 'string' || typeof children === 'number' ? (
+            <Text
+              style={{
+                color: LABEL_COLOR[variant],
+                fontWeight: '700',
+                fontSize: LABEL_FONT[size],
+              }}
+            >
+              {children}
+            </Text>
+          ) : (
+            children
+          )}
+          {iconRight}
+        </Animated.View>
+      )}
     </Pressable>
   )
 }

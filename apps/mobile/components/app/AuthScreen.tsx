@@ -21,6 +21,7 @@ import {
   oauthStartUrl,
   registerEmail,
   requestOtp,
+  setAuthToken,
   verifyOtp,
   type AuthResponse,
   type ProviderStatus,
@@ -74,9 +75,30 @@ export function notifyPromo(res: AuthResponse, t: (k: string) => string): void {
   if (notice) Alert.alert(t('auth_promo_not_applied'), t(errKey(notice)))
 }
 
-/** Open an OAuth start URL via the in-app browser (native only). */
-function openOAuth(url: string): void {
-  void WebBrowser.openBrowserAsync(url)
+/**
+ * Open an OAuth start URL via the in-app browser and wait for the native
+ * deep-link callback. The API callback route redirects to
+ *   yummyornot://auth/callback?token=<token>   (success)
+ *   yummyornot://auth/callback?auth_error=<reason>  (failure)
+ * openAuthSessionAsync intercepts the redirect when the URL matches the app
+ * scheme and returns it without navigating away, so we can extract the token.
+ */
+async function handleOAuth(
+  url: string,
+  onToken: (token: string) => Promise<void>,
+  onError: (reason: string) => void,
+): Promise<void> {
+  const redirectUrl = 'yummyornot://auth/callback'
+  const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl)
+  if (result.type !== 'success') return
+  const parsed = new URL(result.url)
+  const token = parsed.searchParams.get('token')
+  const authError = parsed.searchParams.get('auth_error')
+  if (token) {
+    await onToken(token)
+  } else if (authError) {
+    onError(authError)
+  }
 }
 
 export default function AuthScreen() {
@@ -162,6 +184,7 @@ export default function AuthScreen() {
               method={method}
               t={t}
               setError={setError}
+              onDone={refresh}
             />
           </View>
         </View>
@@ -390,11 +413,13 @@ function SocialButtons({
   method,
   t,
   setError,
+  onDone,
 }: {
   providers: ProviderStatus[]
   method: Method
   t: (k: string, v?: Record<string, string | number>) => string
   setError: (e: string | null) => void
+  onDone: () => Promise<void>
 }) {
   // Surface the providers that match the current habit.
   const audience = method === 'phone' ? 'domestic' : 'international'
@@ -433,7 +458,18 @@ function SocialButtons({
               key={p.id}
               variant="secondary"
               block
-              onPress={() => openOAuth(oauthStartUrl(p.id))}
+              onPress={() => {
+                void handleOAuth(
+                  oauthStartUrl(p.id),
+                  async (token) => {
+                    // Store the token in the shared api-client memory so that
+                    // refresh() picks it up via getAuthToken() and persists it.
+                    setAuthToken(token)
+                    await onDone()
+                  },
+                  (reason) => setError(t(errKey(reason))),
+                )
+              }}
               iconLeft={<Icon name="user" size={16} color="#3a2f43" />}
             >
               {label}

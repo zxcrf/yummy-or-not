@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Animated from 'react-native-reanimated'
+import { type TextProps } from 'react-native'
 import { textBase } from '@/theme'
 import {
   useSharedValue,
@@ -27,7 +28,7 @@ import {
 
 const DURATION = 700
 
-export interface AnimatedNumberProps {
+export interface AnimatedNumberProps extends Omit<TextProps, 'children'> {
   /** Numeric target to animate to. */
   value: number
   /**
@@ -35,15 +36,14 @@ export interface AnimatedNumberProps {
    * Pass 2 for money values.
    */
   decimals?: number
-  [prop: string]: unknown
 }
 
 export default function AnimatedNumber({
   value,
   decimals = 0,
-  testID,
+  style,
   ...textProps
-}: AnimatedNumberProps & { testID?: string }) {
+}: AnimatedNumberProps) {
   const reducedMotion = useReducedMotion()
   const shared = useSharedValue(0)
   const [display, setDisplay] = useState('0')
@@ -85,5 +85,12 @@ export default function AnimatedNumber({
     [decimals, onDisplay],
   )
 
-  return <Animated.Text testID={testID} style={[textBase, (textProps as { style?: object }).style]}>{display}</Animated.Text>
+  // Forward all RN TextProps (color, fontSize, numberOfLines, a11y, etc.) to
+  // Animated.Text. `style` is normalized separately so textBase defaults are
+  // overridable via the style prop without clobbering other TextProps.
+  return (
+    <Animated.Text style={[textBase, style]} {...textProps}>
+      {display}
+    </Animated.Text>
+  )
 }

@@ -20,6 +20,9 @@ import {
   TouchableWithoutFeedback,
   View,
   View as RNView,
+  type StyleProp,
+  type ViewProps,
+  type ViewStyle,
 } from 'react-native'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import { colors, radius, space } from '@/theme'
@@ -48,6 +51,12 @@ export interface LangSwitcherProps {
   /** Resolved color string (hex). Use colors.candyPink etc — NOT Tamagui token strings. */
   tone?: string
   triggerMode?: 'label' | 'flag'
+  /** Style applied to the root wrapper View (e.g. margin, position). */
+  style?: StyleProp<ViewStyle>
+  /** testID forwarded to the root wrapper View. */
+  testID?: string
+  /** accessibilityLabel forwarded to the root wrapper View. */
+  accessibilityLabel?: string
 }
 
 const styles = StyleSheet.create({
@@ -138,6 +147,9 @@ export function LangSwitcher({
   align = 'left',
   tone = colors.candyBlue,
   triggerMode = 'label',
+  style,
+  testID,
+  accessibilityLabel,
 }: LangSwitcherProps) {
   const [open, setOpen] = useState(false)
   const [nativePos, setNativePos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 })
@@ -182,7 +194,11 @@ export function LangSwitcher({
   })
 
   return (
-    <View style={{ alignSelf: 'flex-start' }}>
+    <View
+      style={[{ alignSelf: 'flex-start' }, style]}
+      testID={testID}
+      accessibilityLabel={accessibilityLabel}
+    >
       <Pressable
         ref={triggerRef}
         accessibilityRole="button"

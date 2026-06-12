@@ -606,21 +606,26 @@ export default function AddModal({ onClose, onSaved }: Props) {
                   overflow: 'hidden',
                 }}
               >
-                {/* banner header row */}
-                <Pressable
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: space[2], padding: 12 }}
-                  onPress={() => setBannerExpanded((e) => !e)}
-                  accessibilityRole="button"
-                >
-                  <Icon name={bannerIcon} size={18} color="#191017" />
-                  <Text style={{ flex: 1, color: colors.ink900, fontSize: 14, fontWeight: '600' }}>
-                    {t(bannerVariant === 'warn' ? 'add_warn_hint' : 'add_duplicate_hint')}
-                  </Text>
-                  <Icon
-                    name={bannerExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color="#191017"
-                  />
+                {/* banner header row — non-pressable container with two independent
+                    press targets to avoid nested Pressable propagation issues */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2], paddingLeft: 12, paddingRight: 4, paddingVertical: 12 }}>
+                  {/* expand/collapse tappable area — fills the row except the close button */}
+                  <Pressable
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space[2] }}
+                    onPress={() => setBannerExpanded((e) => !e)}
+                    accessibilityRole="button"
+                  >
+                    <Icon name={bannerIcon} size={18} color="#191017" />
+                    <Text style={{ flex: 1, color: colors.ink900, fontSize: 14, fontWeight: '600' }}>
+                      {t(bannerVariant === 'warn' ? 'add_warn_hint' : 'add_duplicate_hint')}
+                    </Text>
+                    <Icon
+                      name={bannerExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color="#191017"
+                    />
+                  </Pressable>
+                  {/* close button — separate Pressable so it doesn't bubble into the expand handler */}
                   <Pressable
                     onPress={dismissBanner}
                     accessibilityRole="button"
@@ -629,7 +634,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
                   >
                     <Icon name="close" size={14} color="#191017" />
                   </Pressable>
-                </Pressable>
+                </View>
 
                 {/* expanded match rows */}
                 {bannerExpanded ? (

@@ -61,8 +61,22 @@ export function Tag({
 
   if (!onPress) {
     // Static (non-interactive) chip — plain View, no Pressable overhead.
+    // Forward safe View-compatible rest props (testID, a11y, hitSlop, etc.)
+    // by picking the subset that doesn't conflict with our fixed styles.
+    const { testID, accessibilityLabel, accessibilityHint, accessibilityRole } = rest as {
+      testID?: string
+      accessibilityLabel?: string
+      accessibilityHint?: string
+      accessibilityRole?: string
+    }
     return (
-      <View style={[styles.chip, active && styles.active, style]}>
+      <View
+        style={[styles.chip, active && styles.active, style]}
+        testID={testID}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityRole={accessibilityRole as React.ComponentProps<typeof View>['accessibilityRole']}
+      >
         <Text style={[styles.label, { color: textColor }]}>{children}</Text>
         {onRemove ? (
           <Text

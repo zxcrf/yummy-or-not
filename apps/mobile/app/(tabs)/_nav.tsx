@@ -141,6 +141,7 @@ function Sidebar({ props }: { props: TabBarProps }) {
           <Pressable
             key={n.route}
             accessibilityRole="button"
+            accessibilityState={{ selected: on }}
             onPress={() => go(n.route)}
             style={{
               flexDirection: 'row',
@@ -243,6 +244,7 @@ function AnimatedTab({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={{ flex: 1, alignItems: 'center', gap: 3, paddingVertical: 6 }}
     >

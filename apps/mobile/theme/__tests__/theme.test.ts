@@ -210,8 +210,8 @@ describe('pressedShadow', () => {
   it('button collapsed shadow has 0x0 offset', () => {
     expect(pressedShadow.button.shadowOffset).toEqual({ width: 0, height: 0 })
   })
-  it('card collapsed shadow has 0x0 offset', () => {
-    expect(pressedShadow.card.shadowOffset).toEqual({ width: 0, height: 0 })
+  it('card pressed shadow collapses to 3x3 (5x5 → 3x3 per spec)', () => {
+    expect(pressedShadow.card.shadowOffset).toEqual({ width: 3, height: 3 })
   })
 })
 

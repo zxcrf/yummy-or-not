@@ -79,11 +79,26 @@ function writeStoredToken(token: string | null): void {
     // import() bypasses the mapper and requires --experimental-vm-modules).
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store')
-    void (token
-      ? SecureStore.setItemAsync(STORAGE_KEY, token)
-      : SecureStore.deleteItemAsync(STORAGE_KEY))
+    if (token) {
+      void SecureStore.setItemAsync(STORAGE_KEY, token)
+    }
+    // Writes are fire-and-forget (best-effort). Deletions must be awaited via
+    // deleteStoredToken() so a fast app-kill after sign-out can't restore the
+    // old token on next launch.
   } catch {
     // ignore — persistence is best-effort.
+  }
+}
+
+/** Await deletion of the persisted token. Throws only if SecureStore is unavailable. */
+async function deleteStoredToken(): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store')
+    await SecureStore.deleteItemAsync(STORAGE_KEY)
+  } catch {
+    // ignore — if SecureStore is unavailable the token will be gone on next
+    // launch when readStoredToken() returns null.
   }
 }
 
@@ -142,7 +157,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch {
       // ignore — proceed to local cleanup regardless.
     } finally {
-      writeStoredToken(null)
+      // Await the deletion so a fast app-kill after sign-out cannot restore
+      // the old token on next launch (fire-and-forget deletion race).
+      await deleteStoredToken()
       setAuthToken(null)
       // Purge cached taste + tag data + photos so the next account starts clean.
       await clearPersistedTastes()

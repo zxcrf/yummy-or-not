@@ -6,7 +6,7 @@
    ============================================================ */
 
 import { useEffect } from 'react'
-import { Pressable, StyleSheet, type ViewProps } from 'react-native'
+import { Pressable, StyleSheet, type StyleProp, type ViewProps, type ViewStyle } from 'react-native'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -41,9 +41,11 @@ export interface SwitchProps extends Omit<ViewProps, 'style'> {
   checked?: boolean
   onChange?: (next: boolean) => void
   disabled?: boolean
+  /** Optional style applied to the track Pressable (e.g. margin, alignSelf). */
+  style?: StyleProp<ViewStyle>
 }
 
-export function Switch({ checked = false, onChange, disabled = false, ...rest }: SwitchProps) {
+export function Switch({ checked = false, onChange, disabled = false, style, ...rest }: SwitchProps) {
   const knobX = useSharedValue(checked ? KNOB_ON : KNOB_OFF)
 
   useEffect(() => {
@@ -66,6 +68,9 @@ export function Switch({ checked = false, onChange, disabled = false, ...rest }:
         styles.track,
         checked && styles.trackChecked,
         disabled && styles.trackDisabled,
+        // Caller style goes last so it can add margin/alignSelf, but the track
+        // dimensions and colors above always win via StyleSheet specificity.
+        style,
       ]}
       {...rest}
     >

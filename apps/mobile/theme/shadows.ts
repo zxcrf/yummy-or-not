@@ -62,10 +62,11 @@ export const pressedShadow = {
     shadowOpacity: 1,
     shadowRadius: 0,
   },
-  // Card interactive pressed state (nudge x:2 y:2 → offsets collapse to 0)
+  // Card interactive pressed state: 5x5 → 3x3 (nudge x:2 y:2 closes 2px of the gap;
+  // the remaining 3px of offset stays visible — matching the material-motion spec).
   card: {
     shadowColor: colors.ink900,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
   },

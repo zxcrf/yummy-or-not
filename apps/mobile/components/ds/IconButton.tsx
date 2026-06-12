@@ -14,7 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import Animated from 'react-native-reanimated'
-import { colors, radius, popShadow, bouncy, usePressNudge } from '@/theme'
+import { colors, radius, popShadow, pressedShadow, bouncy, usePressNudge } from '@/theme'
 
 // ---------- Public types ----------
 
@@ -78,16 +78,6 @@ export function IconButton({
 }: IconButtonProps) {
   const driver = usePressNudge({ spring: bouncy }, disabled)
 
-  const frameStyle = [
-    styles.base,
-    styles[variant],
-    styles[size],
-    round && styles.round,
-    disabled && styles.disabled,
-    driver.animatedStyle,
-    style,
-  ]
-
   return (
     <Pressable
       disabled={disabled}
@@ -103,9 +93,24 @@ export function IconButton({
       }}
       {...rest}
     >
-      <Animated.View style={frameStyle}>
-        {children}
-      </Animated.View>
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.base,
+            styles[variant],
+            styles[size],
+            round && styles.round,
+            disabled && styles.disabled,
+            driver.animatedStyle,
+            style,
+            // On iOS: shadow collapses 5x5 → 0x0 during nudge press.
+            // Android: translate handles the visual; shadow unchanged.
+            pressed && !disabled ? pressedShadow.button : undefined,
+          ]}
+        >
+          {children}
+        </Animated.View>
+      )}
     </Pressable>
   )
 }
