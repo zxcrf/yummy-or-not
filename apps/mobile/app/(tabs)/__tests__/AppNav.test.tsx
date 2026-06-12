@@ -11,26 +11,25 @@ import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
 import { AppNav } from '../_nav'
 
-const mockUseMedia = jest.fn(() => ({ gtMd: true }))
+// Drives the responsive switch: AppNav reads `useWindowDimensions().width`
+// and renders the Sidebar at width >= 769, else the bottom TabBar.
+const mockUseWindowDimensions = jest.fn(() => ({ width: 1024, height: 768 }))
 const mockSetLang = jest.fn()
 const mockLangSwitcher = jest.fn((props: Record<string, unknown>) =>
   React.createElement('LangSwitcherMock', props),
 )
 
+jest.mock('react-native', () => {
+  const RN = jest.requireActual('react-native')
+  return new Proxy(RN, {
+    get: (target, prop) =>
+      prop === 'useWindowDimensions' ? mockUseWindowDimensions : target[prop],
+  })
+})
+
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
-
-jest.mock('tamagui', () => {
-  const React = require('react')
-  return {
-    Text: ({ children, ...props }: { children?: React.ReactNode }) =>
-      React.createElement('Text', props, children),
-    View: ({ children, ...props }: { children?: React.ReactNode }) =>
-      React.createElement('View', props, children),
-    useMedia: () => mockUseMedia(),
-  }
-})
 
 jest.mock('@yon/shared', () => ({
   LANGS: [{ code: 'zh', label: 'Chinese', native: '中文' }],
@@ -103,7 +102,7 @@ function renderNav(activeRoute: string) {
 describe('AppNav desktop language switcher', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockUseMedia.mockReturnValue({ gtMd: true })
+    mockUseWindowDimensions.mockReturnValue({ width: 1024, height: 768 })
   })
 
   it('hides the global sidebar language switcher while the You tab is active', () => {
@@ -132,7 +131,9 @@ describe('AppNav nav restructure — 想吃 replaces 统计', () => {
   })
 
   function renderTree(gtMd: boolean) {
-    mockUseMedia.mockReturnValue({ gtMd })
+    mockUseWindowDimensions.mockReturnValue(
+      gtMd ? { width: 1024, height: 768 } : { width: 390, height: 844 },
+    )
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(

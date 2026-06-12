@@ -3,12 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
-    "@expo/metro-runtime": "~56.0.14",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@tamagui/animations-react-native": "^2.1.0",
-    "@tamagui/babel-plugin": "^2.1.0",
-    "@tamagui/config": "^2.1.0",
-    "@tamagui/core": "^2.1.0",
     "@yon/shared": "workspace:*",
     "expo": "~56.0.9",
     "expo-build-properties": "~56.0.17",
@@ -28,7 +23,6 @@
     "expo-updates": "~56.0.18",
     "expo-web-browser": "~56.0.5",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-keyboard-controller": "^1.21.11",
     "react-native-reanimated": "4.3.1",
@@ -36,9 +30,7 @@
     "react-native-screens": "4.25.2",
     "react-native-svg": "^15.15.4",
     "react-native-view-shot": "5.1.0",
-    "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.8.3",
-    "tamagui": "^2.1.0"
+    "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -52,7 +44,6 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web",
     "test": "jest"
   },
   "private": true

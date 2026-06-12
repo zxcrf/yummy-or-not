@@ -25,11 +25,6 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
       [
@@ -69,8 +64,7 @@
       "expo-sharing"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "baseUrl": "/web"
+      "typedRoutes": true
     },
     "extra": {
       "router": {},
