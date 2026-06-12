@@ -24,6 +24,7 @@ import AddModal from '../AddModal'
 const mockCreateTaste = jest.fn()
 const mockCreateTag = jest.fn()
 const mockRequestForegroundPermissionsAsync = jest.fn()
+const mockHasServicesEnabledAsync = jest.fn()
 const mockGetCurrentPositionAsync = jest.fn()
 const mockGetLastKnownPositionAsync = jest.fn()
 const mockReverseGeocodeAsync = jest.fn()
@@ -46,9 +47,10 @@ jest.mock('expo-image-manipulator', () => ({
 }))
 
 jest.mock('expo-location', () => ({
-  Accuracy: { Balanced: 'balanced' },
+  Accuracy: { Balanced: 'balanced', High: 'high' },
   requestForegroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestForegroundPermissionsAsync(...args),
+  hasServicesEnabledAsync: (...args: unknown[]) => mockHasServicesEnabledAsync(...args),
   getCurrentPositionAsync: (...args: unknown[]) => mockGetCurrentPositionAsync(...args),
   getLastKnownPositionAsync: (...args: unknown[]) => mockGetLastKnownPositionAsync(...args),
   reverseGeocodeAsync: (...args: unknown[]) => mockReverseGeocodeAsync(...args),
@@ -140,6 +142,7 @@ describe('AddModal locate — last-known-position fallback', () => {
     jest.clearAllMocks()
     mockCreateTaste.mockResolvedValue({ id: 'taste-1' })
     mockRequestForegroundPermissionsAsync.mockResolvedValue({ granted: true })
+    mockHasServicesEnabledAsync.mockResolvedValue(true)
     mockReverseGeocodeAsync.mockResolvedValue([])
     mockServerReverseGeocode.mockResolvedValue({ place: null })
   })
