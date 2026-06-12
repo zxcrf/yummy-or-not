@@ -154,26 +154,58 @@ function textNodes(renderer: TestRenderer.ReactTestRenderer, text: string) {
   )
 }
 
-function renderRecallView() {
-  let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
-    renderer = TestRenderer.create(<RecallView />)
-  })
-  return renderer
-}
-
 // ---- tests --------------------------------------------------------------
 
 describe('RecallView nearby_eaten group', () => {
+  // Each renderer created in a test is stored here so afterEach can clean up.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
   beforeEach(() => {
     jest.clearAllMocks()
+    // Fake timers prevent the 250 ms debounce setTimeout (armed on every
+    // RecallView mount) from firing in real wall-clock time after the test
+    // ends. Without fake timers the timer fires after environment teardown on
+    // Linux, triggers a React re-render via scheduler setImmediate, and hits
+    // the torn-down module Proxy — crashing the worker and flipping jest's
+    // exit code to 1 even though all assertions passed.
+    jest.useFakeTimers()
     mockUser = { warningsEnabled: false, locationEnabled: true }
     mockItems = []
     mockPermission = { granted: true }
     mockLocationError = null
-    // user at 35.0, 139.0
     mockPosition = { coords: { latitude: 35.0, longitude: 139.0 } }
   })
+
+  afterEach(() => {
+    // Each async-act drain turn during renderRecallView() causes React's
+    // scheduler to queue work via setTimeout(fn,0) — these accumulate as fake
+    // timers (7 pending after 6 drain turns). We must fire ALL of them inside
+    // act() so the resulting state updates are processed synchronously before
+    // environment teardown. runAllTimers() covers both scheduler Timeouts and
+    // the 250 ms debounce. Unmount after so cleanup (clearTimeout) runs last.
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
+  })
+
+  // Create a RecallView renderer and drain the async location effect chain:
+  //   requestForegroundPermissionsAsync (1 await)
+  //   → getCurrentPositionAsync / Promise.race (1 await)
+  //   → setUserCoords → React scheduler setImmediate → re-render
+  // Using synchronous act() for create (same pattern as RecallViewNearbyTodo)
+  // then 6 × "await act(async () => Promise.resolve())" drains each microtask
+  // step plus the scheduler setImmediate that React queues for the state update.
+  async function renderRecallView() {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => { renderer = TestRenderer.create(<RecallView />) })
+    for (let i = 0; i < 6; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await act(async () => { await Promise.resolve() })
+    }
+    mountedRenderers.push(renderer)
+    return renderer
+  }
 
   it('renders nearby group sorted nearest-first with distance labels when permission granted and items have coords', async () => {
     // near item: 35.001, 139.0 (~111 m away)
@@ -182,10 +214,7 @@ describe('RecallView nearby_eaten group', () => {
     const far = taste({ id: 'far', name: 'Far Sushi', lat: 35.01, lng: 139.0 })
     mockItems = [far, near] as never[] // intentionally reversed to test sort
 
-    let renderer!: TestRenderer.ReactTestRenderer
-    await act(async () => {
-      renderer = TestRenderer.create(<RecallView />)
-    })
+    const renderer = await renderRecallView()
 
     // Nearby group header must appear
     expect(textNodes(renderer, 'Eaten nearby')).toHaveLength(1)
@@ -214,15 +243,9 @@ describe('RecallView nearby_eaten group', () => {
     const item = taste({ id: 'a', name: 'Boba', lat: 35.001, lng: 139.0 })
     mockItems = [item] as never[]
 
-    let renderer!: TestRenderer.ReactTestRenderer
-    await act(async () => {
-      renderer = TestRenderer.create(<RecallView />)
-    })
+    const renderer = await renderRecallView()
 
-    // No nearby group header
     expect(textNodes(renderer, 'Eaten nearby')).toHaveLength(0)
-
-    // recently_recalled still shows
     expect(textNodes(renderer, 'Recently recalled')).toHaveLength(1)
   })
 
@@ -231,7 +254,11 @@ describe('RecallView nearby_eaten group', () => {
     const item = taste({ id: 'b', name: 'Boba', lat: 35.001, lng: 139.0 })
     mockItems = [item] as never[]
 
-    const renderer = renderRecallView()
+    // locationEnabled=false so the location useEffect returns immediately —
+    // no async chain to drain; synchronous act() is sufficient.
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => { renderer = TestRenderer.create(<RecallView />) })
+    mountedRenderers.push(renderer)
 
     expect(textNodes(renderer, 'Eaten nearby')).toHaveLength(0)
     expect(textNodes(renderer, 'Recently recalled')).toHaveLength(1)
@@ -241,10 +268,7 @@ describe('RecallView nearby_eaten group', () => {
     const item = taste({ id: 'c', name: 'Boba', lat: null, lng: null })
     mockItems = [item] as never[]
 
-    let renderer!: TestRenderer.ReactTestRenderer
-    await act(async () => {
-      renderer = TestRenderer.create(<RecallView />)
-    })
+    const renderer = await renderRecallView()
 
     expect(textNodes(renderer, 'Eaten nearby')).toHaveLength(0)
     expect(textNodes(renderer, 'Recently recalled')).toHaveLength(1)

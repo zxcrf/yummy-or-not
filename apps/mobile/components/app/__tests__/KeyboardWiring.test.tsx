@@ -278,8 +278,21 @@ describe('AddModal keyboard wiring', () => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('RecallView keyboard dismissal', () => {
+  // Track renderers so afterEach can unmount and flush the 250 ms debounce
+  // timer that RecallView arms on every mount. Without fake timers the real
+  // timer fires after environment teardown on Linux and flips jest exit to 1.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
   beforeEach(() => {
+    jest.useFakeTimers()
     jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
   })
 
   // The regression: RecallView's results scroll lacked keyboard interaction
@@ -291,6 +304,7 @@ describe('RecallView keyboard dismissal', () => {
     act(() => {
       renderer = TestRenderer.create(<RecallView />)
     })
+    mountedRenderers.push(renderer)
 
     const nodes = findAllWithProp(renderer, 'keyboardDismissMode', 'on-drag')
     expect(nodes.length).toBeGreaterThan(0)
@@ -301,6 +315,7 @@ describe('RecallView keyboard dismissal', () => {
     act(() => {
       renderer = TestRenderer.create(<RecallView />)
     })
+    mountedRenderers.push(renderer)
 
     const nodes = findAllWithProp(renderer, 'keyboardShouldPersistTaps', 'handled')
     expect(nodes.length).toBeGreaterThan(0)
@@ -311,6 +326,7 @@ describe('RecallView keyboard dismissal', () => {
     act(() => {
       renderer = TestRenderer.create(<RecallView />)
     })
+    mountedRenderers.push(renderer)
 
     const nodes = renderer.root.findAll(
       (node) =>

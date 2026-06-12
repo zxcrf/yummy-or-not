@@ -189,7 +189,22 @@ const mockedGetOriginalPhotoUrl = jest.mocked(getOriginalPhotoUrl)
 // ── RecallView thumbnail tests ───────────────────────────────────────────────
 
 describe('RecallView thumbnail source', () => {
-  beforeEach(() => jest.clearAllMocks())
+  // Track renderers so afterEach can unmount and flush the 250 ms debounce
+  // timer that RecallView arms on every mount. Without fake timers the real
+  // timer fires after environment teardown on Linux and flips jest exit to 1.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
+  })
 
   it('uses imageThumb for the 54 px thumbnail with a stable :thumb cacheKey', async () => {
     /* The row must pass imageThumb as the expo-image source so the small slot
@@ -202,6 +217,7 @@ describe('RecallView thumbnail source', () => {
       imageKey: 'tastes/u1/uuid',
     })
     const renderer = await renderRecall([item])
+    mountedRenderers.push(renderer)
 
     const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
@@ -227,6 +243,7 @@ describe('RecallView thumbnail source', () => {
       imageKey: '',
     })
     const renderer = await renderRecall([item])
+    mountedRenderers.push(renderer)
 
     const thumbImg = findExpoImages(renderer)[0]
     expect(thumbImg.props.source).toEqual({
@@ -245,6 +262,7 @@ describe('RecallView thumbnail source', () => {
       imageKey: '',
     })
     const renderer = await renderRecall([item])
+    mountedRenderers.push(renderer)
 
     const images = findExpoImages(renderer)
     expect(images.length).toBeGreaterThan(0)
