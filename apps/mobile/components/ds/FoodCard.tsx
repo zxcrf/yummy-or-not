@@ -1,47 +1,24 @@
 /* ============================================================
-   YUMMY OR NOT — FoodCard (Tamagui / React Native)
+   YUMMY OR NOT — FoodCard (plain RN + StyleSheet)
    A single logged taste: photo, name, place, price, verdict, tags.
-   Ported from the web DS. Props are compatible with the Taste shape
-   from @yon/shared. The photo is a remote URL rendered with expo-image
-   so a stable cacheKey (Taste.imageKey) survives the per-request signed
-   query and serves from the on-disk cache.
+   Props are compatible with the Taste shape from @yon/shared.
+   The photo is a remote URL rendered with expo-image so a stable
+   cacheKey (Taste.imageKey) survives the per-request signed-URL
+   rotation and serves from the on-disk cache.
+
+   Press motion: manual `pressed` render-prop → scale 0.98 +
+   shadowOffset collapse (no animation hook — §1.3b exception).
    ============================================================ */
 
 import { Image } from 'expo-image'
-import { Pressable } from 'react-native'
-import { type GetProps, View, styled, Text } from 'tamagui'
-import { quick } from './animation'
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native'
+import { Text } from '@/theme'
 import type { TasteStatus, Verdict } from '@yon/shared'
+import { colors, radius, space } from '@/theme'
 import { VerdictStamp } from './VerdictStamp'
 import { Tag } from './Tag'
 
-const CardFrame = styled(View, {
-  name: 'FoodCard',
-  backgroundColor: '$white',
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$lg',
-  overflow: 'hidden',
-  shadowColor: '$ink900',
-  shadowOffset: { width: 5, height: 5 },
-  shadowOpacity: 1,
-  shadowRadius: 0,
-
-  variants: {
-    interactive: {
-      true: {
-        cursor: 'pointer',
-        animation: 'quick',
-        pressStyle: {
-          scale: 0.98,
-          shadowOffset: { width: 3, height: 3 },
-        },
-      },
-    },
-  } as const,
-})
-
-export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
+export interface FoodCardProps extends Omit<ViewProps, 'style'> {
   /** Thumbnail image URL (≤300 px). Falls back to `image` for old records. */
   imageThumb?: string
   /** Legacy image URL — used as fallback when imageThumb is absent. */
@@ -69,6 +46,8 @@ export type FoodCardProps = Omit<GetProps<typeof CardFrame>, 'children'> & {
   /** Taste status — drives badge vs stamp decision. When 'todo', todoLabel takes precedence over verdict. */
   status?: TasteStatus
   onPress?: () => void
+  /** Style pass-through applied to the outermost card frame. */
+  style?: StyleProp<ViewStyle>
 }
 
 /**
@@ -117,33 +96,35 @@ export function FoodCard({
   todoLabel,
   status,
   onPress,
-  // Strip `interactive`/`pressStyle` from the forwarded props: FoodCard fully
-  // owns its press visuals (manual scale/shadow + the wrapping Pressable). Letting
-  // a caller pass these through `...rest` would re-register a native touch
-  // responder on CardFrame and swallow the tap again (see content() note below).
-  interactive: _interactive,
-  pressStyle: _pressStyle,
+  style,
+  // Strip Tamagui-era props that JS/any callers may still forward.
+  // These are not part of FoodCardProps but could arrive via an untyped
+  // boundary; if forwarded to the inner View they'd re-register a touch
+  // responder and swallow taps (same regression as the old `interactive` variant).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ...rest
-}: FoodCardProps) {
-  void _interactive
-  void _pressStyle
+}: FoodCardProps & { interactive?: any; pressStyle?: any }) {
+  // Consume and discard any stale Tamagui-era props before spreading rest
+  const { interactive: _interactive, pressStyle: _pressStyle, ...safeRest } = rest as any
   const normalizedTags = normalizeTags(tags)
+
   const content = (pressed: boolean) => (
-    // NOTE: do NOT use the `interactive` variant here. Its `pressStyle` registers
-    // a native touch responder on CardFrame; nested inside the outer <Pressable>
-    // that responder wins the gesture negotiation and swallows the tap, so
-    // Pressable.onPress never fires (cards stop opening detail on native). The
-    // pressed visual is driven manually by the `scale`/`shadowOffset` props from
-    // the Pressable render-prop instead. `cursor: pointer` is kept for web.
-    <CardFrame
-      {...(onPress ? quick : {})}
-      {...(onPress ? { cursor: 'pointer' as const } : {})}
-      scale={pressed ? 0.98 : 1}
-      shadowOffset={pressed ? { width: 3, height: 3 } : { width: 5, height: 5 }}
-      {...rest}
+    // NOTE: do NOT put a touch responder on the inner frame. The pressed visual
+    // is driven manually by the `pressed` boolean from the outer Pressable
+    // render-prop: scale 0.98 + shadowOffset collapse. No usePressNudge hook
+    // here (§1.3b exception for FoodCard).
+    <View
+      style={[
+        styles.frame,
+        pressed
+          ? { transform: [{ scale: 0.98 }], shadowOffset: { width: 3, height: 3 } }
+          : { transform: [{ scale: 1 }], shadowOffset: { width: 5, height: 5 } },
+        style,
+      ]}
+      {...safeRest}
     >
       {/* media */}
-      <View position="relative" backgroundColor="$paper2" aspectRatio={4 / 3}>
+      <View style={styles.mediaContainer}>
         {(imageThumb || image) ? (
           <Image
             source={{
@@ -152,16 +133,14 @@ export function FoodCard({
             }}
             cachePolicy="disk"
             transition={150}
-            style={{ width: '100%', height: '100%' }}
+            style={styles.image}
             contentFit="cover"
           />
         ) : null}
         {status === 'todo' ? (
           todoLabel != null ? (
             <Tag
-              position="absolute"
-              top="$2"
-              right="$2"
+              style={{ position: 'absolute', top: space[2], right: space[2] }}
             >
               {todoLabel}
             </Tag>
@@ -172,34 +151,32 @@ export function FoodCard({
             size="sm"
             label={verdictLabel}
             rotate={-6}
-            position="absolute"
-            top="$2"
-            right="$2"
+            style={{ position: 'absolute', top: space[2], right: space[2] }}
           />
         ) : null}
       </View>
 
       {/* body */}
-      <View padding="$3" gap="$2">
-        <View flexDirection="row" alignItems="center" justifyContent="space-between" gap="$2">
-          <Text color="$ink900" fontWeight="700" fontSize={16} flexShrink={1}>
+      <View style={styles.body}>
+        <View style={styles.nameRow}>
+          <Text style={styles.nameText}>
             {name}
           </Text>
           {price != null ? (
-            <Text color="$ink900" fontWeight="700" fontSize={16}>
+            <Text style={styles.priceText}>
               {price}
             </Text>
           ) : null}
         </View>
 
         {place ? (
-          <Text color="$colorMuted" fontSize={13}>
+          <Text style={styles.placeText}>
             {place}
           </Text>
         ) : null}
 
         {normalizedTags.length > 0 || boughtCount ? (
-          <View flexDirection="row" flexWrap="wrap" gap="$2" marginTop="$1">
+          <View style={styles.tagsRow}>
             {boughtCount ? (
               <Tag>{boughtLabel || `Bought ${boughtCount}×`}</Tag>
             ) : null}
@@ -209,7 +186,7 @@ export function FoodCard({
           </View>
         ) : null}
       </View>
-    </CardFrame>
+    </View>
   )
 
   if (!onPress) {
@@ -222,5 +199,58 @@ export function FoodCard({
     </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  frame: {
+    backgroundColor: colors.white,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    shadowColor: colors.ink900,
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  mediaContainer: {
+    position: 'relative',
+    backgroundColor: colors.paper2,
+    aspectRatio: 4 / 3,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  body: {
+    padding: space[3],
+    gap: space[2],
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space[2],
+  },
+  nameText: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 16,
+    flexShrink: 1,
+  },
+  priceText: {
+    color: colors.ink900,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  placeText: {
+    color: colors.colorMuted,
+    fontSize: 13,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space[2],
+    marginTop: space[1],
+  },
+})
 
 export default FoodCard

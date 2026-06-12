@@ -1,5 +1,5 @@
 // Design system barrel — import everything from "@/components/ds"
-// Tamagui (React Native / Expo) port of the web DS. Exports all 14
+// Plain RN + Reanimated DS (no Tamagui). Exports all 14
 // primitives and composites: 8 primitives owned here plus 6 composites
 // authored alongside.
 

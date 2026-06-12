@@ -1,45 +1,24 @@
 /* ============================================================
-   YUMMY OR NOT — Avatar (Tamagui / React Native)
-   Pixel-bordered profile chip. Ported from the web DS: a chunky
-   ink-bordered square (or circle) on candy-grape; shows a cover
-   image when `src` is set, otherwise up to two derived initials.
+   YUMMY OR NOT — Avatar (plain RN + StyleSheet)
+   Pixel-bordered profile chip. Shows cover image or initials.
+   No motion (static display component).
    ============================================================ */
 
-import { type GetProps, Image, styled, Text, View } from 'tamagui'
-
-const Frame = styled(View, {
-  name: 'Avatar',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  overflow: 'hidden',
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$md',
-  backgroundColor: '$candyGrape',
-
-  variants: {
-    size: {
-      sm: { width: 34, height: 34 },
-      md: { width: 44, height: 44 },
-      lg: { width: 64, height: 64 },
-    },
-    circle: {
-      true: { borderRadius: '$pill' },
-    },
-  } as const,
-
-  defaultVariants: {
-    size: 'md',
-  },
-})
+import React from 'react'
+import {
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+  type ViewProps,
+} from 'react-native'
+import { Image } from 'expo-image'
+import { colors, radius } from '@/theme'
 
 export type AvatarSize = 'sm' | 'md' | 'lg'
 
-const SIZE_PX: Record<AvatarSize, number> = { sm: 34, md: 44, lg: 64 }
-const FONT_PX: Record<AvatarSize, number> = { sm: 14, md: 18, lg: 26 }
-
-export type AvatarProps = Omit<GetProps<typeof Frame>, 'size'> & {
+export interface AvatarProps extends Omit<ViewProps, 'children' | 'style'> {
   /** Image URL. If absent, renders initials. */
   src?: string
   /** Display name used for initials and alt text. */
@@ -48,12 +27,24 @@ export type AvatarProps = Omit<GetProps<typeof Frame>, 'size'> & {
   size?: AvatarSize
   /** Fully round instead of squared. */
   circle?: boolean
+  /** Style pass-through reaches the frame container. */
+  style?: StyleProp<ViewStyle>
 }
+
+const SIZE_PX: Record<AvatarSize, number> = { sm: 34, md: 44, lg: 64 }
+const FONT_PX: Record<AvatarSize, number> = { sm: 14, md: 18, lg: 26 }
 
 /**
  * Avatar — pixel-bordered profile chip. Shows an image or initials.
  */
-export function Avatar({ src, name = '', size = 'md', circle = false, ...rest }: AvatarProps) {
+export function Avatar({
+  src,
+  name = '',
+  size = 'md',
+  circle = false,
+  style,
+  ...rest
+}: AvatarProps) {
   const initials =
     name
       .split(/\s+/)
@@ -63,23 +54,52 @@ export function Avatar({ src, name = '', size = 'md', circle = false, ...rest }:
       .join('')
       .toUpperCase() || '?'
 
+  const dim = SIZE_PX[size]
+
   return (
-    <Frame size={size} circle={circle} {...rest}>
+    <View
+      style={[
+        styles.frame,
+        { width: dim, height: dim },
+        circle && styles.circle,
+        style,
+      ]}
+      {...rest}
+    >
       {src ? (
         <Image
           source={{ uri: src }}
-          width={SIZE_PX[size]}
-          height={SIZE_PX[size]}
-          resizeMode="cover"
+          style={{ width: dim, height: dim }}
+          contentFit="cover"
           accessibilityLabel={name}
         />
       ) : (
-        <Text color="$onBrand" fontWeight="700" fontSize={FONT_PX[size]}>
+        <Text style={[styles.initials, { fontSize: FONT_PX[size] }]}>
           {initials}
         </Text>
       )}
-    </Frame>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  frame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.md,
+    backgroundColor: colors.candyGrape,
+  },
+  circle: {
+    borderRadius: radius.pill,
+  },
+  initials: {
+    color: colors.onBrand,
+    fontWeight: '700',
+  },
+})
 
 export default Avatar

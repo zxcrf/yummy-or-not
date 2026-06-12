@@ -119,7 +119,7 @@ describe('AppNav desktop language switcher', () => {
     expect(mockLangSwitcher).toHaveBeenCalledWith(
       expect.objectContaining({
         align: 'left',
-        tone: '$candyPink',
+        tone: '#ff2e88',
         value: 'zh',
       }),
     )

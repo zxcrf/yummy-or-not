@@ -51,14 +51,16 @@ describe('FoodCard press handling', () => {
   })
 
   // A caller could try to forward `interactive`/`pressStyle` through ...rest;
-  // FoodCard must strip them so the responder can't be reintroduced.
+  // FoodCard must NOT pass unknown props through to inner nodes. These props
+  // are no longer part of FoodCardProps (they were Tamagui-era), so the cast
+  // simulates a JS caller or a `as any` boundary forwarding stale props.
   it('drops interactive/pressStyle even when passed via props', () => {
     const renderer = render({
       name: 'x',
       onPress: jest.fn(),
-      // deliberately forwarding the escape-hatch props
-      interactive: true,
-      pressStyle: { scale: 0.9 },
+      // deliberately forwarding now-invalid props via any-cast (JS boundary sim)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...({ interactive: true, pressStyle: { scale: 0.9 } } as any),
     })
     // Scope under the Pressable so we inspect the rendered CardFrame subtree,
     // not the FoodCard root element's own incoming props.

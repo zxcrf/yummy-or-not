@@ -261,10 +261,8 @@ export default function RecallView() {
             value={q}
             onChangeText={setQ}
             placeholder={t('recall_placeholder')}
-            aria-label={t('recall_placeholder')}
-            fontSize={18}
-            paddingLeft={46}
-            paddingVertical={16}
+            accessibilityLabel={t('recall_placeholder')}
+            style={{ fontSize: 18, paddingLeft: 46, paddingVertical: 16 }}
           />
         </View>
       </YStack>
@@ -450,7 +448,7 @@ export default function RecallView() {
               </Text>
               <Button
                 variant="primary"
-                marginTop="$3"
+                style={{ marginTop: 12 }}
                 onPress={() => router.push('/add')}
                 iconLeft={<Icon name="plus" size={18} color="#fff" />}
               >

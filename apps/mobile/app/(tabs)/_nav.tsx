@@ -25,6 +25,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated'
 import { Text, View, useMedia } from 'tamagui'
+import { colors } from '@/theme'
 import { LANGS } from '@yon/shared'
 
 import { router, Tabs } from 'expo-router'
@@ -114,7 +115,7 @@ function Sidebar({ props }: { props: TabBarProps }) {
             onChange={setLang}
             languages={LANGS}
             align="left"
-            tone="$candyPink"
+            tone={colors.candyPink}
           />
         </View>
       ) : null}

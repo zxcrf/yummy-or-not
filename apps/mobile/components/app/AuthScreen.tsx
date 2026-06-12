@@ -36,6 +36,7 @@ import {
 } from '@yon/shared'
 
 import { Button, Icon, Input, LangSwitcher } from '@/components/ds'
+import { colors } from '@/theme'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -121,7 +122,7 @@ export default function AuthScreen() {
               onChange={setLang}
               languages={LANGS}
               align="right"
-              tone="$candyPink"
+              tone={colors.candyPink}
             />
           </View>
 
@@ -490,7 +491,7 @@ function SocialButtons({
                 key={p.id}
                 variant="secondary"
                 block
-                opacity={0.6}
+                style={{ opacity: 0.6 }}
                 onPress={() =>
                   setError(t('auth_err_provider_unavailable', { p: p.label }))
                 }

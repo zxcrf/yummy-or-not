@@ -163,7 +163,7 @@ describe('AddModal', () => {
   it('shows a real permission error instead of another Add a photo label', async () => {
     mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: false })
     const renderer = renderAddModal()
-    const dropzone = renderer.root.findByProps({ 'aria-label': 'Add a photo' })
+    const dropzone = renderer.root.findByProps({ accessibilityLabel: 'Add a photo' })
 
     await act(async () => {
       await dropzone.props.onPress()

@@ -40,7 +40,6 @@ export function Icon({ name = 'heart', size = 20, color = '#191017', label }: Ic
       height={size}
       viewBox="0 0 24 24"
       accessibilityRole="image"
-      aria-label={label}
       accessibilityLabel={label}
     >
       <Path d={d} fill={color} />

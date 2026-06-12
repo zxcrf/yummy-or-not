@@ -1,91 +1,153 @@
 /* ============================================================
-   YUMMY OR NOT — Tag (Tamagui / React Native)
-   Rounded pixel chip. Clickable (filter) and/or removable. Ported from
-   the web DS: a pill with a chunky ink border; the active (selected
-   filter) state fills brand-pink; an optional × removes it.
+   YUMMY OR NOT — Tag (plain RN + StyleSheet)
+   Rounded pixel chip. Clickable (filter) and/or removable.
+   Press motion: usePressScale(quick) 0.92 + opacity 0.85.
+   §1.3b event-composition contract enforced:
+     - caller onPressIn/onPressOut always forwarded
+     - disabled suppresses animation + sets accessibilityState
    ============================================================ */
 
-import { type GetProps, View, styled, Text } from 'tamagui'
-import { quick } from './animation'
+import React from 'react'
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type PressableProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
+import Animated from 'react-native-reanimated'
+import { colors, radius, space, quick, usePressScale } from '@/theme'
 
-const Chip = styled(View, {
-  name: 'Tag',
-  flexDirection: 'row',
-  alignItems: 'center',
-  alignSelf: 'flex-start',
-  gap: 6,
-  paddingHorizontal: '$3',
-  paddingVertical: '$1',
-  borderWidth: 2,
-  borderColor: '$ink900',
-  borderRadius: '$pill',
-  backgroundColor: '$paper2',
-
-  pressStyle: {
-    scale: 0.92,
-    opacity: 0.85,
-  },
-
-  variants: {
-    active: {
-      true: { backgroundColor: '$brand', borderColor: '$ink900' },
-    },
-    clickable: {
-      true: { cursor: 'pointer' },
-    },
-  } as const,
-})
-
-export type TagProps = Omit<GetProps<typeof Chip>, 'children'> & {
+export interface TagProps extends Omit<PressableProps, 'children' | 'style'> {
   /** Highlighted (selected filter) state. */
   active?: boolean
   /** Called when the × is pressed. Renders a remove affordance. */
   onRemove?: () => void
   onPress?: () => void
+  onPressIn?: PressableProps['onPressIn']
+  onPressOut?: PressableProps['onPressOut']
+  /** Disabled state — suppresses press animation + sets accessibilityState. */
+  disabled?: boolean
+  /** Style pass-through reaches the animated wrapper (e.g. position:'absolute'). */
+  style?: StyleProp<ViewStyle>
   children?: React.ReactNode
 }
 
 /**
  * Tag — rounded chip. Clickable (filter) and/or removable.
+ * Press motion: usePressScale(quick) → scale 0.92 + opacity 0.85.
  */
-export function Tag({ active = false, onRemove, onPress, children, ...rest }: TagProps) {
-  const clickable = !!onPress
+export function Tag({
+  active = false,
+  onRemove,
+  onPress,
+  onPressIn: callerPressIn,
+  onPressOut: callerPressOut,
+  disabled = false,
+  style,
+  children,
+  ...rest
+}: TagProps) {
+  const clickable = !!onPress && !disabled
+
+  const driver = usePressScale(
+    { spring: quick, toScale: 0.92, toOpacity: 0.85 },
+    disabled,
+  )
+
+  const textColor = active ? colors.onBrand : colors.ink900
+
+  if (!onPress) {
+    // Static (non-interactive) chip — plain View, no Pressable overhead.
+    return (
+      <View style={[styles.chip, active && styles.active, style]}>
+        <Text style={[styles.label, { color: textColor }]}>{children}</Text>
+        {onRemove ? (
+          <Text
+            accessibilityRole="button"
+            accessibilityLabel="Remove"
+            onPress={(e) => {
+              e.stopPropagation?.()
+              onRemove()
+            }}
+            style={[styles.remove, { color: textColor }]}
+          >
+            ×
+          </Text>
+        ) : null}
+      </View>
+    )
+  }
 
   return (
-    <Chip
-      {...(clickable ? quick : {})}
-      active={active}
-      clickable={clickable}
+    <Pressable
       onPress={onPress}
-      accessibilityRole={clickable ? 'button' : undefined}
+      onPressIn={(e) => {
+        driver.onPressIn()
+        callerPressIn?.(e)
+      }}
+      onPressOut={(e) => {
+        driver.onPressOut()
+        callerPressOut?.(e)
+      }}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
       {...rest}
     >
-      <Text
-        color={active ? '$onBrand' : '$ink900'}
-        fontWeight="600"
-        fontSize={13}
-        lineHeight={17}
+      <Animated.View
+        style={[styles.chip, active && styles.active, driver.animatedStyle, style]}
       >
-        {children}
-      </Text>
-      {onRemove ? (
-        <Text
-          accessibilityRole="button"
-          aria-label="Remove"
-          onPress={(e) => {
-            e.stopPropagation?.()
-            onRemove()
-          }}
-          color={active ? '$onBrand' : '$ink900'}
-          fontWeight="700"
-          fontSize={14}
-          lineHeight={17}
-        >
-          ×
-        </Text>
-      ) : null}
-    </Chip>
+        <Text style={[styles.label, { color: textColor }]}>{children}</Text>
+        {onRemove ? (
+          <Text
+            accessibilityRole="button"
+            accessibilityLabel="Remove"
+            onPress={(e) => {
+              e.stopPropagation?.()
+              onRemove()
+            }}
+            style={[styles.remove, { color: textColor }]}
+          >
+            ×
+          </Text>
+        ) : null}
+      </Animated.View>
+    </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: space[3],
+    paddingVertical: space[1],
+    borderWidth: 2,
+    borderColor: colors.ink900,
+    borderRadius: radius.pill,
+    backgroundColor: colors.paper2,
+  },
+  active: {
+    backgroundColor: colors.brand,
+    borderColor: colors.ink900,
+  },
+  label: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 17,
+    color: colors.ink900,
+  },
+  remove: {
+    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 17,
+    color: colors.ink900,
+  },
+})
 
 export default Tag

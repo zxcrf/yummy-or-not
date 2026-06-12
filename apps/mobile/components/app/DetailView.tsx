@@ -455,7 +455,7 @@ export default function DetailView() {
 
         {/* back button */}
         <View position="absolute" top={16} left={16}>
-          <IconButton aria-label={t('cancel')} onPress={goBack}>
+          <IconButton accessibilityLabel={t('cancel')} onPress={goBack}>
             <Icon name="arrow-left" size={20} />
           </IconButton>
         </View>
@@ -806,7 +806,7 @@ export default function DetailView() {
               </Button>
               <Button
                 variant="primary"
-                backgroundColor="$verdictNah"
+                style={{ backgroundColor: '#ff3147' }}
                 disabled={deleting}
                 onPress={() => { setConfirmDeleteOpen(false); void doDelete() }}
                 testID="confirm-delete-btn"

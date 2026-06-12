@@ -163,8 +163,8 @@ describe('YouView warnings switch', () => {
     mockPatchUser.mockImplementation(() => {})
   })
 
-  // The real Switch component renders a Track (styled View) with
-  // accessibilityRole="switch" and aria-checked reflecting the checked prop.
+  // The real Switch component renders a Pressable track with
+  // accessibilityRole="switch" and accessibilityState.checked reflecting the checked prop.
   // Find it by accessibilityRole; there is exactly one switch in YouView (the
   // warnings row — location/private rows have no switch yet).
   function findSwitch(renderer: TestRenderer.ReactTestRenderer) {
@@ -177,7 +177,7 @@ describe('YouView warnings switch', () => {
     const renderer = renderYouView()
     const sw = findSwitch(renderer)
     expect(sw).toBeTruthy()
-    expect(sw.props['aria-checked']).toBe(false)
+    expect(sw.props.accessibilityState?.checked).toBe(false)
   })
 
   it('calls updateUser({ warningsEnabled: true }) when switch is pressed', async () => {
@@ -217,6 +217,6 @@ describe('YouView warnings switch', () => {
       await sw.props.onPress()
     })
     // Should revert to false (user.warningsEnabled was false)
-    expect(findSwitch(renderer).props['aria-checked']).toBe(false)
+    expect(findSwitch(renderer).props.accessibilityState?.checked).toBe(false)
   })
 })

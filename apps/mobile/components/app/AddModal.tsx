@@ -502,7 +502,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
         <Text color="$ink900" fontWeight="700" fontSize={24}>
           {t('log_taste')}
         </Text>
-        <IconButton aria-label={t('cancel')} onPress={onClose}>
+        <IconButton accessibilityLabel={t('cancel')} onPress={onClose}>
           <Icon name="close" size={18} />
         </IconButton>
       </View>
@@ -582,7 +582,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
           <View
             onPress={onPhotoPress}
             accessibilityRole="button"
-            aria-label={t('add_photo')}
+            accessibilityLabel={t('add_photo')}
             height={160}
             alignItems="center"
             justifyContent="center"
@@ -667,7 +667,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
                   <View
                     onPress={dismissBanner}
                     accessibilityRole="button"
-                    aria-label={t('cancel')}
+                    accessibilityLabel={t('cancel')}
                     padding={4}
                   >
                     <Icon name="close" size={14} color="#191017" />

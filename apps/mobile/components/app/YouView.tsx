@@ -16,6 +16,7 @@ import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { LANGS, updateUser, type Taste } from '@yon/shared'
 
 import { Avatar, Button, Card, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
+import { space } from '@/theme'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -321,7 +322,7 @@ export default function YouView({ items }: Props) {
 
       {/* verdict breakdown — ported from the removed Stats tab so 我的 retains
           all former stats content. */}
-      <Card padded marginTop="$4" testID="verdict-breakdown-card">
+      <Card padded style={{ marginTop: space[4] }} testID="verdict-breakdown-card">
         <Text
           color="$ink400"
           fontSize={11}
@@ -393,7 +394,7 @@ export default function YouView({ items }: Props) {
       <Button
         variant="secondary"
         block
-        marginTop={18}
+        style={{ marginTop: 18 }}
         onPress={() => {
           void signOut()
         }}

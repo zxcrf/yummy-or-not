@@ -78,8 +78,8 @@ export default function TodoView() {
             value={query}
             onChangeText={setQuery}
             placeholder={t('search_log')}
-            paddingLeft={38}
-            aria-label={t('search_log')}
+            accessibilityLabel={t('search_log')}
+            style={{ paddingLeft: 38 }}
           />
         </View>
       </YStack>

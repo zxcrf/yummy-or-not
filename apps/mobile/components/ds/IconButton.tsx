@@ -1,70 +1,68 @@
 /* ============================================================
-   YUMMY OR NOT — IconButton (Tamagui / React Native)
-   A square (or round) button holding one Icon. Ported from the web
-   DS: chunky ink border + hard offset pop-shadow, presses in on
-   press. Three sizes × three variants.
+   YUMMY OR NOT — IconButton (plain RN + Reanimated)
+   A square (or round) button holding one Icon.
+   Pressable → Animated.View with usePressNudge(bouncy).
+   §1.3b event-composition contract.
    ============================================================ */
 
-import { type GetProps, styled, View } from 'tamagui'
-import { bouncy } from './animation'
+import React from 'react'
+import {
+  Pressable,
+  StyleSheet,
+  type PressableProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
+import Animated from 'react-native-reanimated'
+import { colors, radius, popShadow, bouncy, usePressNudge } from '@/theme'
 
-const Frame = styled(View, {
-  name: 'IconButton',
-  alignItems: 'center',
-  justifyContent: 'center',
-  alignSelf: 'flex-start',
-  borderWidth: 3,
-  borderColor: '$ink900',
-  borderRadius: '$md',
-  backgroundColor: '$white',
-  cursor: 'pointer',
-  shadowColor: '$ink900',
-  shadowOffset: { width: 3, height: 3 },
-  shadowOpacity: 1,
-  shadowRadius: 0,
-  pressStyle: {
-    x: 3,
-    y: 3,
-    shadowOffset: { width: 0, height: 0 },
-  },
-
-  variants: {
-    variant: {
-      secondary: { backgroundColor: '$white' },
-      pink: { backgroundColor: '$brand' },
-      accent: { backgroundColor: '$candyYellow' },
-    },
-    size: {
-      sm: { width: 34, height: 34, borderRadius: '$sm' },
-      md: { width: 42, height: 42 },
-      lg: { width: 52, height: 52 },
-    },
-    round: {
-      true: { borderRadius: '$pill' },
-    },
-    disabled: {
-      true: { opacity: 0.45, cursor: 'not-allowed', pressStyle: { x: 0, y: 0 } },
-    },
-  } as const,
-
-  defaultVariants: {
-    variant: 'secondary',
-    size: 'md',
-  },
-})
+// ---------- Public types ----------
 
 export type IconButtonVariant = 'secondary' | 'pink' | 'accent'
 export type IconButtonSize = 'sm' | 'md' | 'lg'
 
-export type IconButtonProps = Omit<GetProps<typeof Frame>, 'variant' | 'size'> & {
+export type IconButtonProps = Omit<PressableProps, 'style' | 'children'> & {
   /** Visual style. */
   variant?: IconButtonVariant
   /** Control size. */
   size?: IconButtonSize
   /** Fully rounded instead of squared. */
   round?: boolean
+  /** Disabled — suppresses press animation AND sets accessibilityState.disabled */
+  disabled?: boolean
   children?: React.ReactNode
+  /** Pass-through style applied to the Animated.View frame. */
+  style?: StyleProp<ViewStyle>
 }
+
+// ---------- Styles ----------
+
+const styles = StyleSheet.create({
+  base: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: 3,
+    borderColor: colors.ink900,
+    borderRadius: radius.md,
+    // pop-shadow (iOS; Android = translate only per material-motion.md)
+    ...popShadow.sm,
+  },
+  // --- variants ---
+  secondary: { backgroundColor: colors.white },
+  pink: { backgroundColor: colors.brand },
+  accent: { backgroundColor: colors.candyYellow },
+  // --- sizes ---
+  sm: { width: 34, height: 34, borderRadius: radius.sm },
+  md: { width: 42, height: 42 },
+  lg: { width: 52, height: 52 },
+  // --- round ---
+  round: { borderRadius: radius.pill },
+  // --- disabled ---
+  disabled: { opacity: 0.45 },
+})
+
+// ---------- Component ----------
 
 /** A square/round button holding one Icon. */
 export function IconButton({
@@ -73,20 +71,42 @@ export function IconButton({
   round = false,
   disabled = false,
   children,
+  style,
+  onPressIn: callerPressIn,
+  onPressOut: callerPressOut,
   ...rest
 }: IconButtonProps) {
+  const driver = usePressNudge({ spring: bouncy }, disabled)
+
+  const frameStyle = [
+    styles.base,
+    styles[variant],
+    styles[size],
+    round && styles.round,
+    disabled && styles.disabled,
+    driver.animatedStyle,
+    style,
+  ]
+
   return (
-    <Frame
-      {...bouncy}
-      variant={variant}
-      size={size}
-      round={round}
+    <Pressable
       disabled={disabled}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      onPressIn={(e) => {
+        driver.onPressIn()
+        callerPressIn?.(e)
+      }}
+      onPressOut={(e) => {
+        driver.onPressOut()
+        callerPressOut?.(e)
+      }}
       {...rest}
     >
-      {children}
-    </Frame>
+      <Animated.View style={frameStyle}>
+        {children}
+      </Animated.View>
+    </Pressable>
   )
 }
 

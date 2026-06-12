@@ -15,6 +15,7 @@ import { type GetProps, ScrollView, Text, View } from 'tamagui'
 import { getStats, type Stats, type Taste } from '@yon/shared'
 
 import { Card, Icon } from '@/components/ds'
+import { space } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
 import AnimatedNumber from '@/components/app/AnimatedNumber'
 
@@ -280,7 +281,7 @@ export default function StatsView({ items, onRefresh: refreshItems }: Props) {
       </Card>
 
       {/* breakdown bars */}
-      <Card padded marginTop="$6" maxWidth={720}>
+      <Card padded style={{ marginTop: space[6], maxWidth: 720 }}>
         <Text {...KICKER}>{t('verdict_breakdown')}</Text>
         <View marginTop="$4">
           {bar(t('yum_buy_again'), 'yum', '$verdictYum')}
