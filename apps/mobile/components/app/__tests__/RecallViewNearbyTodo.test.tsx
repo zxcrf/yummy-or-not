@@ -172,7 +172,10 @@ function findTextMatching(renderer: TestRenderer.ReactTestRenderer, text: string
   )
 }
 
-async function renderWithLocation(coords: { latitude: number; longitude: number } | null) {
+async function renderWithLocation(
+  coords: { latitude: number; longitude: number } | null,
+  mountedRenderers?: TestRenderer.ReactTestRenderer[],
+) {
   mockLocationCoords = coords
   let renderer!: TestRenderer.ReactTestRenderer
   act(() => {
@@ -184,16 +187,30 @@ async function renderWithLocation(coords: { latitude: number; longitude: number 
     // eslint-disable-next-line no-await-in-loop
     await act(async () => { await Promise.resolve() })
   }
+  mountedRenderers?.push(renderer)
   return renderer
 }
 
 // ---- tests ----------------------------------------------------------------
 
 describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
+  // Track renderers so afterEach can unmount and flush the 250 ms debounce
+  // timer that RecallView arms on every mount. Without fake timers the real
+  // timer fires after environment teardown on Linux and flips jest exit to 1.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
   beforeEach(() => {
+    jest.useFakeTimers()
     jest.clearAllMocks()
     mockItems = []
     mockLocationCoords = null
+  })
+
+  afterEach(() => {
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
   })
 
   it('todo item with coords appears under 附近你想吃的 with badge and distance', async () => {
@@ -210,7 +227,7 @@ describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
       }),
     ]
 
-    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 })
+    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 }, mountedRenderers)
 
     // Nearby todo section header should appear
     const todoHeaders = findTextMatching(renderer, 'Want to try nearby')
@@ -234,7 +251,7 @@ describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
       }),
     ]
 
-    const renderer = await renderWithLocation(null)
+    const renderer = await renderWithLocation(null, mountedRenderers)
 
     const todoHeaders = findTextMatching(renderer, 'Want to try nearby')
     expect(todoHeaders).toHaveLength(0)
@@ -265,7 +282,7 @@ describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
       }),
     ]
 
-    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 })
+    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 }, mountedRenderers)
 
     // Nearby todo header should exist (matcha)
     const todoHeaders = findTextMatching(renderer, 'Want to try nearby')
@@ -294,7 +311,7 @@ describe('RecallView A3 — nearby-todo group (附近你想吃的)', () => {
       }),
     )
 
-    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 })
+    const renderer = await renderWithLocation({ latitude: 31.0, longitude: 121.0 }, mountedRenderers)
 
     // Section header must appear (≥1 todo item within range)
     const todoHeaders = findTextMatching(renderer, 'Want to try nearby')

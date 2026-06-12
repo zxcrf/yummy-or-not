@@ -96,7 +96,14 @@ function findPressables(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe('RecallRow press handling', () => {
+  // Track renderers so afterEach can unmount and flush the 250 ms debounce
+  // timer that RecallView arms on every mount. Without fake timers the real
+  // timer fires after environment teardown on Linux, triggering a React
+  // re-render into a torn-down module Proxy and flipping jest exit to 1.
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
   beforeEach(() => {
+    jest.useFakeTimers()
     jest.clearAllMocks()
     mockItems = [
       {
@@ -110,8 +117,16 @@ describe('RecallRow press handling', () => {
     ]
   })
 
+  afterEach(() => {
+    act(() => { jest.runAllTimers() })
+    act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+    mountedRenderers.length = 0
+    jest.useRealTimers()
+  })
+
   it('routes recent-row taps through a react-native Pressable', () => {
     const renderer = renderRecallView()
+    mountedRenderers.push(renderer)
 
     const pressables = findPressables(renderer)
     expect(pressables.length).toBeGreaterThan(0)
