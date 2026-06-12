@@ -202,11 +202,19 @@ function findByTestId(renderer: TestRenderer.ReactTestRenderer, testId: string) 
   return renderer.root.findAll((n) => n.props['data-testid'] === testId)
 }
 
-function renderDetail(): TestRenderer.ReactTestRenderer {
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+afterEach(() => {
+  act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+  mountedRenderers.length = 0
+})
+
+async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<DetailView />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
 
@@ -220,8 +228,8 @@ beforeEach(() => {
 })
 
 describe('DetailView delete confirm dialog', () => {
-  it('pressing 删除 opens the in-app confirm sheet, NOT Alert.alert', () => {
-    const renderer = renderDetail()
+  it('pressing 删除 opens the in-app confirm sheet, NOT Alert.alert', async () => {
+    const renderer = await renderDetail()
 
     // Confirm sheet must not be visible before pressing delete.
     expect(findByTestId(renderer, 'confirm-delete-modal')).toHaveLength(0)
@@ -238,8 +246,8 @@ describe('DetailView delete confirm dialog', () => {
     expect(mockAlert).not.toHaveBeenCalled()
   })
 
-  it('confirm sheet renders the title and body text', () => {
-    const renderer = renderDetail()
+  it('confirm sheet renders the title and body text', async () => {
+    const renderer = await renderDetail()
 
     act(() => {
       findByTestId(renderer, 'delete-btn')[0].props.onClick()
@@ -251,7 +259,7 @@ describe('DetailView delete confirm dialog', () => {
   })
 
   it('pressing confirm-delete-btn calls deleteTaste and does not call Alert.alert', async () => {
-    const renderer = renderDetail()
+    const renderer = await renderDetail()
 
     act(() => {
       findByTestId(renderer, 'delete-btn')[0].props.onClick()
@@ -265,8 +273,8 @@ describe('DetailView delete confirm dialog', () => {
     expect(mockAlert).not.toHaveBeenCalled()
   })
 
-  it('id change closes the delete sheet so confirm cannot delete the wrong record', () => {
-    const renderer = renderDetail()
+  it('id change closes the delete sheet so confirm cannot delete the wrong record', async () => {
+    const renderer = await renderDetail()
 
     // Open the confirm sheet for taste-1.
     act(() => {
@@ -290,8 +298,8 @@ describe('DetailView delete confirm dialog', () => {
     expect(mockDeleteTaste).not.toHaveBeenCalled()
   })
 
-  it('pressing cancel closes the sheet without deleting', () => {
-    const renderer = renderDetail()
+  it('pressing cancel closes the sheet without deleting', async () => {
+    const renderer = await renderDetail()
 
     act(() => {
       findByTestId(renderer, 'delete-btn')[0].props.onClick()

@@ -56,8 +56,15 @@ function taste(id: string, name = id): Taste {
   }
 }
 
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+afterEach(() => {
+  act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+  mountedRenderers.length = 0
+})
+
 /** Mount a probe that records every items value the hook yields. */
-function mountProbe() {
+async function mountProbe() {
   const seen: { items: Taste[]; loading: boolean }[] = []
   function Probe() {
     const s = useRefreshableTastes()
@@ -65,9 +72,10 @@ function mountProbe() {
     return null
   }
   let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<Probe />)
   })
+  mountedRenderers.push(renderer)
   return { seen, renderer }
 }
 
@@ -103,7 +111,7 @@ describe('useRefreshableTastes — stale-while-revalidate', () => {
       }),
     )
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
 
@@ -124,7 +132,7 @@ describe('useRefreshableTastes — stale-while-revalidate', () => {
     setTastesUser('u1')
     mockListTastes.mockResolvedValueOnce([taste('a'), taste('b')])
 
-    mountProbe()
+    await mountProbe()
     await flush()
     await flush()
 
@@ -141,7 +149,7 @@ describe('invalidateTastes', () => {
       .mockResolvedValueOnce([taste('first')])
       .mockResolvedValueOnce([taste('second')])
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
     expect(seen[seen.length - 1].items.map((t) => t.id)).toEqual(['first'])
@@ -200,7 +208,7 @@ describe('clearPersistedTastes (logout cleanup)', () => {
     setTastesUser('u1')
     mockListTastes.mockResolvedValue([taste('cached')])
 
-    mountProbe()
+    await mountProbe()
     await flush()
     await flush()
     expect(await AsyncStorage.getItem('yon_tastes:u1')).not.toBeNull()
@@ -214,7 +222,7 @@ describe('clearPersistedTastes (logout cleanup)', () => {
     // A fresh mount after clearing must re-hit the network (cache was dropped).
     mockListTastes.mockClear()
     mockListTastes.mockResolvedValueOnce([taste('reloaded')])
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
     expect(mockListTastes).toHaveBeenCalledTimes(1)
@@ -233,9 +241,9 @@ describe('request dedupe', () => {
     )
 
     // Three views mount before the network resolves.
-    mountProbe()
-    mountProbe()
-    mountProbe()
+    await mountProbe()
+    await mountProbe()
+    await mountProbe()
     await flush()
 
     expect(mockListTastes).toHaveBeenCalledTimes(1)
@@ -252,14 +260,14 @@ describe('per-user namespacing', () => {
   it('scopes the persisted key by user id so accounts do not cross-read', async () => {
     setTastesUser('alice')
     mockListTastes.mockResolvedValueOnce([taste('alice-1')])
-    mountProbe()
+    await mountProbe()
     await flush()
     await flush()
 
     // Switch accounts → cache resets, different storage key.
     act(() => { setTastesUser('bob') })
     mockListTastes.mockResolvedValueOnce([taste('bob-1')])
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush()
     await flush()
 
@@ -284,7 +292,7 @@ describe('epoch guard — user-switch mid-fetch (finding 1)', () => {
     )
 
     // alice's probe is mounted while alice's (slow) fetch is in flight.
-    const { seen: aliceSeen } = mountProbe()
+    const { seen: aliceSeen } = await mountProbe()
     await flush()
 
     // User switches while alice's fetch is still in-flight. A new probe
@@ -296,7 +304,7 @@ describe('epoch guard — user-switch mid-fetch (finding 1)', () => {
     expect(aliceSeen[aliceSeen.length - 1].items).toEqual([])
 
     // Bob's first view mounts — this triggers the revalidate() for bob.
-    const { seen: bobSeen } = mountProbe()
+    const { seen: bobSeen } = await mountProbe()
     await flush()
     await flush()
 
@@ -317,7 +325,7 @@ describe('epoch guard — user-switch mid-fetch (finding 1)', () => {
     expect(bobRaw ? JSON.parse(bobRaw).map((t: Taste) => t.id) : []).not.toContain('alice-1')
   })
 
-  it('immediately clears mounted views when setTastesUser is called', () => {
+  it('immediately clears mounted views when setTastesUser is called', async () => {
     /* Old code: setTastesUser only cleared module cache; already-mounted hooks
        kept the prior account's items. Fix: setTastesUser emits [] so every
        subscriber clears synchronously before the new fetch resolves. */
@@ -326,7 +334,7 @@ describe('epoch guard — user-switch mid-fetch (finding 1)', () => {
     // We can't easily seed via mountProbe+flush without a network mock here,
     // so we call revalidate indirectly: provide a resolving mock then flush.
     mockListTastes.mockResolvedValueOnce([taste('u1-item')])
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     // After mounting, switch user — must clear mounted views immediately.
     act(() => { setTastesUser('u2') })
     // The last recorded state must be empty (emitted by setTastesUser).
@@ -350,7 +358,7 @@ describe('epoch guard — invalidate during in-flight (finding 2)', () => {
       // Second call: fast, post-mutation fetch.
       .mockResolvedValueOnce([taste('fresh-after-mutation')])
 
-    const { seen } = mountProbe()
+    const { seen } = await mountProbe()
     await flush() // first fetch started
 
     // Mutation happens — invalidate bumps epoch and starts the second fetch.
@@ -394,8 +402,8 @@ describe('cold-start persisted hydration — all subscribers notified (finding 5
     )
 
     // Two views mount concurrently (cold start — no warm cache yet).
-    const { seen: seen1 } = mountProbe()
-    const { seen: seen2 } = mountProbe()
+    const { seen: seen1 } = await mountProbe()
+    const { seen: seen2 } = await mountProbe()
     await flush()
     await flush()
 
@@ -443,7 +451,7 @@ describe('serialized write chain — stale setItem cannot resurrect after remove
 
     // Trigger revalidate so writePersisted enqueues a (blocked) setItem.
     mockListTastes.mockResolvedValueOnce([taste('will-be-stale')])
-    mountProbe()
+    await mountProbe()
     // Let revalidate() run and listTastes resolve, enqueueing the blocked setItem.
     await flush()
     await flush()

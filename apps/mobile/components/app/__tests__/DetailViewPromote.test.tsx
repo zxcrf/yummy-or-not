@@ -265,15 +265,23 @@ function findTextNodes(renderer: TestRenderer.ReactTestRenderer, text: string) {
   )
 }
 
-function renderForId(id: string) {
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+afterEach(() => {
+  act(() => { mountedRenderers.forEach((r) => r.unmount()) })
+  mountedRenderers.length = 0
+})
+
+async function renderForId(id: string) {
   // Override the mock to use the given id
   const ExpoRouter = jest.requireMock('expo-router') as { useLocalSearchParams: jest.Mock }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(ExpoRouter as any).useLocalSearchParams = () => ({ id })
   let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<DetailView />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
 
@@ -289,8 +297,8 @@ describe('DetailView A2 — todo promote (转正)', () => {
     })
   })
 
-  it('todo item: promote_cta button is present, warn toggle absent, buy-again absent', () => {
-    const renderer = renderForId('todo-1')
+  it('todo item: promote_cta button is present, warn toggle absent, buy-again absent', async () => {
+    const renderer = await renderForId('todo-1')
 
     // Promote CTA present
     const promoteBtns = findByTestId(renderer, 'promote-btn')
@@ -304,8 +312,8 @@ describe('DetailView A2 — todo promote (转正)', () => {
     expect(findByTestId(renderer, 'buy-again-btn')).toHaveLength(0)
   })
 
-  it('pressing promote_cta opens the promote sheet with VerdictPicker', () => {
-    const renderer = renderForId('todo-1')
+  it('pressing promote_cta opens the promote sheet with VerdictPicker', async () => {
+    const renderer = await renderForId('todo-1')
 
     const promoteBtns = findByTestId(renderer, 'promote-btn')
     act(() => { promoteBtns[0].props.onClick() })
@@ -316,7 +324,7 @@ describe('DetailView A2 — todo promote (转正)', () => {
   })
 
   it('confirm in promote sheet PATCHes {status:tasted, verdict} and invalidates', async () => {
-    const renderer = renderForId('todo-1')
+    const renderer = await renderForId('todo-1')
 
     // Open sheet
     const promoteBtns = findByTestId(renderer, 'promote-btn')
@@ -341,8 +349,8 @@ describe('DetailView A2 — todo promote (转正)', () => {
     expect(mockInvalidateTastes).toHaveBeenCalled()
   })
 
-  it('confirm disabled until verdict selected', () => {
-    const renderer = renderForId('todo-1')
+  it('confirm disabled until verdict selected', async () => {
+    const renderer = await renderForId('todo-1')
 
     const promoteBtns = findByTestId(renderer, 'promote-btn')
     act(() => { promoteBtns[0].props.onClick() })

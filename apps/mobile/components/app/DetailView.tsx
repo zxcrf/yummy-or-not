@@ -102,7 +102,9 @@ export default function DetailView() {
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    Sharing.isAvailableAsync().then(setSharingAvailable).catch(() => {})
+    let alive = true
+    Sharing.isAvailableAsync().then((v) => { if (alive) setSharingAvailable(v) }).catch(() => {})
+    return () => { alive = false }
   }, [])
 
   // Same-instance route `id` change: re-seed from the shared cache synchronously
