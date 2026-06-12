@@ -178,12 +178,11 @@ export const SCORE_THRESHOLD: Record<MatchStrength, number> = {
 /**
  * Search a list of tastes for a query string.
  *
- * Returns [] when query is empty or a single character (callers handle empty
- * states themselves).
+ * Returns [] when query is empty (callers handle empty states themselves).
  */
 export function searchTastes(items: Taste[], query: string): ScoredResult[] {
   const normQuery = normalizeText(query);
-  if (normQuery.length <= 1) return [];
+  if (normQuery.length === 0) return [];
 
   const results: ScoredResult[] = [];
 

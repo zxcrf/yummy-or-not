@@ -140,6 +140,7 @@ export default function RecallView() {
 
   const { items, refresh } = useRefreshableTastes()
   const [q, setQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const visibleRecentItems = recentCardCount(height)
 
@@ -172,6 +173,11 @@ export default function RecallView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.locationEnabled])
 
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQ(q), 250)
+    return () => clearTimeout(id)
+  }, [q])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -203,19 +209,19 @@ export default function RecallView() {
     () => items.filter((it) => (it.status ?? 'tasted') === 'tasted'),
     [items],
   )
-  const results = useMemo(() => (q ? searchTastes(tastedItems, q) : []), [tastedItems, q])
+  const results = useMemo(() => (debouncedQ ? searchTastes(tastedItems, debouncedQ) : []), [tastedItems, debouncedQ])
 
   const topMatch = results[0]?.item ?? null
   const otherMatches = results.slice(1).map((r) => r.item)
 
   // Todo hint: when searching, check if query hits the todo list
   const todoHints = useMemo(() => {
-    if (!q) return []
+    if (!debouncedQ) return []
     const todoItems = items.filter((it) => (it.status ?? 'tasted') === 'todo')
-    return searchTastes(todoItems, q)
+    return searchTastes(todoItems, debouncedQ)
       .filter((r) => r.strength === 'exact' || r.strength === 'strong')
       .map((r) => r.item)
-  }, [items, q])
+  }, [items, debouncedQ])
 
   // Warning styling applies only when the taste has the flag set and the user
   // has warnings enabled globally. Falls back to plain display if user is null
@@ -437,7 +443,7 @@ export default function RecallView() {
             <YStack alignItems="center" gap="$2" paddingVertical={24}>
               <Icon name="info-box" size={40} color="#b8aeb4" />
               <Text color="$ink900" fontWeight="600" fontSize={18} textAlign="center">
-                {t('no_record', { q })}
+                {t('no_record', { q: debouncedQ })}
               </Text>
               <Text color="$ink500" textAlign="center">
                 {t('try_then_log')}
