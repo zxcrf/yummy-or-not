@@ -1,7 +1,7 @@
 /* Yummy or Not — Korean (ko) translations.
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const ko: Record<string, string> = {
-  nav_tastes: "기록", nav_recall: "찾기", nav_saved: "저장", nav_you: "나", nav_stats: "통계",
+  nav_tastes: "기록", nav_recall: "찾기", nav_saved: "저장", nav_you: "나", nav_stats: "통계", nav_todo: "먹고싶다",
   my_tastes: "나의 입맛", count_logged: "{n}개 기록", search_log: "기록 검색…",
   log_taste: "맛 기록하기", recall_title: "전에 먹어봤나요?",
   recall_sub: "사기 전에 검색하세요. 과거의 내가 어떻게 생각했는지 알려드려요.",

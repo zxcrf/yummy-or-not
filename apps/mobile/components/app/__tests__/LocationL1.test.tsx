@@ -282,7 +282,7 @@ describe('Location L1', () => {
 
   it('shows loc_failed hint and save still works when getCurrentPosition times out', async () => {
     mockLocationEnabled = true
-    // Never resolves — the 10s timeout in locateMe will win
+    // Never resolves — the 15s timeout in locateMe will win
     mockGetCurrentPositionAsync.mockReturnValue(new Promise(() => {}))
     const renderer = renderAddModal()
 
@@ -296,12 +296,12 @@ describe('Location L1', () => {
       locatePromise = renderer.root.findByProps({ testID: 'locate-button' }).props.onPress() as Promise<void>
     })
 
-    // Drain microtasks then advance past the 10s timeout
+    // Drain microtasks then advance past the 15s timeout
     await act(async () => {
       await Promise.resolve()
     })
     await act(async () => {
-      jest.advanceTimersByTime(11_000)
+      jest.advanceTimersByTime(16_000)
       await locatePromise
     })
 

@@ -188,6 +188,23 @@ describe('AddModal', () => {
     expect(scroll.props.bottomOffset).toBeGreaterThan(16)
   })
 
+  it('reserves the footer height in the scroll content padding (not a hardcoded 24)', () => {
+    // Regression (Images 2&3): the sticky footer (KeyboardStickyView) floats up
+    // over the viewport with the keyboard. bottomOffset only drives the focus
+    // auto-scroll; the resting inset is contentContainerStyle.paddingBottom. The
+    // old code hardcoded paddingBottom:24, so the bottom fields (where? / 你的看法)
+    // could not scroll clear of the floated footer and sat behind it. The fix
+    // reserves the measured footer height + a 16dp margin instead.
+    const renderer = renderAddModal()
+    const scroll = renderer.root.findByType(KeyboardAwareScrollView)
+    const style = scroll.props.contentContainerStyle
+    // Must not be the old hardcoded value, and must match the reserved
+    // bottomOffset so the resting inset and the focus-scroll target agree.
+    expect(style.paddingBottom).not.toBe(24)
+    expect(style.paddingBottom).toBe(scroll.props.bottomOffset)
+    expect(style.paddingBottom).toBeGreaterThan(24)
+  })
+
   it('keeps the same KeyboardAwareScrollView construction on iOS (no Platform keyboard branch)', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' })
     const renderer = renderAddModal()

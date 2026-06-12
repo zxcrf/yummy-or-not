@@ -343,30 +343,60 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
     setLocationDenied(false)
     try {
-      // Race getCurrentPositionAsync against a 10s timeout.
-      const positionPromise = Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      })
-      // Clear the timeout once the race settles so the timer never lingers
-      // (a pending 10s timer keeps the event loop alive and, after the race
-      // resolves, its reject becomes an unhandled rejection).
-      let timeoutId: ReturnType<typeof setTimeout> | undefined
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('location_timeout')), 10_000)
-      })
-      let current: Location.LocationObject
+      // Acquire a fix from the most reliable source available. On a fresh build
+      // / cold GPS, getCurrentPositionAsync can stall well past 10s and was the
+      // sole driver of the "定位失败" banner. So we try sources in order and only
+      // fail when EVERY source comes up empty:
+      //   1. Last-known position — instant when the OS has a recent cached fix
+      //      (≤5min old). Covers the common "I was just using maps" case.
+      //   2. A fresh getCurrentPositionAsync, raced against a 15s timeout.
+      // If (2) throws/times out but (1) gave us coords, we keep (1)'s coords —
+      // a stale-but-real fix beats showing 定位失败.
+      let coords: Location.LocationObject['coords'] | null = null
+
       try {
-        current = await Promise.race([positionPromise, timeoutPromise])
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId)
+        const lastKnown = await Location.getLastKnownPositionAsync({
+          maxAge: 5 * 60 * 1000,
+        })
+        if (lastKnown) coords = lastKnown.coords
+      } catch {
+        // Last-known lookup failed — fall through to a fresh fix below.
       }
-      const nextLat = current.coords.latitude
-      const nextLng = current.coords.longitude
+
+      try {
+        // Race getCurrentPositionAsync against a 15s timeout. Clear the timer
+        // once the race settles so it never lingers (a pending timer keeps the
+        // event loop alive and, after the race resolves, its reject becomes an
+        // unhandled rejection).
+        const positionPromise = Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        })
+        let timeoutId: ReturnType<typeof setTimeout> | undefined
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('location_timeout')), 15_000)
+        })
+        try {
+          const current = await Promise.race([positionPromise, timeoutPromise])
+          coords = current.coords
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId)
+        }
+      } catch {
+        // Fresh fix failed/timed out — keep last-known coords if we have them.
+      }
+
+      // No source produced a fix → this is the only path that fails.
+      if (!coords) throw new Error('location_unavailable')
+
+      const nextLat = coords.latitude
+      const nextLng = coords.longitude
       setLat(nextLat)
       setLng(nextLng)
       setLocRecorded(true)
 
-      // Try native geocode first; fall back to server if empty.
+      // Try native geocode first; fall back to server if empty. A reverse-geocode
+      // failure must NOT show 定位失败 — coords are recorded and usable; the place
+      // field just stays editable.
       let geocoded = false
       try {
         const results = await Location.reverseGeocodeAsync({
@@ -470,17 +500,23 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
       {/* scrollable body — KeyboardAwareScrollView keeps the focused input and
           its cursor visible above the keyboard with a frame-synced animation
-          (no one-frame jump). bottomOffset reserves the sticky footer height +
-          a 16dp margin: the footer floats up over the viewport with the keyboard
-          (KeyboardStickyView), so clearing only the keyboard would leave a
-          focused bottom field hidden behind it. It subsumes the old RN
-          KeyboardAvoidingView + manual scrollToEnd-on-focus compensation. */}
+          (no one-frame jump). It subsumes the old RN KeyboardAvoidingView +
+          manual scrollToEnd-on-focus compensation.
+
+          The sticky footer floats up over the viewport with the keyboard
+          (KeyboardStickyView), so the scroll content must physically reserve
+          its height in TWO places or a focused bottom field sits behind it:
+            - contentContainerStyle.paddingBottom = footerHeight + 16 reserves
+              the resting inset so the last field can always scroll fully clear
+              of the floated footer (the bug was a hardcoded 24dp here);
+            - bottomOffset = footerHeight + 16 drives the focus auto-scroll so a
+              newly-focused bottom field lands above the footer, not behind it. */}
       <KeyboardAwareScrollView
         bottomOffset={footerHeight + 16}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 24 }}
+        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: footerHeight + 16 }}
       >
         {/* mode selector — 吃过了 / 还没吃，先记下 */}
         <XStack

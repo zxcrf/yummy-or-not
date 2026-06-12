@@ -1,7 +1,7 @@
 /* Yummy or Not — Japanese (ja) translations.
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const ja: Record<string, string> = {
-  nav_tastes: "記録", nav_recall: "検索", nav_saved: "保存", nav_you: "マイ", nav_stats: "統計",
+  nav_tastes: "記録", nav_recall: "検索", nav_saved: "保存", nav_you: "マイ", nav_stats: "統計", nav_todo: "食べたい",
   my_tastes: "私の味", count_logged: "{n}件", search_log: "記録を検索…",
   log_taste: "味を記録", recall_title: "前に食べた？",
   recall_sub: "買う前に検索。過去の自分の感想をお知らせします。",

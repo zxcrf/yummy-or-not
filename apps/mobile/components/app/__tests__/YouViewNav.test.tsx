@@ -1,8 +1,10 @@
 /* ============================================================
    Regression tests — YouView savings card + tastes_logged count navigation.
 
-   BUG-04 closure: pressing the savings card must push '/(tabs)/stats';
-   pressing the tastes-logged count must push '/(tabs)'.
+   Nav restructure: the Stats tab was removed and its breakdown chart
+   ported into 我的 (YouView). The savings card must therefore NO LONGER
+   navigate to the removed '/(tabs)/stats' route (it is now an
+   informational card). The tastes-logged count still pushes '/(tabs)'.
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
@@ -84,13 +86,21 @@ describe('YouView navigation — savings card + tastes-logged count', () => {
     mockFormatMoney.mockImplementation((n: number) => `$${n.toFixed(2)}`)
   })
 
-  it('savings card press pushes to /(tabs)/stats', () => {
+  it('savings card no longer navigates to the removed /(tabs)/stats route', () => {
     const renderer = renderYouView()
-    const btn = renderer.root.findByProps({ testID: 'savings-card-btn' })
-    act(() => {
-      btn.props.onPress()
-    })
-    expect(mockPush).toHaveBeenCalledWith('/(tabs)/stats')
+    // The old pressable savings-card-btn is gone; the card is now static.
+    expect(renderer.root.findAllByProps({ testID: 'savings-card-btn' })).toHaveLength(0)
+    // A static savings card is still rendered.
+    expect(renderer.root.findAllByProps({ testID: 'savings-card' }).length).toBeGreaterThan(0)
+    // And nothing in YouView ever pushes the dead stats route.
+    expect(mockPush).not.toHaveBeenCalledWith('/(tabs)/stats')
+  })
+
+  it('renders the ported verdict-breakdown chart so 我的 keeps all former stats info', () => {
+    const renderer = renderYouView()
+    expect(
+      renderer.root.findAllByProps({ testID: 'verdict-breakdown-card' }).length,
+    ).toBeGreaterThan(0)
   })
 
   it('tastes-logged count press pushes to /(tabs)', () => {

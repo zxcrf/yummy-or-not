@@ -44,7 +44,7 @@ jest.mock('@/providers/I18nProvider', () => ({
       free_plan: 'Free',
       log_taste: 'Log a taste',
       nav_recall: 'Recall',
-      nav_stats: 'Stats',
+      nav_todo: 'To-Try',
       nav_you: 'You',
       my_tastes: 'My Tastes',
     }[key] ?? key),
@@ -74,23 +74,28 @@ jest.mock('@/components/ds', () => {
 const routes = [
   { name: 'index', key: 'index-key' },
   { name: 'recall', key: 'recall-key' },
-  { name: 'stats', key: 'stats-key' },
+  { name: 'todo', key: 'todo-key' },
   { name: 'you', key: 'you-key' },
 ]
 
-function renderNav(activeRoute: string) {
+function makeProps(activeRoute: string) {
   const index = routes.findIndex((route) => route.name === activeRoute)
-  const props = {
+  return {
     state: { index, routes },
     navigation: {
       emit: jest.fn(() => ({ defaultPrevented: false })),
       navigate: jest.fn(),
     },
   }
+}
 
+function renderNav(activeRoute: string) {
   act(() => {
     TestRenderer.create(
-      React.createElement(AppNav, props as unknown as React.ComponentProps<typeof AppNav>),
+      React.createElement(
+        AppNav,
+        makeProps(activeRoute) as unknown as React.ComponentProps<typeof AppNav>,
+      ),
     )
   })
 }
@@ -118,5 +123,38 @@ describe('AppNav desktop language switcher', () => {
         value: 'zh',
       }),
     )
+  })
+})
+
+describe('AppNav nav restructure — 想吃 replaces 统计', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  function renderTree(gtMd: boolean) {
+    mockUseMedia.mockReturnValue({ gtMd })
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(
+        React.createElement(
+          AppNav,
+          makeProps('index') as unknown as React.ComponentProps<typeof AppNav>,
+        ),
+      )
+    })
+    return renderer
+  }
+
+  it.each([
+    ['sidebar (desktop)', true],
+    ['bottom bar (mobile)', false],
+  ])('renders a To-Try entry and no Stats entry in the %s', (_label, gtMd) => {
+    const renderer = renderTree(gtMd as boolean)
+    const labels = renderer.root
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => n.props.children as string)
+
+    expect(labels).toContain('To-Try')
+    expect(labels).not.toContain('Stats')
   })
 })

@@ -80,6 +80,9 @@ export default function DetailView() {
     return [...builtIn, ...extra, ...itemLegacy]
   }, [userTags, item?.tags])
 
+  // Delete confirm sheet state
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+
   // Promote sheet state (todo → tasted 转正)
   const [promoteSheetOpen, setPromoteSheetOpen] = useState(false)
   const [promoteVerdict, setPromoteVerdict] = useState<Verdict | null>(null)
@@ -132,6 +135,8 @@ export default function DetailView() {
     setPromoteVerdict(null)
     setPromotePrice('')
     setPromoteSubmitting(false)
+    // Reset delete confirm sheet so an open dialog for taste A cannot delete taste B.
+    setConfirmDeleteOpen(false)
   }
 
   useEffect(() => {
@@ -211,10 +216,7 @@ export default function DetailView() {
   }
 
   const handleDelete = () => {
-    Alert.alert(t('del'), t('confirm_delete'), [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('del'), style: 'destructive', onPress: doDelete },
-    ])
+    setConfirmDeleteOpen(true)
   }
 
   const startEditing = () => {
@@ -645,6 +647,7 @@ export default function DetailView() {
                 iconLeft={<Icon name="trash" size={18} />}
                 disabled={deleting}
                 onPress={handleDelete}
+                testID="delete-btn"
               >
                 {t('del')}
               </Button>
@@ -775,6 +778,40 @@ export default function DetailView() {
                 testID="buy-confirm-btn"
               >
                 {t('detail_buy_again_confirm')}
+              </Button>
+            </XStack>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete confirm sheet — replaces native Alert.alert */}
+      <Modal
+        visible={confirmDeleteOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setConfirmDeleteOpen(false)}
+        testID="confirm-delete-modal"
+      >
+        <Pressable style={styles.sheetOverlay} onPress={() => setConfirmDeleteOpen(false)}>
+          <Pressable style={styles.sheetContent} onPress={() => {}}>
+            <Text color="$ink900" fontWeight="700" fontSize={18} marginBottom={8}>
+              {t('del')}
+            </Text>
+            <Text color="$ink500" fontSize={15} marginBottom={20}>
+              {t('confirm_delete')}
+            </Text>
+            <XStack gap="$3">
+              <Button variant="ghost" onPress={() => setConfirmDeleteOpen(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                backgroundColor="$verdictNah"
+                disabled={deleting}
+                onPress={() => { setConfirmDeleteOpen(false); void doDelete() }}
+                testID="confirm-delete-btn"
+              >
+                {t('del')}
               </Button>
             </XStack>
           </Pressable>
