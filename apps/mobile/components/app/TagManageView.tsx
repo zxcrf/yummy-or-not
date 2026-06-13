@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { KeyboardStickyView } from 'react-native-keyboard-controller'
 import { renameTag, deleteTag, type UserTag } from '@yon/shared'
 
 import { Button, Icon, Input } from '@/components/ds'
@@ -124,36 +125,43 @@ export default function TagManageView() {
         onRequestClose={closeRename}
       >
         <Pressable style={modalStyles.sheetOverlay} onPress={closeRename}>
-          <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-            <Text style={modalStyles.modalTitle}>{t('tag_rename')}</Text>
-            <Input
-              label={t('tag_rename')}
-              value={renameValue}
-              onChangeText={(v) => {
-                setRenameValue(v)
-                setRenameError('')
-              }}
-              testID="rename-tag-input"
-            />
-            {renameError ? (
-              <Text style={modalStyles.errorText} testID="rename-error">
-                {renameError}
-              </Text>
-            ) : null}
-            <View style={modalStyles.buttonRow}>
-              <Button variant="ghost" onPress={closeRename}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={renameSaving || !renameValue.trim()}
-                onPress={submitRename}
-                testID="rename-confirm-btn"
-              >
-                {t('save_taste')}
-              </Button>
-            </View>
-          </Pressable>
+          {/* The sheet is anchored to the bottom of the screen. KeyboardStickyView
+              translates it up frame-synced with the keyboard so the rename input
+              and the save/cancel buttons stay above the keyboard instead of being
+              hidden behind it — same react-native-keyboard-controller strategy the
+              other input screens use (AddModal footer, AuthScreen). */}
+          <KeyboardStickyView>
+            <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
+              <Text style={modalStyles.modalTitle}>{t('tag_rename')}</Text>
+              <Input
+                label={t('tag_rename')}
+                value={renameValue}
+                onChangeText={(v) => {
+                  setRenameValue(v)
+                  setRenameError('')
+                }}
+                testID="rename-tag-input"
+              />
+              {renameError ? (
+                <Text style={modalStyles.errorText} testID="rename-error">
+                  {renameError}
+                </Text>
+              ) : null}
+              <View style={modalStyles.buttonRow}>
+                <Button variant="ghost" onPress={closeRename}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={renameSaving || !renameValue.trim()}
+                  onPress={submitRename}
+                  testID="rename-confirm-btn"
+                >
+                  {t('save_taste')}
+                </Button>
+              </View>
+            </Pressable>
+          </KeyboardStickyView>
         </Pressable>
       </Modal>
     </ScrollView>
