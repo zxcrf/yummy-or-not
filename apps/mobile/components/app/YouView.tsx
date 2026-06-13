@@ -11,6 +11,7 @@
 
 import { useCallback, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { KeyboardStickyView } from 'react-native-keyboard-controller'
 import { useRouter } from 'expo-router'
 import { LANGS, updateUser, type Taste } from '@yon/shared'
 
@@ -315,36 +316,41 @@ export default function YouView({ items }: Props) {
         onRequestClose={closeEditName}
       >
         <Pressable style={modalStyles.sheetOverlay} onPress={closeEditName}>
-          <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-            <Text style={modalStyles.modalTitle}>{t('edit_profile')}</Text>
-            <Input
-              label={t('display_name_label')}
-              value={nameInput}
-              onChangeText={(v) => {
-                setNameInput(v)
-                setNameError('')
-              }}
-              testID="display-name-input"
-            />
-            {nameError ? (
-              <Text style={modalStyles.errorText} testID="name-error">
-                {nameError}
-              </Text>
-            ) : null}
-            <View style={modalStyles.buttonRow}>
-              <Button variant="ghost" onPress={closeEditName}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={nameSaving || !nameInput.trim()}
-                onPress={submitEditName}
-                testID="save-name-btn"
-              >
-                {t('save_taste')}
-              </Button>
-            </View>
-          </Pressable>
+          {/* KeyboardStickyView rides the sheet up with the keyboard so the
+              nickname input and the save/cancel row stay above it instead of
+              being hidden behind it (matches AddModal / TagManageView). */}
+          <KeyboardStickyView>
+            <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
+              <Text style={modalStyles.modalTitle}>{t('edit_profile')}</Text>
+              <Input
+                label={t('display_name_label')}
+                value={nameInput}
+                onChangeText={(v) => {
+                  setNameInput(v)
+                  setNameError('')
+                }}
+                testID="display-name-input"
+              />
+              {nameError ? (
+                <Text style={modalStyles.errorText} testID="name-error">
+                  {nameError}
+                </Text>
+              ) : null}
+              <View style={modalStyles.buttonRow}>
+                <Button variant="ghost" onPress={closeEditName}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={nameSaving || !nameInput.trim()}
+                  onPress={submitEditName}
+                  testID="save-name-btn"
+                >
+                  {t('save_taste')}
+                </Button>
+              </View>
+            </Pressable>
+          </KeyboardStickyView>
         </Pressable>
       </Modal>
     </ScrollView>

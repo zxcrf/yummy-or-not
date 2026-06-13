@@ -9,7 +9,8 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View, View as RNView } from 'react-native'
+import { Alert, Image, Modal, Pressable, StyleSheet, View, View as RNView } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller'
 import { Image as ExpoImage } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
@@ -424,9 +425,12 @@ export default function DetailView() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ paddingBottom: 40 }}
+      bottomOffset={16}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
     >
       {/* photo + controls */}
       <View style={{ position: 'relative' }}>
@@ -738,6 +742,10 @@ export default function DetailView() {
         onRequestClose={() => setBuySheetOpen(false)}
       >
         <Pressable style={styles.sheetOverlay} onPress={() => setBuySheetOpen(false)}>
+          {/* KeyboardStickyView rides the sheet up with the keyboard so the
+              price/place inputs and the confirm row stay above it instead of
+              being hidden behind it (matches AddModal / TagManageView). */}
+          <KeyboardStickyView>
           <Pressable style={styles.sheetContent} onPress={() => {}}>
             <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 16 }}>
               {t('detail_buy_again_title')}
@@ -795,6 +803,7 @@ export default function DetailView() {
               </Button>
             </View>
           </Pressable>
+          </KeyboardStickyView>
         </Pressable>
       </Modal>
 
@@ -840,6 +849,9 @@ export default function DetailView() {
         onRequestClose={() => setPromoteSheetOpen(false)}
       >
         <Pressable style={styles.sheetOverlay} onPress={() => setPromoteSheetOpen(false)}>
+          {/* KeyboardStickyView rides the sheet up with the keyboard so the
+              price input and confirm row stay above it (see buy sheet above). */}
+          <KeyboardStickyView>
           <Pressable style={styles.sheetContent} onPress={() => {}}>
             <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 16 }}>
               {t('promote_title')}
@@ -874,6 +886,7 @@ export default function DetailView() {
               </Button>
             </View>
           </Pressable>
+          </KeyboardStickyView>
         </Pressable>
       </Modal>
 
@@ -894,7 +907,7 @@ export default function DetailView() {
           ) : null}
         </Pressable>
       </Modal>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   )
 }
 
