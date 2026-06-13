@@ -34,6 +34,17 @@ function hashSessionToken(token: string): string {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Epoch millis of a taste's most recent activity: the later of its creation
+ *  and its newest purchase. Repurchasing bumps both the displayed `date` and
+ *  the list sort order. `purchases` is newest-first, so [0] is the latest. */
+function lastActivityMs(taste: Taste): number {
+  const createdMs = new Date(taste.createdAt).getTime();
+  const newestPurchaseMs = taste.purchases.length
+    ? new Date(taste.purchases[0].createdAt).getTime()
+    : 0;
+  return Math.max(createdMs, newestPurchaseMs);
+}
+
 /** Build a human-readable relative date string from a DB timestamptz. */
 function relativeDate(createdAt: Date): string {
   const diffMs = Date.now() - createdAt.getTime();
@@ -196,6 +207,16 @@ async function rowToTaste(row: any): Promise<Taste> {
     purchaseCount = fetched.count;
   }
 
+  // `date` tracks the most recent activity (creation or newest purchase) so a
+  // repurchase refreshes the displayed "X days ago" → "just now". `purchases`
+  // is newest-first, so [0] is the latest.
+  const createdAt = new Date(row.created_at);
+  const newestPurchaseAt = purchases.length ? new Date(purchases[0].createdAt) : null;
+  const lastActivityAt =
+    newestPurchaseAt && newestPurchaseAt.getTime() > createdAt.getTime()
+      ? newestPurchaseAt
+      : createdAt;
+
   return {
     id:            row.id,
     name:          row.name,
@@ -207,7 +228,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     boughtCount:   1 + purchaseCount,
     warnBeforeBuy: Boolean(row.warn_before_buy),
     purchases,
-    date:          relativeDate(new Date(row.created_at)),
+    date:          relativeDate(lastActivityAt),
     notes:         row.notes ?? '',
     lat:           row.lat ?? null,
     lng:           row.lng ?? null,
@@ -296,7 +317,13 @@ export async function listTastes(
   const sql = `SELECT * FROM tastes ${where} ORDER BY created_at DESC`;
 
   const { rows } = await pool.query(sql, values);
-  return Promise.all(rows.map(rowToTaste));
+  const tastes = await Promise.all(rows.map(rowToTaste));
+  // Order by most recent activity so a repurchase bumps the item to the top.
+  // SQL can't see the purchases ledger here without a correlated subquery, so
+  // sort the materialized rows (list sizes are small in practice). The sort is
+  // stable, so `created_at DESC` remains the tiebreak for equal activity.
+  tastes.sort((a, b) => lastActivityMs(b) - lastActivityMs(a));
+  return tastes;
 }
 
 /** Fetch a single taste owned by the user; returns null if not found. */

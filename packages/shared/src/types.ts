@@ -54,7 +54,9 @@ export interface Taste {
   warnBeforeBuy: boolean;
   /** Purchase ledger entries for this taste, newest first. */
   purchases: TastePurchase[];
-  /** Human display date, e.g. "2 weeks ago" / "just now". Derived from createdAt. */
+  /** Human display date, e.g. "2 weeks ago" / "just now". Derived from the most
+   *  recent activity — the later of `createdAt` and the newest purchase — so a
+   *  repurchase refreshes it (and bumps the item's list sort order). */
   date: string;
   notes: string;
   lat?: number | null;

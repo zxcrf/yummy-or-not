@@ -34,6 +34,7 @@ import {
   updateTaste,
   addTastePurchase,
   listTastePurchases,
+  listTastes,
   updateUserWarnings,
   updateUserSettings,
   findUserById,
@@ -229,6 +230,52 @@ describe('taste purchases', () => {
     expect(purchases!.length).toBe(2);
     // Newest first — the second insert has a later created_at
     expect(purchases![0].price).toBe('9.00');
+  });
+});
+
+// ── repurchase recency: date + sort reflect the latest purchase ───────────────
+// Regression: a "再买一次" (addPurchase) used to leave both the displayed `date`
+// (derived from created_at) and the list order (ORDER BY created_at DESC) stale,
+// so a freshly repurchased item neither refreshed its "X days ago" subtitle nor
+// moved to the top of the recall/library lists.
+
+/** Backdate a taste's created_at so relativeDate produces a stable "N days ago". */
+function backdateTaste(id: string, daysAgo: number) {
+  const ts = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+  memdb().public.none(`UPDATE tastes SET created_at = '${ts}' WHERE id = '${id}';`);
+}
+
+describe('repurchase recency', () => {
+  it('date reflects the newest purchase, not the original creation', async () => {
+    const taste = await createTaste('u1', { name: 'Latte', verdict: 'yum' });
+    backdateTaste(taste.id, 5);
+
+    const before = await getTaste('u1', taste.id);
+    expect(before?.date).toBe('5 days ago');
+
+    // 再买一次 — records a purchase at "now".
+    await addTastePurchase('u1', taste.id, { price: '5.80', place: 'Luckin' });
+
+    const after = await getTaste('u1', taste.id);
+    // The repurchase bumps the displayed date to the most recent activity.
+    expect(after?.date).toBe('just now');
+  });
+
+  it('a repurchase bumps the taste to the top of the list', async () => {
+    const older = await createTaste('u1', { name: 'Old Latte', verdict: 'yum' });
+    const newer = await createTaste('u1', { name: 'New Cola', verdict: 'yum' });
+    backdateTaste(older.id, 5);
+    backdateTaste(newer.id, 2);
+
+    // By creation time alone, the newer taste sorts first.
+    const initial = await listTastes('u1');
+    expect(initial.map((t) => t.id)).toEqual([newer.id, older.id]);
+
+    // Repurchasing the older taste makes it the most-recently-active.
+    await addTastePurchase('u1', older.id, { price: '5.80' });
+
+    const after = await listTastes('u1');
+    expect(after.map((t) => t.id)).toEqual([older.id, newer.id]);
   });
 });
 

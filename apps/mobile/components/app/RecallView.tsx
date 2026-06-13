@@ -345,7 +345,7 @@ export default function RecallView() {
                     >
                       {t('verdict_on_file')}
                     </Text>
-                    <Text style={{ fontWeight: '700', fontSize: 28, marginTop: space[1] }}>
+                    <Text style={{ fontWeight: '700', fontSize: 28, lineHeight: 34, marginTop: space[1] }}>
                       {t('recall_warn_skip')}
                     </Text>
                   </>
@@ -356,12 +356,12 @@ export default function RecallView() {
                     >
                       {t('verdict_on_file')}
                     </Text>
-                    <Text style={{ fontWeight: '700', fontSize: 46, marginTop: space[1] }}>
+                    <Text style={{ fontWeight: '700', fontSize: 46, lineHeight: 52, marginTop: space[1] }}>
                       {t(VERDICT_KEY[topMatch.verdict])}
                     </Text>
                   </>
                 ) : (
-                  <Text style={{ fontWeight: '700', fontSize: 28, marginTop: space[1] }}>
+                  <Text style={{ fontWeight: '700', fontSize: 28, lineHeight: 34, marginTop: space[1] }}>
                     {t('todo_badge')}
                   </Text>
                 )}
