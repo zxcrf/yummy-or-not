@@ -14,6 +14,7 @@ export const en: Record<string, string> = {
   delete_log: "Delete log", edit: "Edit", del: "Delete", stats_title: "Your stats", saved_amt: "{amt} saved",
   saved_sub: "by skipping repeat “nah” buys", settings: "Settings", set_warnings: "Buy-again warnings",
   set_location: "Record location",
+  set_default_visibility: "New records default to nearby",
   loc_recorded: "Location recorded",
   loc_failed: "Couldn't get location",
   loc_locating: "Locating…",

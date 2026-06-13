@@ -14,6 +14,7 @@ export const ja: Record<string, string> = {
   delete_log: "記録を削除", edit: "編集", del: "削除", stats_title: "あなたの統計", saved_amt: "{amt} 節約",
   saved_sub: "「イマイチ」のリピート購入を避けて", settings: "設定", set_warnings: "再購入の警告",
   set_location: "位置を記録",
+  set_default_visibility: "新規記録は既定で「近く」に公開",
   loc_recorded: "位置を記録しました",
   loc_failed: "位置情報を取得できません",
   loc_locating: "位置情報取得中…",

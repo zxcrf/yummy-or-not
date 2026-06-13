@@ -73,6 +73,8 @@ export default function YouView({ items }: Props) {
 
   const [warningsEnabled, setWarningsEnabled] = useState(() => user?.warningsEnabled ?? false)
   const [locationEnabled, setLocationEnabled] = useState(() => user?.locationEnabled ?? false)
+  // S3c: new-record default visibility. The Switch is boolean — ON = 'shared'.
+  const [defaultShared, setDefaultShared] = useState(() => user?.defaultVisibility === 'shared')
 
   // Nickname edit modal state
   const [editNameOpen, setEditNameOpen] = useState(false)
@@ -99,6 +101,18 @@ export default function YouView({ items }: Props) {
       patchUser({ locationEnabled: updated.locationEnabled })
     } catch {
       setLocationEnabled(prev)
+    }
+  }
+
+  const toggleDefaultVisibility = async (next: boolean) => {
+    const prev = defaultShared
+    setDefaultShared(next)
+    const value = next ? 'shared' : 'private'
+    try {
+      const { user: updated } = await updateUser({ defaultVisibility: value })
+      patchUser({ defaultVisibility: updated.defaultVisibility })
+    } catch {
+      setDefaultShared(prev)
     }
   }
 
@@ -285,6 +299,16 @@ export default function YouView({ items }: Props) {
           <Text style={styles.settingRowLabel}>{t('set_location')}</Text>
           <Switch checked={locationEnabled} onChange={toggleLocation} testID="location-switch" />
         </View>
+        {/* S3c: new-record default visibility — ON = 'shared' (公开到附近). */}
+        <View style={styles.settingRow}>
+          <Icon name="eye" size={20} color="#5a4f63" />
+          <Text style={styles.settingRowLabel}>{t('set_default_visibility')}</Text>
+          <Switch
+            checked={defaultShared}
+            onChange={toggleDefaultVisibility}
+            testID="default-visibility-switch"
+          />
+        </View>
         {/* Tag management — navigates to /tags stack screen */}
         <SettingRow
           icon="tag"
@@ -292,7 +316,6 @@ export default function YouView({ items }: Props) {
           onPress={() => router.push('/tags')}
           last
         />
-        {/* set_private row removed until S3 */}
       </View>
 
       {/* sign out */}

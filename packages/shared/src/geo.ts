@@ -60,6 +60,103 @@ export function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)} km`
 }
 
+// ── Geohash (S3c) ───────────────────────────────────────────────────────────
+// Pure-function geohash encode/decode for the geo-visibility grid layer. Two
+// jobs (see docs/product/plans/share-and-circles.md §S3c): (a) COARSEN a precise
+// coordinate to a privacy-safe ~5 km cell so the public feed can never recover
+// an exact location, and (b) DECODE a cell back to its bounding box for the heat
+// grid. Precision 5 is the grid_cell grain the plan pins (~4.9 km × 4.9 km).
+//
+// Standard base-32 geohash (Gustavo Niemeyer's algorithm, public domain). Deter-
+// ministic math — no DB, no PostGIS — so it is plain-unit-testable.
+
+const GEOHASH_BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+
+/** Encode a WGS-84 coordinate into a base-32 geohash string.
+ *  @param precision number of geohash characters (default 5 — the plan's grid_cell grain). */
+export function encodeGeohash(lat: number, lng: number, precision = 5): string {
+  let minLat = -90;
+  let maxLat = 90;
+  let minLng = -180;
+  let maxLng = 180;
+
+  let hash = '';
+  let bit = 0;
+  let ch = 0;
+  // Even bits bisect longitude, odd bits bisect latitude (the geohash interleave).
+  let even = true;
+
+  while (hash.length < precision) {
+    if (even) {
+      const mid = (minLng + maxLng) / 2;
+      if (lng >= mid) {
+        ch = (ch << 1) | 1;
+        minLng = mid;
+      } else {
+        ch = ch << 1;
+        maxLng = mid;
+      }
+    } else {
+      const mid = (minLat + maxLat) / 2;
+      if (lat >= mid) {
+        ch = (ch << 1) | 1;
+        minLat = mid;
+      } else {
+        ch = ch << 1;
+        maxLat = mid;
+      }
+    }
+    even = !even;
+
+    if (bit < 4) {
+      bit += 1;
+    } else {
+      hash += GEOHASH_BASE32.charAt(ch);
+      bit = 0;
+      ch = 0;
+    }
+  }
+  return hash;
+}
+
+/** A geohash cell's bounding box (WGS-84 degrees). */
+export interface GeohashBounds {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+}
+
+/** Decode a base-32 geohash string back to its bounding box. The point it was
+ *  encoded from is guaranteed to lie inside this box; the box CENTER re-encodes
+ *  to the same cell (stable privacy bucket). */
+export function decodeGeohashBounds(hash: string): GeohashBounds {
+  let minLat = -90;
+  let maxLat = 90;
+  let minLng = -180;
+  let maxLng = 180;
+  let even = true;
+
+  for (const char of hash.toLowerCase()) {
+    const idx = GEOHASH_BASE32.indexOf(char);
+    if (idx === -1) continue; // skip invalid chars defensively
+    for (let mask = 16; mask > 0; mask >>= 1) {
+      const on = (idx & mask) !== 0;
+      if (even) {
+        const mid = (minLng + maxLng) / 2;
+        if (on) minLng = mid;
+        else maxLng = mid;
+      } else {
+        const mid = (minLat + maxLat) / 2;
+        if (on) minLat = mid;
+        else maxLat = mid;
+      }
+      even = !even;
+    }
+  }
+  return { minLat, maxLat, minLng, maxLng };
+}
+
 /** Convert a WGS-84 coordinate to GCJ-02 (China Mars coordinate).
  *  Returns the input unchanged if the point is outside China. */
 export function wgs84ToGcj02(lat: number, lng: number): { lat: number; lng: number } {

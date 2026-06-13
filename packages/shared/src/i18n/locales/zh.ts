@@ -14,6 +14,7 @@ export const zh: Record<string, string> = {
   delete_log: "删除记录", edit: "编辑", del: "删除", stats_title: "你的统计", saved_amt: "省下 {amt}",
   saved_sub: "靠避免重复买“别买”的东西", settings: "设置", set_warnings: "重复购买提醒",
   set_location: "记录位置",
+  set_default_visibility: "新记录默认公开到附近",
   loc_recorded: "位置已记录",
   loc_failed: "定位失败，可手动填写",
   loc_locating: "定位中…",

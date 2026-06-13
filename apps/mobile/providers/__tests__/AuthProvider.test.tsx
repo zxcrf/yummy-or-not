@@ -136,7 +136,7 @@ describe('AuthProvider.signOut — server logout failure (finding 4)', () => {
     // tags. The fix calls setTagsUser(user.id) inside refresh(), which runs on
     // every sign-in and session restore.
     const fakeUser = { id: 'user-42', displayName: 'Test', phone: '', email: '',
-      avatar: '', locale: 'en', plan: 'free' as const, warningsEnabled: false, locationEnabled: false, mediaEnabled: false, createdAt: '' }
+      avatar: '', locale: 'en', plan: 'free' as const, warningsEnabled: false, locationEnabled: false, mediaEnabled: false, defaultVisibility: 'private' as const, createdAt: '' }
     mockedGetMe.mockResolvedValueOnce({ user: fakeUser, providers: [] })
 
     renderProvider()
