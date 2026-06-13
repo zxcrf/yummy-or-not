@@ -25,7 +25,10 @@ type RouteContext = { params: Promise<{ token: string }> };
 
 // Short-lived presign for shared previews: <=60s so a leaked preview URL dies
 // fast and revocation is effectively immediate (next read mints nothing).
-export const SHARE_PRESIGN_TTL_SECONDS = 60;
+// NOT exported: a Next.js App Router route module may only export the framework's
+// reserved fields (GET/OPTIONS/runtime/…); any other `export const` fails the
+// production `next build` route-type check. This TTL is route-local.
+const SHARE_PRESIGN_TTL_SECONDS = 60;
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
