@@ -91,6 +91,8 @@ export default function LibraryView() {
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

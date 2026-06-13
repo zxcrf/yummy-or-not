@@ -10,6 +10,18 @@
 import TestRenderer, { act } from 'react-test-renderer'
 import YouView from '../YouView'
 
+// Identifiable KeyboardStickyView (the shared mock aliases it to a plain View,
+// indistinguishable from any other View). This lets the keyboard test pin that
+// the nickname sheet content is actually wrapped so it rides the keyboard.
+jest.mock('react-native-keyboard-controller', () => {
+  const React = require('react')
+  const { View } = require('react-native')
+  return {
+    KeyboardStickyView: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(View, { testID: 'nickname-keyboard-sticky' }, children),
+  }
+})
+
 const mockPush = jest.fn()
 const mockSetLang = jest.fn()
 const mockSignOut = jest.fn()
@@ -202,5 +214,18 @@ describe('YouView nickname edit modal', () => {
     const saveBtn = renderer.root.findByProps({ testID: 'save-name-btn' })
     expect(saveBtn.props.disabled).toBe(true)
     expect(mockUpdateUser).not.toHaveBeenCalled()
+  })
+
+  // Regression: the nickname sheet had no keyboard handling, so focusing the
+  // input opened the keyboard over the input + save/cancel row. The sheet
+  // content must be wrapped in a KeyboardStickyView so it rides the keyboard.
+  it('renders the nickname input and save button inside a KeyboardStickyView', () => {
+    const renderer = renderYouView()
+    act(() => {
+      renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
+    })
+    const sticky = renderer.root.findByProps({ testID: 'nickname-keyboard-sticky' })
+    expect(sticky.findByProps({ testID: 'display-name-input' })).toBeTruthy()
+    expect(sticky.findByProps({ testID: 'save-name-btn' })).toBeTruthy()
   })
 })
