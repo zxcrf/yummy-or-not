@@ -45,6 +45,28 @@ ssh ubuntu@baobao.click 'docker run -d --name yon-pg --restart unless-stopped \
   -c max_parallel_workers_per_gather=0 -c random_page_cost=1.1'
 ```
 
+### PostGIS 前置（S3c 上线前，未做）
+
+> 关联：`docs/product/plans/share-and-circles.md` S3c（geo 半径 feed）。S3a/S3b 不需要，
+> 仅 S3c 依赖。动 S3c 前必须先完成此项，否则 `CREATE EXTENSION postgis` 失败。
+
+`postgres:17-alpine` **不含 PostGIS**。S3c 的 `geography`/`ST_DWithin`/GiST 需要：
+
+1. **换镜像**：`postgres:17-alpine` → `postgis/postgis:17-3.5`（Debian 基底，非 alpine）。
+   上面 `docker run` 的所有调优 flag 原样保留，仅改镜像名。换镜像不动 `yon-pgdata`
+   volume（同 PG 大版本 17，数据目录兼容）。
+2. **建扩展**：换镜像重启后，对 `yon` 库执行一次
+   `psql -h yon-pg -U yon -d yon -c 'CREATE EXTENSION IF NOT EXISTS postgis;'`
+   （或作为 migration 0009a 走既有 psql 管道，见 migration-runner 备忘）。
+3. **备份/恢复链路**：`pg_dump` 会带上 PostGIS 对象，但**恢复目标库必须先有
+   扩展**——恢复用的临时容器/scratch DB 也得是 `postgis/postgis` 镜像，否则
+   `pg_restore` 因缺 `postgis` 类型/函数失败。恢复流程（见下「备份 → 恢复流程」）
+   的 `CREATE DATABASE yon_restore_test` 后需补 `CREATE EXTENSION postgis`
+   再 `pg_restore`，且容器镜像换成 postgis。
+
+**验收**：换镜像后 `SELECT postgis_version();` 返回版本；既有 yon 数据/查询不回归；
+一次完整 backup→restore 演练通过（含 PostGIS 对象）。
+
 ## R2 对象存储
 
 | Bucket | 用途 | 访问 | Token |
