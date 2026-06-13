@@ -67,6 +67,68 @@ afterEach(() => {
   delete (globalThis as any).__pgPool;
 });
 
+// ── 0. createShareToken retry-on-23505 (unique-violation collision) ──────────
+//
+// Security fix (0008): if a fresh token's derived import_code collides with an
+// existing live row (unique partial index violation, pg code 23505), createShareToken
+// must re-mint a fresh token (→ new derived code) and retry, up to 5 times.
+// Each retry uses a DIFFERENT token, so the derived code also changes.
+
+describe('createShareToken — retry on unique-violation (23505)', () => {
+  it('retries with a fresh token when the first INSERT throws pg 23505, and the second token differs', async () => {
+    const seenTokens: string[] = [];
+    let callCount = 0;
+
+    installPool(
+      async (sql, params) => {
+        expect(sql).toMatch(/INSERT INTO share_tokens/);
+        const p = params as unknown[];
+        seenTokens.push(p[0] as string);
+        callCount++;
+        if (callCount === 1) {
+          // First attempt: simulate unique violation on import_code
+          const err = Object.assign(new Error('duplicate key'), { code: '23505' });
+          throw err;
+        }
+        // Second attempt: success
+        return {
+          rows: [{
+            token: p[0], taste_id: p[1], owner_id: p[2],
+            revoked: false, expires_at: null,
+          }],
+        };
+      },
+      async () => ({ rows: [] }),
+    );
+
+    const row = await createShareToken({ tasteId: 't1', ownerId: 'o1' });
+
+    // Two INSERT attempts were made.
+    expect(callCount).toBe(2);
+    // The second token is a fresh mint — different from the first.
+    expect(seenTokens.length).toBe(2);
+    expect(seenTokens[0]).not.toBe(seenTokens[1]);
+    // The returned row used the second (successful) token.
+    expect(row.token).toBe(seenTokens[1]);
+  });
+
+  it('throws after 5 failed attempts (all 23505) without succeeding', async () => {
+    let callCount = 0;
+
+    installPool(
+      async () => {
+        callCount++;
+        const err = Object.assign(new Error('duplicate key'), { code: '23505' });
+        throw err;
+      },
+      async () => ({ rows: [] }),
+    );
+
+    await expect(createShareToken({ tasteId: 't1', ownerId: 'o1' })).rejects.toThrow();
+    expect(callCount).toBe(5);
+  });
+});
+
 // ── 1. createShareToken stores the derived import_code ────────────────────────
 
 describe('createShareToken — stores the derived import code', () => {

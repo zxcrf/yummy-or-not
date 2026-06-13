@@ -23,6 +23,7 @@
 
 import path from 'path';
 import { readFileSync, readdirSync } from 'fs';
+import { encodeGeohash } from '@yon/shared';
 
 const POSTGIS_URL = process.env.DATABASE_URL_POSTGIS;
 const d = POSTGIS_URL ? describe : describe.skip;
@@ -85,6 +86,13 @@ const ME = { lat: 35.0, lng: 139.0 };
 const NEAR = { lat: 35.001, lng: 139.0 };
 // far: ~5.5 km north — outside 300 m, inside 10 km.
 const FAR = { lat: 35.05, lng: 139.0 };
+// TRUE precision-5 cells for the fixtures (the feeds filter on grid_cell, so the
+// seed must use each point's real cell). NEAR and FAR are in DIFFERENT cells.
+const NEAR_CELL = encodeGeohash(NEAR.lat, NEAR.lng, 5); // 'xn4z5'
+const FAR_CELL = encodeGeohash(FAR.lat, FAR.lng, 5); // 'xn4z7'
+// A second point ~111 m east of NEAR that shares NEAR's cell — the realistic
+// "two precise points, one grid_cell" indistinguishability pair.
+const NEAR2 = { lat: NEAR.lat, lng: NEAR.lng + 0.001 };
 
 async function seed(): Promise<void> {
   await raw(`INSERT INTO users (id, display_name, plan) VALUES
@@ -135,8 +143,14 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
     await seed();
     // Publish the two non-secret tastes to geo (double-write geog + grid_cell).
     // t_private is deliberately NEVER published — it stays visibility='private'.
-    await setTasteVisibility('owner_a', 't_near', [{ type: 'geo', lat: NEAR.lat, lng: NEAR.lng, gridCell: 'xn4z5' }]);
-    await setTasteVisibility('owner_b', 't_far', [{ type: 'geo', lat: FAR.lat, lng: FAR.lng, gridCell: 'xn4z5' }]);
+    //
+    // grid_cell is each point's TRUE precision-5 geohash: NEAR → xn4z5, FAR (5.5 km
+    // north) → xn4z7. The feeds now filter on grid_cell (not precise geog), so the
+    // fixture must be cell-honest: a far point lives in a far cell. (NEAR_CELL and
+    // FAR_CELL below are asserted against encodeGeohash so a precision regression
+    // is caught.)
+    await setTasteVisibility('owner_a', 't_near', [{ type: 'geo', lat: NEAR.lat, lng: NEAR.lng, gridCell: NEAR_CELL }]);
+    await setTasteVisibility('owner_b', 't_far', [{ type: 'geo', lat: FAR.lat, lng: FAR.lng, gridCell: FAR_CELL }]);
   });
 
   it('the GiST index on geog exists (radius query is index-backed, not a seq scan)', async () => {
@@ -147,8 +161,10 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
     expect(defs.some((s) => s.includes('gist') && s.includes('geog'))).toBe(true);
   });
 
-  it('ST_DWithin returns rows INSIDE the radius and excludes rows outside it', async () => {
-    // 300 m radius: t_near (~111 m) in, t_far (~5.5 km) out.
+  it('the radius feed returns cells INSIDE the radius and excludes cells outside it', async () => {
+    // Cell-grain radius: the 300 m circle around ME covers cells [xn4z4, xn4z5]
+    // → t_near (xn4z5) in, t_far (xn4z7, ~5.5 km) out. The 10 km circle covers
+    // both cells → both in. Resolution is the cell, never the precise point.
     const tight = await listGeoFeedNear({ lat: ME.lat, lng: ME.lng, radiusM: 300 });
     const names = tight.map((c) => c.name);
     expect(names).toContain('Near Ramen');
@@ -171,13 +187,27 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
   });
 
   it('NEGATIVE: a private taste is unreadable via the cell feed and absent from heat counts', async () => {
-    const cellRows = await listGeoFeedByCell('xn4z5');
+    const cellRows = await listGeoFeedByCell(NEAR_CELL);
     expect(cellRows.map((c) => c.name)).not.toContain('Secret Spot');
-    // Heat counts only the 2 published shares in the cell, never the private row.
+    // The seed leaves only t_near published in xn4z5. Add two MORE published
+    // shares in the SAME cell (different precise coords) so it clears the
+    // k-anonymity floor (HEAT_MIN_COUNT=3) and a bucket actually surfaces. The
+    // private row at NEAR's coords is still never counted: a count of exactly 3
+    // proves the published rows aggregated, the private row is invisible.
+    await raw(
+      `INSERT INTO tastes (id, user_id, name, verdict, lat, lng) VALUES
+         ('t_pair2','owner_b','Pair Bar','yum',$1,$2),
+         ('t_third','owner_b','Third Bar','yum',$3,$4);`,
+      [NEAR2.lat, NEAR2.lng, NEAR.lat, NEAR.lng],
+    );
+    await setTasteVisibility('owner_b', 't_pair2', [{ type: 'geo', lat: NEAR2.lat, lng: NEAR2.lng, gridCell: NEAR_CELL }]);
+    await setTasteVisibility('owner_b', 't_third', [{ type: 'geo', lat: NEAR.lat, lng: NEAR.lng, gridCell: NEAR_CELL }]);
     const heat = await geoHeat({ minLng: 138.9, minLat: 34.9, maxLng: 139.2, maxLat: 35.1 });
-    const xn4z5 = heat.find((h) => h.cell === 'xn4z5');
-    expect(xn4z5).toBeDefined();
-    expect(Number(xn4z5!.count)).toBe(2);
+    const cell = heat.find((h) => h.cell === NEAR_CELL);
+    expect(cell).toBeDefined();
+    // 3 published shares (t_near, t_pair2, t_third) in the cell — NOT 4. The
+    // private t_private row at NEAR's coords is excluded by the visibility filter.
+    expect(Number(cell!.count)).toBe(3);
   });
 
   it('the radius response is COARSENED — no precise coords / owner identity leak', async () => {
@@ -190,6 +220,89 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
         expect(card).not.toHaveProperty(k);
       }
     }
+  });
+
+  // ── PRIVACY: precise-coord leak via filter inference is CLOSED ─────────────
+  // The bug: near/heat filtered on the precise `ts.geog`. Even with a coarsened
+  // response, an attacker could shrink the radius/bbox to ~1 m and binary-search
+  // whether a share's exact point falls inside → recover precise coordinates.
+  // The fix quantizes every query to geohash-5 cells (grid_cell = ANY(cells)), so
+  // the finest resolution any query yields is one cell. These pin that closure:
+  // two shares with DIFFERENT precise coords but the SAME grid_cell must be
+  // INDISTINGUISHABLE across all near/heat queries, and a sub-cell query cannot
+  // isolate one.
+  describe('NEGATIVE: a sub-cell query cannot recover precise coordinates', () => {
+    // The indistinguishability pair: t_near at NEAR and t_pair2 at NEAR2 (~111 m
+    // east). Their precise coords DIFFER, but both genuinely encode to NEAR_CELL
+    // (xn4z5). t_third (also in the cell) lifts the cell over the k-anonymity
+    // floor so heat buckets actually surface. All seeded locally per-test.
+    beforeEach(async () => {
+      await raw(
+        `INSERT INTO tastes (id, user_id, name, verdict, lat, lng) VALUES
+           ('t_pair2','owner_b','Pair Bar','yum',$1,$2),
+           ('t_third','owner_b','Third Bar','yum',$3,$4);`,
+        [NEAR2.lat, NEAR2.lng, NEAR.lat, NEAR.lng],
+      );
+      await setTasteVisibility('owner_b', 't_pair2', [{ type: 'geo', lat: NEAR2.lat, lng: NEAR2.lng, gridCell: NEAR_CELL }]);
+      await setTasteVisibility('owner_b', 't_third', [{ type: 'geo', lat: NEAR.lat, lng: NEAR.lng, gridCell: NEAR_CELL }]);
+    });
+
+    it('near: a 1 m radius on EITHER precise point returns the SAME same-cell members', async () => {
+      // Attacker centres a 1 m radius exactly on t_near's point, then on t_pair2's
+      // ~111 m away. Under the OLD ST_DWithin each returned only its own row
+      // (precise) — the oracle. Under the quantized filter BOTH queries resolve to
+      // the same cell and return the SAME members: the attacker cannot tell which
+      // precise point any row sits at.
+      const onNear = (await listGeoFeedNear({ lat: NEAR.lat, lng: NEAR.lng, radiusM: 1 })).map((c) => c.id).sort();
+      const onPair = (await listGeoFeedNear({ lat: NEAR2.lat, lng: NEAR2.lng, radiusM: 1 })).map((c) => c.id).sort();
+      expect(onNear).toEqual(onPair);
+      expect(onNear).toContain('t_near');
+      expect(onNear).toContain('t_pair2');
+    });
+
+    it('near: shifting the tiny-radius center anywhere inside the cell yields the IDENTICAL result set', async () => {
+      // Sweep the query center across the cell at sub-cell offsets. Every query
+      // must return the SAME membership — there is no center that isolates one
+      // share, which is exactly what defeats the binary search.
+      const at = (lat: number, lng: number) =>
+        listGeoFeedNear({ lat, lng, radiusM: 1 }).then((r) => r.map((c) => c.id).sort());
+      const a = await at(NEAR.lat, NEAR.lng);
+      const b = await at(NEAR.lat + 0.0005, NEAR.lng + 0.0005);
+      const c = await at(NEAR.lat - 0.0005, NEAR.lng - 0.0005);
+      expect(b).toEqual(a);
+      expect(c).toEqual(a);
+      expect(a).toContain('t_near');
+      expect(a).toContain('t_pair2');
+    });
+
+    it('heat: a 1 m bbox around one point yields the SAME bucket as a 1 m bbox around the OTHER point', async () => {
+      // The decisive heat oracle test: the two bboxes are centred on DIFFERENT
+      // precise points (NEAR vs NEAR2). Both live in NEAR_CELL, so each sub-cell
+      // bbox resolves to that one cell → the IDENTICAL bucket. The attacker learns
+      // only "cell xn4z5 has N shares", never which precise point any of them is at.
+      const eps = 0.000005;
+      const aroundNear = await geoHeat({
+        minLng: NEAR.lng - eps, minLat: NEAR.lat - eps, maxLng: NEAR.lng + eps, maxLat: NEAR.lat + eps,
+      });
+      const aroundPair = await geoHeat({
+        minLng: NEAR2.lng - eps, minLat: NEAR2.lat - eps, maxLng: NEAR2.lng + eps, maxLat: NEAR2.lat + eps,
+      });
+      expect(aroundNear).toEqual(aroundPair);
+      const bucket = aroundNear.find((h) => h.cell === NEAR_CELL);
+      expect(bucket).toBeDefined();
+      // t_near + t_pair2 + t_third = 3 published shares in the cell.
+      expect(Number(bucket!.count)).toBe(3);
+    });
+  });
+
+  it('heat: a cell with fewer than 3 shares is SUPPRESSED (k-anonymity)', async () => {
+    // The default seed puts exactly 1 published share in xn4z5 (t_near; t_far is
+    // in xn4z7) and 1 in xn4z7. Both are below the HEAT_MIN_COUNT=3 floor → NO
+    // bucket may surface, so a count of 1 or 2 never pinpoints a near-single
+    // person.
+    const heat = await geoHeat({ minLng: 138.9, minLat: 34.9, maxLng: 139.2, maxLat: 35.1 });
+    expect(heat.find((h) => h.cell === NEAR_CELL)).toBeUndefined();
+    expect(heat.find((h) => h.cell === FAR_CELL)).toBeUndefined();
   });
 
   // ── Family/member feed viewer scoping (IDOR boundary) ──────────────────────

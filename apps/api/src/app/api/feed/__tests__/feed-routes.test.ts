@@ -45,6 +45,11 @@ jest.mock('@/lib/db', () => ({
   listFamilyFeed: (...args: unknown[]) => mockListFamilyFeed(...args),
 }));
 
+// GeohashCoverTooLargeError is imported from @yon/shared by the routes.
+// We need the real class so we can throw it from mocks and assert the route
+// maps it to HTTP 400 (not 500).
+import { GeohashCoverTooLargeError } from '@yon/shared';
+
 import { GET as GET_GEO } from '../geo/route';
 import { GET as GET_NEAR } from '../geo/near/route';
 import { GET as GET_HEAT } from '../geo/heat/route';
@@ -162,6 +167,40 @@ describe('GET /api/feed/geo/heat?bbox= — grid heat aggregation', () => {
     const res = await GET_HEAT(get('http://localhost/api/feed/geo/heat'));
     expect(res.status).toBe(400);
     expect(mockGeoHeat).not.toHaveBeenCalled();
+  });
+});
+
+describe('GeohashCoverTooLargeError → HTTP 400 (not 500)', () => {
+  // When the db helper throws GeohashCoverTooLargeError (the cap-breach signal),
+  // the routes must map it to 400 area_too_large — not swallow it as a 500.
+  // A 500 would hide the breach from the caller; a 400 surfaces it explicitly
+  // (CLAUDE.md: "Fail explicitly, don't fail silently").
+  it('near route: throws GeohashCoverTooLargeError → 400 area_too_large', async () => {
+    mockListGeoFeedNear.mockRejectedValue(new GeohashCoverTooLargeError('test'));
+    const res = await GET_NEAR(get('http://localhost/api/feed/geo/near?lat=35.0&lng=139.0&radius=2000'));
+    expect(res.status).toBe(400);
+    const body = (await bodyOf(res)) as Record<string, unknown>;
+    expect(body.error).toBe('area_too_large');
+  });
+
+  it('heat route: throws GeohashCoverTooLargeError → 400 area_too_large', async () => {
+    mockGeoHeat.mockRejectedValue(new GeohashCoverTooLargeError('test'));
+    const res = await GET_HEAT(get('http://localhost/api/feed/geo/heat?bbox=138.9,34.9,139.1,35.1'));
+    expect(res.status).toBe(400);
+    const body = (await bodyOf(res)) as Record<string, unknown>;
+    expect(body.error).toBe('area_too_large');
+  });
+
+  it('near route: a non-cover error still returns 500 (not every error is a 400)', async () => {
+    mockListGeoFeedNear.mockRejectedValue(new Error('db connection lost'));
+    const res = await GET_NEAR(get('http://localhost/api/feed/geo/near?lat=35.0&lng=139.0&radius=2000'));
+    expect(res.status).toBe(500);
+  });
+
+  it('heat route: a non-cover error still returns 500', async () => {
+    mockGeoHeat.mockRejectedValue(new Error('db connection lost'));
+    const res = await GET_HEAT(get('http://localhost/api/feed/geo/heat?bbox=138.9,34.9,139.1,35.1'));
+    expect(res.status).toBe(500);
   });
 });
 

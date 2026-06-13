@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { geoHeat } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
+import { GeohashCoverTooLargeError } from '@yon/shared';
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -25,6 +26,9 @@ export async function GET(req: NextRequest) {
     const heat = await geoHeat({ minLng, minLat, maxLng, maxLat });
     return withCors(NextResponse.json(heat), origin);
   } catch (err) {
+    if (err instanceof GeohashCoverTooLargeError) {
+      return withCors(NextResponse.json({ error: 'area_too_large' }, { status: 400 }), origin);
+    }
     console.error('GET /api/feed/geo/heat error:', err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);
   }

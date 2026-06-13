@@ -24,9 +24,11 @@ export function mintShareToken(): string {
 
 // Unambiguous, alphanumeric alphabet for the printed import code. Drops the
 // visually ambiguous 0/O and 1/I/L so a human re-typing the code off a card
-// doesn't transpose them. 32 symbols → 6 chars ≈ 30 bits of address space.
+// doesn't transpose them. 31 symbols × 10 chars ≈ 49.5 bits of address space.
+// CODE_LENGTH was bumped 6→10 (security fix, migration 0008) to eliminate the
+// collision window where distinct live tokens could derive the same import code.
 const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-const CODE_LENGTH = 6;
+const CODE_LENGTH = 10;
 
 /** Deterministically derive the short import code for a token.
  *  sha256(token) → map 6 bytes into the unambiguous alphabet. Deterministic so

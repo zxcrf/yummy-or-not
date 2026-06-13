@@ -1,14 +1,19 @@
-// Unit tests for the S3a share-token helpers (lib/share-token.ts — NOT yet
-// implemented, so these FAIL now and PASS once S3a lands):
+// Unit tests for the S3a share-token helpers (lib/share-token.ts):
 //
 //   - mintShareToken()  : crypto-random, non-enumerable token
-//   - importCodeFor()   : SHORT (6–8 char), token-DERIVED, deterministic code
+//   - importCodeFor()   : 10-char, token-DERIVED, deterministic code
 //   - the deepLink shape (yummyornot://import/<token>)
 //
 // These pin the "magic word" downgrade path described in §S3a: the import code
 // is printed on the card so WeChat-forwarded images (which strip the deep link)
 // still carry a way to import. It must be derived from the token (so the server
 // can resolve code → token) yet short and non-enumerable.
+//
+// Security fix (0008): CODE_LENGTH bumped 6→10 (~30→~49.5 bits) to eliminate
+// the collision window that allowed distinct live tokens to share the same
+// import code. The UNIQUE partial index on import_code (migration 0008) makes
+// collisions impossible at the DB level; the entropy increase makes them
+// negligibly rare in practice.
 
 import { mintShareToken, importCodeFor, shareDeepLink } from '@/lib/share-token';
 
@@ -27,13 +32,12 @@ describe('mintShareToken — non-enumerable token', () => {
 });
 
 describe('importCodeFor — short, token-derived, deterministic', () => {
-  it('is 6–8 chars and deterministic for a given token', () => {
+  it('is exactly 10 chars and deterministic for a given token', () => {
     const token = 'tok_abcdefghijklmnopqrstuvwxyz';
     const code1 = importCodeFor(token);
     const code2 = importCodeFor(token);
     expect(code1).toBe(code2); // deterministic (server resolves code → token)
-    expect(code1.length).toBeGreaterThanOrEqual(6);
-    expect(code1.length).toBeLessThanOrEqual(8);
+    expect(code1.length).toBe(10);
   });
 
   it('uses an unambiguous, non-enumerable alphabet (no full sequential range)', () => {

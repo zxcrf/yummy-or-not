@@ -63,18 +63,34 @@ export async function createShareToken(input: {
   ownerId: string;
   expiresAt?: Date | null;
 }): Promise<ShareTokenRow> {
-  const token = mintShareToken();
-  // Compute + STORE the import code at mint so resolve is an indexed O(1)
-  // lookup instead of a full scan that re-derives the code per live token.
-  const importCode = importCodeFor(token);
   const expiresAt = input.expiresAt ?? null;
-  const { rows } = await pool().query(
-    `INSERT INTO share_tokens (token, taste_id, owner_id, import_code, expires_at)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [token, input.tasteId, input.ownerId, importCode, expiresAt]
-  );
-  return rowToShareToken(rows[0]);
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Re-mint a fresh token on every attempt so a derived import_code collision
+    // (unique partial index violation, pg code 23505) gets a genuinely new code.
+    const token = mintShareToken();
+    // Compute + STORE the import code at mint so resolve is an indexed O(1)
+    // lookup instead of a full scan that re-derives the code per live token.
+    const importCode = importCodeFor(token);
+    try {
+      const { rows } = await pool().query(
+        `INSERT INTO share_tokens (token, taste_id, owner_id, import_code, expires_at)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [token, input.tasteId, input.ownerId, importCode, expiresAt]
+      );
+      return rowToShareToken(rows[0]);
+    } catch (err: unknown) {
+      // 23505 = unique_violation: the derived import_code collided with an
+      // existing live token. Re-mint produces a fresh code; retry resolves it.
+      if (attempt < MAX_ATTEMPTS && (err as { code?: string }).code === '23505') {
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Unreachable — the loop always either returns or throws; TypeScript needs this.
+  throw new Error('createShareToken: exceeded max retry attempts');
 }
 
 /** Fetch the raw pointer row for a token, or null. The route decides 410 from

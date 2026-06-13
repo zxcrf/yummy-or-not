@@ -126,9 +126,9 @@ describe('POST /api/tastes/:id/share (mint thin token, owner-only)', () => {
     expect(typeof body.token).toBe('string');
     expect(body.deepLink).toBe('yummyornot://import/tok_abcdef123456');
     // import code is short + token-derived (not the full token).
+    // CODE_LENGTH=10 since the 0008 security fix (bumped from 6 for ~49.5 bits).
     expect(typeof body.importCode).toBe('string');
-    expect((body.importCode as string).length).toBeGreaterThanOrEqual(6);
-    expect((body.importCode as string).length).toBeLessThanOrEqual(8);
+    expect((body.importCode as string).length).toBe(10);
     expect(body.importCode).not.toBe(body.token);
     expect(body).toHaveProperty('expiresAt');
 

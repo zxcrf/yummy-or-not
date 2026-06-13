@@ -3,7 +3,7 @@
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
 import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput, Taster, CreateTasterInput, UpdateTasterInput } from '@yon/shared';
-import { FILTERS } from '@yon/shared';
+import { FILTERS, geohashCellsInRadius, geohashCellsInBbox } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
 import { getSignedPhotoUrl } from './storage';
@@ -869,25 +869,34 @@ export async function setTasteVisibility(
   return getTaste(userId, id);
 }
 
-/** Cross-user GEO radius feed (PostGIS ST_DWithin). Returns COARSENED cards for
- *  every PUBLISHED ('shared') geo taste within `radiusM` metres of (lat,lng).
- *  visibility='shared' is the bypass-proof filter: a private/unpublished taste
- *  is never returned regardless of distance. The response carries grid_cell, NOT
- *  precise coords or owner identity. */
+/** Cross-user GEO radius feed. Returns COARSENED cards for every PUBLISHED
+ *  ('shared') geo taste whose grid_cell falls within the cells covering the
+ *  query circle. visibility='shared' is the bypass-proof filter: a private /
+ *  unpublished taste is never returned regardless of distance.
+ *
+ *  PRIVACY INVARIANT (S3c): this feed must NOT filter on the precise `ts.geog`.
+ *  A precise ST_DWithin against an attacker-chosen tiny radius is a binary-search
+ *  oracle that recovers exact coordinates even when the RESPONSE is coarsened.
+ *  Instead we quantize the query to the SET of geohash-5 cells it covers and
+ *  filter `grid_cell = ANY(cells)`. The finest resolution any radius can yield
+ *  is then one ~5 km cell — two shares in the same cell are indistinguishable.
+ *  The response still carries grid_cell only, never precise coords or identity. */
 export async function listGeoFeedNear(q: {
   lat: number;
   lng: number;
   radiusM: number;
 }): Promise<GeoFeedCard[]> {
+  const cells = geohashCellsInRadius(q.lat, q.lng, q.radiusM, 5);
+  if (cells.length === 0) return [];
   const { rows } = await pool.query(
     `SELECT ${GEO_FEED_COLUMNS}
        FROM taste_shares ts
        JOIN tastes t ON t.id = ts.taste_id
       WHERE ts.target_type = 'geo'
         AND t.visibility = 'shared'
-        AND ST_DWithin(ts.geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+        AND ts.grid_cell = ANY($1::text[])
       ORDER BY t.created_at DESC`,
-    [q.lng, q.lat, q.radiusM],
+    [cells],
   );
   return Promise.all(rows.map(rowToGeoFeedCard));
 }
@@ -909,30 +918,44 @@ export async function listGeoFeedByCell(cell: string): Promise<GeoFeedCard[]> {
   return Promise.all(rows.map(rowToGeoFeedCard));
 }
 
+/** Minimum shares in a grid cell before its heat bucket is published. Buckets
+ *  below this are SUPPRESSED (k-anonymity): a count of 1 in a ~5 km cell is close
+ *  to pinpointing a single person; only aggregates of ≥3 surface. */
+export const HEAT_MIN_COUNT = 3;
+
 /** Grid heat aggregation: count of PUBLISHED geo shares per grid_cell within a
  *  bounding box. Drives the heat map. Returns ONLY { cell, count } — no records,
- *  no coords, no identity. The bbox is applied on geog (ST_MakeEnvelope) so the
- *  GiST index can be used. */
+ *  no coords, no identity.
+ *
+ *  PRIVACY INVARIANT (S3c): like the radius feed, this must NOT filter on the
+ *  precise `ts.geog`. ST_Intersects against an attacker-shrunk envelope is a
+ *  binary-search oracle that recovers exact coordinates. Instead we quantize the
+ *  bbox to the SET of geohash-5 cells it covers and filter `grid_cell = ANY(...)`
+ *  — the finest spatial resolution is one cell. A k-anonymity floor
+ *  (HAVING COUNT(*) >= HEAT_MIN_COUNT) suppresses cells with too few shares so a
+ *  surviving bucket never points at a single person. */
 export async function geoHeat(bbox: {
   minLng: number;
   minLat: number;
   maxLng: number;
   maxLat: number;
 }): Promise<Array<{ cell: string; count: number }>> {
+  const cells = geohashCellsInBbox(
+    { minLat: bbox.minLat, maxLat: bbox.maxLat, minLng: bbox.minLng, maxLng: bbox.maxLng },
+    5,
+  );
+  if (cells.length === 0) return [];
   const { rows } = await pool.query(
     `SELECT ts.grid_cell AS cell, COUNT(*)::int AS count
        FROM taste_shares ts
        JOIN tastes t ON t.id = ts.taste_id
       WHERE ts.target_type = 'geo'
         AND t.visibility = 'shared'
-        AND ts.grid_cell IS NOT NULL
-        AND ST_Intersects(
-              ts.geog,
-              ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
-            )
+        AND ts.grid_cell = ANY($1::text[])
       GROUP BY ts.grid_cell
+     HAVING COUNT(*) >= $2
       ORDER BY ts.grid_cell ASC`,
-    [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
+    [cells, HEAT_MIN_COUNT],
   );
   return rows.map((r) => ({ cell: String(r.cell), count: Number(r.count) }));
 }
