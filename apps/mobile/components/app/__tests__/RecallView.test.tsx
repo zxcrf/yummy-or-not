@@ -151,6 +151,15 @@ afterEach(() => {
   mountedRenderers.length = 0
 })
 
+// Flatten an RN style prop (object | array | nested arrays) into one object so
+// later entries win — mirrors StyleSheet.flatten for assertion purposes.
+function flattenStyle(style: unknown): Record<string, number> {
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map(flattenStyle))
+  }
+  return (style as Record<string, number>) ?? {}
+}
+
 function textNodes(renderer: TestRenderer.ReactTestRenderer, text: string) {
   return renderer.root.findAll(
     (node) =>
@@ -211,6 +220,34 @@ describe('RecallView', () => {
       (n) => String(n.type) === 'Text' && n.props.children === 'Matcha smoothie',
     )
     expect(secondNames.length).toBeGreaterThan(0)
+  })
+
+  // ── Regression: the big verdict headline must set an explicit lineHeight ──
+  // The headline is fontSize 46 but inherits lineHeight 23 from the base Text
+  // unless overridden. A 46px glyph in a 23px line box overflows upward and
+  // collides with the "已存评价 / Verdict on file" label above it (the bug in
+  // the screenshot). Assert the rendered line box is at least as tall as the
+  // glyphs so it can never overlap the label.
+  it('big verdict headline does not overlap the label (lineHeight >= fontSize)', () => {
+    const top = taste({ id: 'top', name: 'Matcha latte', verdict: 'yum' })
+    mockItems = [top] as never[]
+    mockSearchTastes.mockReturnValue([
+      { item: top, score: 10001, strength: 'exact' },
+    ])
+
+    const renderer = renderRecallView()
+    typeSearch(renderer, 'matcha')
+
+    // The headline host Text carries the verdict label as its only child.
+    const headlineNodes = renderer.root.findAll(
+      (n) => String(n.type) === 'Text' && n.props.children === 'You loved it',
+    )
+    expect(headlineNodes).toHaveLength(1)
+
+    const style = flattenStyle(headlineNodes[0]!.props.style)
+    expect(style.fontSize).toBe(46)
+    expect(typeof style.lineHeight).toBe('number')
+    expect(style.lineHeight).toBeGreaterThanOrEqual(style.fontSize)
   })
 
   it('shows warn styling on top result card when warnBeforeBuy=true and warningsEnabled=true', () => {
