@@ -574,9 +574,12 @@ export default function DetailView() {
               ) : null}
             </View>
 
-            {/* badges */}
+            {/* badges — purchase count hidden for todo items (never bought;
+                boughtCount is structurally 1+purchases so a todo reads 1). */}
             <View style={{ flexDirection: 'row', gap: space[2], flexWrap: 'wrap' }}>
-              <Badge tone="dark">{t('bought_n', { n: item.boughtCount })}</Badge>
+              {item.status !== 'todo' ? (
+                <Badge tone="dark">{t('bought_n', { n: item.boughtCount })}</Badge>
+              ) : null}
               {item.tags.map((tg) => (
                 <Badge key={tg}>{tg}</Badge>
               ))}
