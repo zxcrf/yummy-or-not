@@ -195,8 +195,11 @@ export async function importSharedTaste(input: {
 
     // Copy-on-import happens INSIDE the transaction so a rollback can clean up
     // the copied object. The DB insert below is what makes the copy "real".
-    copiedImage = await copySourcePhoto(rawImage, importerId);
+    copiedImage = await copySourcePhoto(rawImage);
 
+    // lat/lng are DELIBERATELY omitted from this INSERT (privacy): the importer
+    // must not receive the owner's exact coordinates. Consistent with S3c geo
+    // coarsening — do NOT start copying lat/lng here.
     const ins = await client.query(
       `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image)
        VALUES ($1, $2, $3, $4, 'todo', NULL, $5, $6, $7)
@@ -276,12 +279,14 @@ async function cleanupOrphanedCopy(copiedImage: string): Promise<void> {
 
 /**
  * Copy the source photo (orig + thumb + display variants when present) into a
- * fresh importer-namespaced key and return the value to persist in the copy's
- * `image` column. Empty / legacy-URL sources yield '' (the import still
- * succeeds, photoless and decoupled). Best-effort: a copy failure leaves the
- * copy photoless rather than failing the whole import.
+ * fresh canonical-layout key (t/{uuid}/orig.{ext}) and return the value to
+ * persist in the copy's `image` column. The new uuid decouples the copy from the
+ * owner's object; isolation is enforced at the row level by user_id scoping.
+ * Empty / legacy-URL sources yield '' (the import still succeeds, photoless and
+ * decoupled). Best-effort: a copy failure leaves the copy photoless rather than
+ * failing the whole import.
  */
-async function copySourcePhoto(rawImage: string | null, importerId: string): Promise<string> {
+async function copySourcePhoto(rawImage: string | null): Promise<string> {
   if (!rawImage) return '';
   if (
     rawImage.startsWith('http://') ||
@@ -291,13 +296,17 @@ async function copySourcePhoto(rawImage: string | null, importerId: string): Pro
     return '';
   }
 
-  // Importer-namespaced prefix so the copy's key is provably NOT the owner's
-  // (the route test asserts the copy key contains the importer id and differs
-  // from the source key).
+  // Use the CANONICAL variant layout (t/{uuid}/orig.{ext}) — NOT an importer-id
+  // prefix. The fresh uuid already decouples the copy from the owner's key, and
+  // row-level isolation is enforced by user_id scoping in getTaste/queries, so a
+  // path prefix is not needed for isolation. An importer-prefixed key would fail
+  // isVariantKey (anchored /^t\/…/), so resolvePhotoUrls would treat the copy as
+  // a flat legacy key and serve the full-res ORIGINAL instead of the thumb/display
+  // variants this function copies — the very regression this layout avoids.
   try {
     if (isVariantKey(rawImage)) {
       const ext = rawImage.slice(rawImage.lastIndexOf('.') + 1);
-      const newOrig = `${importerId}/t/${randomUUID()}/orig.${safeExt(`x.${ext}`)}`;
+      const newOrig = `t/${randomUUID()}/orig.${safeExt(`x.${ext}`)}`;
       const srcV = variantKeys(rawImage);
       const dstV = variantKeys(newOrig);
       await Promise.all([
@@ -307,8 +316,11 @@ async function copySourcePhoto(rawImage: string | null, importerId: string): Pro
       ]);
       return newOrig;
     }
+    // Flat (pre-variant) source: no thumb/display siblings exist, so keep the
+    // copy a FLAT key too (a t/{uuid}/orig.{ext} key would make the resolver
+    // look for variants that were never written). Use a fresh-uuid flat key.
     const ext = rawImage.includes('.') ? rawImage.slice(rawImage.lastIndexOf('.') + 1) : 'bin';
-    const newKey = `${importerId}/${randomUUID()}.${safeExt(`x.${ext}`)}`;
+    const newKey = `${randomUUID()}.${safeExt(`x.${ext}`)}`;
     return await copyPhoto(rawImage, newKey);
   } catch (err) {
     console.error('copySourcePhoto: copy failed, importing photoless:', err);

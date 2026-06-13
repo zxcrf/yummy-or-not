@@ -14,6 +14,7 @@
 // The pg Pool is faked via globalThis.__pgPool; storage + db are mocked.
 
 import { importCodeFor } from '../share-token';
+import { isVariantKey } from '../image-variants';
 
 // ── storage + db mocks ───────────────────────────────────────────────────────
 const mockCopyPhoto = jest.fn();
@@ -240,5 +241,56 @@ describe('importSharedTaste — TOCTOU revocation re-check inside the txn', () =
     expect(mockCopyPhoto).toHaveBeenCalledTimes(1);
     expect(mockDeletePhoto).not.toHaveBeenCalled(); // nothing orphaned on success
     expect(clientQuery).toHaveBeenCalledWith('COMMIT', undefined);
+  });
+});
+
+// ── 5. copy-on-import persists a CANONICAL variant key (resolver-visible) ──────
+//
+// Regression (review of 102d010): copySourcePhoto built the copy's orig key as
+// `${importerId}/t/{uuid}/orig.{ext}`. That importer-prefixed key fails
+// isVariantKey (anchored /^t\/…/), so resolvePhotoUrls treats the imported copy
+// as a flat legacy key and serves the full-res ORIGINAL on list/detail — never
+// the thumb/display variants copySourcePhoto already wrote. The copy's stored
+// `image` MUST be a canonical variant key so the resolver emits the variants.
+describe('importSharedTaste — copies a CANONICAL variant key into the copy', () => {
+  it('persists an image key that isVariantKey accepts (resolver serves thumb/display, not orig)', async () => {
+    mockGetTaste
+      .mockResolvedValueOnce(SOURCE)                                       // live source read
+      .mockResolvedValueOnce({ id: 'my-copy', status: 'todo', verdict: null }); // final read of the copy
+    // A canonical owner variant key is the source of the copy-on-import.
+    mockGetRawImage.mockResolvedValue('t/123e4567-e89b-12d3-a456-426614174000/orig.jpg');
+    // copyPhoto echoes its destination so the REAL copySourcePhoto layout flows
+    // through to the INSERT unaltered (no stubbed key hiding the bug).
+    mockCopyPhoto.mockImplementation(async (_src: string, dst: string) => dst);
+
+    let insertedImageKey = '';
+    installPool(
+      async (sql) => {
+        if (/SELECT \* FROM share_tokens/.test(sql)) {
+          return { rows: [{ token: 'tok', taste_id: 'src', owner_id: 'o1', revoked: false, expires_at: null }] };
+        }
+        if (/FROM taste_imports WHERE from_token/.test(sql)) return { rows: [] };
+        return { rows: [] };
+      },
+      async (sql, params) => {
+        if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
+        if (/FOR UPDATE/.test(sql)) return { rows: [{ revoked: false, expires_at: null }] };
+        if (/INSERT INTO tastes/.test(sql)) {
+          // The 7th INSERT param is the copy's stored `image` value.
+          insertedImageKey = (params as unknown[])[6] as string;
+          return { rows: [{ id: 'my-copy' }] };
+        }
+        if (/INSERT INTO taste_imports/.test(sql)) return { rows: [{ taste_id: 'my-copy' }] };
+        throw new Error(`unexpected client query: ${sql}`);
+      },
+    );
+
+    const res = await importSharedTaste({ token: 'tok', importerId: 'imp' });
+    expect(res).toEqual({ created: true, taste: { id: 'my-copy', status: 'todo', verdict: null } });
+
+    // The persisted key must be a canonical variant key the resolver understands,
+    // and must NOT be the owner's source key (copy-on-import stays decoupled).
+    expect(insertedImageKey).not.toBe('t/123e4567-e89b-12d3-a456-426614174000/orig.jpg');
+    expect(isVariantKey(insertedImageKey)).toBe(true);
   });
 });
