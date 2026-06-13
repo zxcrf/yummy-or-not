@@ -143,6 +143,26 @@ it('still appends text fields correctly', async () => {
   expect(fd.getAll('tags')).toEqual(['Burger', 'Spicy']);
 });
 
+it('appends tasterId on the multipart (photo) path when an active taster is set', async () => {
+  // S3b regression: a save WITH a photo must still carry the active persona.
+  // The bug dropped tasterId on the multipart path, so every photo save fell
+  // back to the self-taster regardless of the selected taster.
+  await createTaste(
+    { name: 'Partner Dish', verdict: 'yum' as const, tags: [], tasterId: 'ts_partner' },
+    rnFile,
+  );
+
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd.get('tasterId')).toBe('ts_partner');
+});
+
+it('omits tasterId on the multipart path when none is active (self default)', async () => {
+  await createTaste({ name: 'Just Me', verdict: 'yum' as const, tags: [] }, rnFile);
+
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd.get('tasterId')).toBeNull();
+});
+
 it('omits location fields when they are not provided', async () => {
   await createTaste({ name: 'No location', verdict: 'yum' as const, tags: [] }, rnFile);
 

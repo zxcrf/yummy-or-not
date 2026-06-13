@@ -62,6 +62,7 @@ import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
 import { invalidateTastes, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
+import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { PhotoPreview } from './PhotoPreview'
 import { useRouter } from 'expo-router'
 
@@ -143,6 +144,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const insets = useSafeAreaInsets()
   const { tags: userTags } = useTags()
   const { items } = useRefreshableTastes()
+  // S3b: the active client taster (null = self). Carried into the create payload
+  // so a record logged while a non-self persona is active is attributed to it.
+  const activeTaster = useActiveTaster()
 
   // Merge the user's tag library with the built-in TAG_CHOICES, deduped, for
   // the chip list. Built-in choices always appear first so the UX stays stable
@@ -446,6 +450,9 @@ export default function AddModal({ onClose, onSaved }: Props) {
           notes: notes || undefined,
           lat,
           lng,
+          // Only send a non-self taster; null (self) → omitted so the server
+          // applies the self-taster default, never a wrong persona.
+          ...(activeTaster ? { tasterId: activeTaster } : {}),
         },
         photo,
       )

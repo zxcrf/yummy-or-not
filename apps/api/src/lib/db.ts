@@ -2,7 +2,7 @@
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput, Taster, CreateTasterInput, UpdateTasterInput } from '@yon/shared';
 import { FILTERS } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
@@ -232,6 +232,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     notes:         row.notes ?? '',
     lat:           row.lat ?? null,
     lng:           row.lng ?? null,
+    tasterId:      row.taster_id ?? null,
     image:         urls.image,
     imageThumb:    urls.imageThumb,
     imageDisplay:  urls.imageDisplay,
@@ -284,12 +285,16 @@ export async function listTastes(
     q,
     filter,
     status = 'tasted',
+    taster,
   }: {
     q?: string;
     filter?: string;
     /** Lifecycle filter: 'tasted' (DEFAULT — old clients never see todos),
      *  'todo' (wishlist only), or 'all' (no status condition). */
     status?: 'tasted' | 'todo' | 'all';
+    /** S3b: restrict to records attributed to this taster persona. Omitted →
+     *  no taster condition (all of the owner's personas). */
+    taster?: string;
   } = {}
 ): Promise<Taste[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -311,6 +316,20 @@ export async function listTastes(
   if (status !== 'all') {
     values.push(status);
     conditions.push(`status = $${values.length}`);
+  }
+
+  if (taster) {
+    // Scope the taster filter to a persona THIS account owns. The existing
+    // `user_id = $1` conjunct already prevents a cross-user read, but don't
+    // rely on it alone: bind the taster to its owner in the condition itself so
+    // a foreign taster id can never match even if the query is later refactored.
+    values.push(taster);
+    const tasterParam = values.length;
+    values.push(userId);
+    const ownerParam = values.length;
+    conditions.push(
+      `taster_id = (SELECT id FROM tasters WHERE id = $${tasterParam} AND owner_account_id = $${ownerParam})`
+    );
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -335,8 +354,22 @@ export async function getTaste(userId: string, id: string): Promise<Taste | null
   return rows.length ? await rowToTaste(rows[0]) : null;
 }
 
+/** Thrown by createTaste when an explicit tasterId does not belong to the
+ *  calling account (IDOR guard). The route maps `.code` to a 400 error body.
+ *  A thrown error (rather than a union return) keeps the happy-path return type
+ *  a plain Taste for the many existing callers, while still enforcing ownership
+ *  at the DB-helper level — not only at the route. */
+export class CreateTasteError extends Error {
+  constructor(public readonly code: 'invalid_taster') {
+    super(code);
+    this.name = 'CreateTasteError';
+  }
+}
+
 /** Insert a new taste owned by the user, optionally overriding the image URL.
- *  warn_before_buy defaults to true when verdict is 'nah', false otherwise. */
+ *  warn_before_buy defaults to true when verdict is 'nah', false otherwise.
+ *  Throws CreateTasteError('invalid_taster') when an explicit tasterId is not
+ *  owned by userId. */
 export async function createTaste(
   userId: string,
   input: CreateTasteInput,
@@ -370,11 +403,28 @@ export async function createTaste(
       ? input.lng
       : null;
 
+  // S3b: attribute the record to the active taster. An explicit tasterId (the
+  // client's active persona) must belong to THIS account — otherwise an
+  // authenticated user could stamp a record onto a foreign persona (IDOR). The
+  // DB FK only requires the taster to exist globally, so verify ownership here
+  // before insert. No explicit tasterId → fall back to the owner's self-taster
+  // so every row is attributed (never NULL on a fresh insert). The self-taster
+  // is auto-created on registration but ensure it here too so a pre-S3b account
+  // that hasn't been touched still resolves to a stable id.
+  let tasterId: string;
+  if (input.tasterId) {
+    const owned = await getTaster(userId, input.tasterId);
+    if (!owned) throw new CreateTasteError('invalid_taster');
+    tasterId = owned.id;
+  } else {
+    tasterId = (await ensureSelfTaster(userId)).id;
+  }
+
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng, taster_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng]
+    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng, tasterId]
   );
   // New taste has no purchases yet — pass empty aggregates directly.
   const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
@@ -520,6 +570,150 @@ export async function getStats(userId: string): Promise<Stats> {
   };
 }
 
+// ── Tasters & families (S3b) ──────────────────────────────────────────────────
+
+/** Map a tasters row (snake_case) → the client-facing Taster (camelCase). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToTaster(row: any): Taster {
+  return {
+    id:             row.id,
+    ownerAccountId: row.owner_account_id,
+    familyId:       row.family_id ?? null,
+    displayName:    row.display_name ?? '',
+    avatar:         row.avatar ?? '',
+    isSelf:         Boolean(row.is_self),
+    createdAt:      new Date(row.created_at).toISOString(),
+  };
+}
+
+/** Return the owner's is_self taster, creating it on first call. Idempotent:
+ *  a repeat call returns the SAME row (never mints a second self-taster). Called
+ *  on registration (auto-create) and as the createTaste self-default fallback. */
+export async function ensureSelfTaster(userId: string): Promise<Taster> {
+  const existing = await pool.query(
+    'SELECT * FROM tasters WHERE owner_account_id = $1 AND is_self = true LIMIT 1',
+    [userId]
+  );
+  if (existing.rows.length) return rowToTaster(existing.rows[0]);
+
+  // Name the self-taster after the account's display_name when present.
+  const u = await pool.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+  const name = (u.rows[0]?.display_name as string | undefined)?.trim() || 'Me';
+  // Race-safe insert. The SELECT above usually decides, but two concurrent
+  // first-saves (or registration racing the first POST) can both miss it and
+  // try to insert. The tasters_one_self_per_owner partial unique index makes the
+  // loser's INSERT raise a unique violation; catch it and re-SELECT the winner's
+  // row so both callers get the SAME id (no duplicate self-tasters → no split
+  // attribution downstream). Catching the violation rather than using ON CONFLICT
+  // (owner_account_id) WHERE is_self avoids the partial-index arbiter clause,
+  // which behaves identically on real Postgres and the pg-mem test adapter.
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO tasters (owner_account_id, display_name, is_self) VALUES ($1, $2, true) RETURNING *`,
+      [userId, name]
+    );
+    return rowToTaster(rows[0]);
+  } catch (err) {
+    // Postgres unique_violation = 23505. The concurrent caller won; re-read it.
+    if ((err as { code?: string })?.code !== '23505') throw err;
+    const winner = await pool.query(
+      'SELECT * FROM tasters WHERE owner_account_id = $1 AND is_self = true LIMIT 1',
+      [userId]
+    );
+    if (!winner.rows.length) throw err;
+    return rowToTaster(winner.rows[0]);
+  }
+}
+
+/** Migration 0008 backfill (also runnable from app code / a one-off script):
+ *  give every user exactly one is_self taster and point each of their
+ *  still-unattributed tastes at it. Idempotent — re-running creates no
+ *  duplicate self-tasters and never re-points an already-attributed row. */
+export async function backfillSelfTasters(): Promise<void> {
+  const { rows: users } = await pool.query('SELECT id FROM users');
+  for (const u of users as Array<{ id: string }>) {
+    const self = await ensureSelfTaster(u.id);
+    await pool.query(
+      'UPDATE tastes SET taster_id = $1 WHERE user_id = $2 AND taster_id IS NULL',
+      [self.id, u.id]
+    );
+  }
+}
+
+/** List all personas owned by the account (self first, then newest). */
+export async function listTasters(userId: string): Promise<Taster[]> {
+  const { rows } = await pool.query(
+    'SELECT * FROM tasters WHERE owner_account_id = $1 ORDER BY is_self DESC, created_at ASC',
+    [userId]
+  );
+  return rows.map(rowToTaster);
+}
+
+/** Fetch a single taster owned by the account, or null. */
+export async function getTaster(userId: string, id: string): Promise<Taster | null> {
+  const { rows } = await pool.query(
+    'SELECT * FROM tasters WHERE id = $1 AND owner_account_id = $2',
+    [id, userId]
+  );
+  return rows.length ? rowToTaster(rows[0]) : null;
+}
+
+/** Create a non-self persona under the account. (Pro gating is enforced at the
+ *  route layer — this helper is unconditional so the self-taster auto-create
+ *  path stays usable.) */
+export async function createTaster(
+  userId: string,
+  input: CreateTasterInput
+): Promise<Taster> {
+  const { rows } = await pool.query(
+    `INSERT INTO tasters (owner_account_id, display_name, avatar, is_self)
+     VALUES ($1, $2, $3, false) RETURNING *`,
+    [userId, input.displayName.trim(), input.avatar ?? '']
+  );
+  return rowToTaster(rows[0]);
+}
+
+/** Patch a persona owned by the account; returns the updated row or null. */
+export async function updateTaster(
+  userId: string,
+  id: string,
+  patch: UpdateTasterInput
+): Promise<Taster | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+
+  if (patch.displayName !== undefined) {
+    values.push(patch.displayName.trim());
+    setClauses.push(`display_name = $${values.length}`);
+  }
+  if (patch.avatar !== undefined) {
+    values.push(patch.avatar);
+    setClauses.push(`avatar = $${values.length}`);
+  }
+  if (setClauses.length === 0) return getTaster(userId, id);
+
+  values.push(id);
+  const idParam = values.length;
+  values.push(userId);
+  const ownerParam = values.length;
+  const { rows } = await pool.query(
+    `UPDATE tasters SET ${setClauses.join(', ')} WHERE id = $${idParam} AND owner_account_id = $${ownerParam} RETURNING *`,
+    values
+  );
+  return rows.length ? rowToTaster(rows[0]) : null;
+}
+
+/** Delete a persona owned by the account. Returns true if a row was deleted.
+ *  Refuses to drop a self-taster (the route also guards this, defence in depth).
+ *  Tastes attributed to it keep their data (FK is ON DELETE SET NULL). */
+export async function deleteTaster(userId: string, id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM tasters WHERE id = $1 AND owner_account_id = $2 AND is_self = false',
+    [id, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 // ── Users & auth ────────────────────────────────────────────────────────────
 
 /** Map a users row → the client-safe User (never includes password_hash). */
@@ -535,6 +729,7 @@ function rowToUser(row: any): User {
     plan:            row.plan ?? 'free',
     warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
     locationEnabled: row.location_enabled != null ? Boolean(row.location_enabled) : false,
+    mediaEnabled:    row.media_enabled != null ? Boolean(row.media_enabled) : false,
     createdAt:       new Date(row.created_at).toISOString(),
   };
 }
@@ -581,7 +776,12 @@ export async function createUser(input: {
       input.plan ?? 'free',
     ]
   );
-  return rowToUser(rows[0]);
+  const user = rowToUser(rows[0]);
+  // S3b: every new account gets its self-taster up front, so its records are
+  // attributed from the very first save (idempotent — the createTaste fallback
+  // also ensures one for pre-S3b accounts).
+  await ensureSelfTaster(user.id);
+  return user;
 }
 
 /** Phone-OTP login: return the existing user for this phone, or create one. */

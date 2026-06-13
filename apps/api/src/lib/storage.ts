@@ -44,6 +44,40 @@ export interface UploadOptions {
   contentType: string;
 }
 
+// ── S3b-media capability gate ─────────────────────────────────────────────────
+//
+// S3b only adds the GATE POINT, not the live-photo / video pipeline. The gate is
+// the security boundary "media_enabled=false 时不能传 video": a still image is
+// always allowed; a video / live-photo upload is allowed ONLY when the account's
+// media_enabled flag is true. Enforced server-side, never trusting the client.
+
+/** True when an upload is video / live-photo (media) rather than a still image.
+ *  Classifies on the content type, falling back to the filename extension when
+ *  the type is generic (some clients send application/octet-stream). */
+export function isVideoUpload(contentType: string, filename = ''): boolean {
+  const ct = (contentType || '').toLowerCase();
+  if (ct.startsWith('video/')) return true;
+  if (ct.startsWith('image/')) return false;
+  // Generic / unknown type — fall back to the extension.
+  const ext = filename.toLowerCase().split('.').pop() ?? '';
+  return ['mp4', 'mov', 'm4v', 'qt', 'webm', 'avi', 'mkv', '3gp'].includes(ext);
+}
+
+/** Machine-readable reason a media upload was blocked (route maps it to a 403). */
+export type MediaGateReason = 'media_not_enabled';
+
+/** Server-side capability gate. Returns a MediaGateReason ('media_not_enabled')
+ *  when a video / live-photo upload is attempted without the media capability,
+ *  or null when the upload is permitted (always permitted for still images). */
+export function assertMediaAllowed(
+  user: { mediaEnabled: boolean },
+  contentType: string,
+  filename = ''
+): MediaGateReason | null {
+  if (!isVideoUpload(contentType, filename)) return null;
+  return user.mediaEnabled ? null : 'media_not_enabled';
+}
+
 /**
  * Upload a photo buffer and return the value to persist in the DB `image`
  * column. For local/s3 this is the bare key; for blob it is the full public

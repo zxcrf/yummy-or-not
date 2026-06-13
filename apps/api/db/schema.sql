@@ -23,6 +23,8 @@ CREATE TABLE users (
   plan             text        NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
   warnings_enabled boolean     NOT NULL DEFAULT true,
   location_enabled boolean     NOT NULL DEFAULT false,
+  -- S3b-media capability flag (NOT a plan-enum change): gates video/live-photo uploads.
+  media_enabled    boolean     NOT NULL DEFAULT false,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
@@ -92,12 +94,44 @@ CREATE TABLE tastes (
   image          text        NOT NULL DEFAULT '',
   lat            double precision,
   lng            double precision,
+  -- S3b: attribute a taste to a taster persona (nullable; defaults to the
+  -- owner's self-taster, backfilled). FK declared after the tasters table below.
+  taster_id      text,
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tastes_status_verdict_check CHECK (status <> 'tasted' OR verdict IS NOT NULL)
 );
 
 -- Per-user, newest-first queries (the hot path)
 CREATE INDEX tastes_user_created_idx ON tastes (user_id, created_at DESC);
+
+-- ── Families + tasters (S3b — owner-scoped personas, no separate login) ───────
+CREATE TABLE families (
+  id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  owner_id   text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       text        NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX families_owner_idx ON families (owner_id);
+
+CREATE TABLE tasters (
+  id               text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  owner_account_id text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  family_id        text        REFERENCES families(id) ON DELETE SET NULL,
+  display_name     text        NOT NULL,
+  avatar           text        NOT NULL DEFAULT '',
+  is_self          boolean     NOT NULL DEFAULT false,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX tasters_owner_idx ON tasters (owner_account_id);
+-- At most one is_self taster per account (guards the ensureSelfTaster race; see
+-- migration 0008). ensureSelfTaster relies on this for its ON CONFLICT DO NOTHING.
+CREATE UNIQUE INDEX tasters_one_self_per_owner ON tasters (owner_account_id) WHERE is_self;
+
+-- Attribute tastes to a taster (ON DELETE SET NULL: deleting a persona never
+-- cascades away its food log). FK added here because tasters is defined above.
+ALTER TABLE tastes ADD CONSTRAINT tastes_taster_id_fkey
+  FOREIGN KEY (taster_id) REFERENCES tasters(id) ON DELETE SET NULL;
+CREATE INDEX tastes_taster_idx ON tastes (taster_id, created_at DESC);
 
 -- Per-user, status-partitioned newest-first (Library 已尝/想吃 segments)
 CREATE INDEX tastes_user_status_created_idx ON tastes (user_id, status, created_at DESC);
