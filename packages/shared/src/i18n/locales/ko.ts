@@ -8,7 +8,7 @@ export const ko: Record<string, string> = {
   recall_placeholder: "“말차” 또는 “버블티” 검색…", recently_recalled: "최근 찾아본 항목", nearby_eaten: "근처에서 먹은",
   verdict_on_file: "기록된 평가", loved_it: "맛있었어요", soso: "그저 그래요", skip_it: "별로였어요",
   no_record: "“{q}” 기록이 없어요.", try_then_log: "먹어보고 평가를 남겨보세요.", log_it_now: "지금 기록하기",
-  add_photo: "사진 추가", photo_permission_denied: "사진을 선택하려면 사진 접근 권한이 필요합니다.", f_what: "무엇을 드셨나요?", f_where: "어디서?", f_price: "가격",
+  add_photo: "사진 추가", photo_permission_denied: "사진을 선택하려면 사진 접근 권한이 필요합니다.", f_what: "무엇을 드셨나요?", f_what_todo: "무엇을 먹고 싶나요?", f_where: "어디서?", f_price: "가격",
   how_was_it: "어땠나요?", tags: "태그", add_tag: "태그 추가", tag_placeholder: "새 태그", your_take: "내 평가", save_taste: "이 맛 저장하기", save_taste_web: "저장",
   cancel: "취소", bought_n: "{n}번 구매", your_note: "내 메모", warn_before: "다시 사기 전에 알려주세요",
   delete_log: "기록 삭제", edit: "수정", del: "삭제", stats_title: "내 통계", saved_amt: "{amt} 절약",

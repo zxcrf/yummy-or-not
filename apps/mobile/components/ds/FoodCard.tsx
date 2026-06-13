@@ -107,6 +107,9 @@ export function FoodCard({
   // Consume and discard any stale Tamagui-era props before spreading rest
   const { interactive: _interactive, pressStyle: _pressStyle, ...safeRest } = rest as any
   const normalizedTags = normalizeTags(tags)
+  // Todo rows have never been bought (boughtCount is structurally 1+purchases,
+  // so a fresh todo reads 1) — never show the purchase badge for them.
+  const showBought = status !== 'todo' && !!boughtCount
 
   const content = (pressed: boolean) => (
     // NOTE: do NOT put a touch responder on the inner frame. The pressed visual
@@ -177,9 +180,9 @@ export function FoodCard({
           </Text>
         ) : null}
 
-        {normalizedTags.length > 0 || boughtCount ? (
+        {normalizedTags.length > 0 || showBought ? (
           <View style={styles.tagsRow}>
-            {boughtCount ? (
+            {showBought ? (
               <Tag>{boughtLabel || `Bought ${boughtCount}×`}</Tag>
             ) : null}
             {normalizedTags.map((t) => (

@@ -58,6 +58,14 @@ export interface VerdictPickerProps extends Omit<ViewProps, 'style'> {
   labels?: Partial<Record<Verdict, string>>
   /** Style pass-through on the outer row container. */
   style?: StyleProp<ViewStyle>
+  /**
+   * Render the option frames as plain Views instead of Reanimated
+   * `Animated.View`s (press motion degrades to an opacity dim). Required when
+   * this picker is mounted inside a React Native `<Modal>`: on the New
+   * Architecture a `flex:1` Reanimated view inside a Modal fails to lay out its
+   * children, so the option boxes render blank. See DetailView promote sheet.
+   */
+  staticRender?: boolean
 }
 
 // ---------- Single option item ----------
@@ -69,10 +77,47 @@ interface OptItemProps {
   onPressIn?: PressableProps['onPressIn']
   onPressOut?: PressableProps['onPressOut']
   label?: string
+  staticRender?: boolean
 }
 
-function OptItem({ opt, selected, onSelect, onPressIn: callerIn, onPressOut: callerOut, label }: OptItemProps) {
+function OptItem({ opt, selected, onSelect, onPressIn: callerIn, onPressOut: callerOut, label, staticRender }: OptItemProps) {
   const driver = usePressScale({ spring: bouncy, toScale: 0.95 })
+
+  const frameStyle = [
+    styles.optBase,
+    selected
+      ? {
+          backgroundColor: OPT_BG[opt.key],
+          borderColor: OPT_BORDER[opt.key],
+          ...SELECTED_SHADOW,
+        }
+      : styles.optUnselected,
+  ]
+
+  const content = (
+    <>
+      <Text style={styles.optFace}>{opt.face}</Text>
+      <Text style={styles.optLabel}>{label || opt.label}</Text>
+    </>
+  )
+
+  // Static path: plain View, no Reanimated. Used inside a React Native <Modal>,
+  // where a flex:1 Animated.View fails to lay out its Text children on the New
+  // Architecture (the boxes render blank). Press feedback degrades to opacity.
+  if (staticRender) {
+    return (
+      <Pressable
+        onPress={onSelect}
+        onPressIn={callerIn}
+        onPressOut={callerOut}
+        accessibilityRole="radio"
+        accessibilityState={{ checked: selected }}
+        style={({ pressed }) => [styles.optPressable, pressed ? { opacity: 0.85 } : null]}
+      >
+        <View style={frameStyle}>{content}</View>
+      </Pressable>
+    )
+  }
 
   return (
     <Pressable
@@ -89,21 +134,8 @@ function OptItem({ opt, selected, onSelect, onPressIn: callerIn, onPressOut: cal
       accessibilityState={{ checked: selected }}
       style={styles.optPressable}
     >
-      <Animated.View
-        style={[
-          styles.optBase,
-          selected
-            ? {
-                backgroundColor: OPT_BG[opt.key],
-                borderColor: OPT_BORDER[opt.key],
-                ...SELECTED_SHADOW,
-              }
-            : styles.optUnselected,
-          driver.animatedStyle,
-        ]}
-      >
-        <Text style={styles.optFace}>{opt.face}</Text>
-        <Text style={styles.optLabel}>{label || opt.label}</Text>
+      <Animated.View style={[...frameStyle, driver.animatedStyle]}>
+        {content}
       </Animated.View>
     </Pressable>
   )
@@ -112,7 +144,7 @@ function OptItem({ opt, selected, onSelect, onPressIn: callerIn, onPressOut: cal
 /**
  * VerdictPicker — tap yum / meh / nah. Controlled via `value` + `onChange`.
  */
-export function VerdictPicker({ value, onChange, labels, style, ...rest }: VerdictPickerProps) {
+export function VerdictPicker({ value, onChange, labels, style, staticRender, ...rest }: VerdictPickerProps) {
   return (
     <View style={[styles.row, style]} {...rest}>
       {OPTS.map((o) => (
@@ -122,6 +154,7 @@ export function VerdictPicker({ value, onChange, labels, style, ...rest }: Verdi
           selected={value === o.key}
           onSelect={() => onChange?.(o.key)}
           label={labels?.[o.key]}
+          staticRender={staticRender}
         />
       ))}
     </View>

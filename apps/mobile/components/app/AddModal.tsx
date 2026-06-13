@@ -589,9 +589,10 @@ export default function AddModal({ onClose, onSaved }: Props) {
             )}
           </Pressable>
 
-          {/* text fields */}
+          {/* text fields — title reflects mode: tasted asks "what did you eat",
+              todo asks "what do you want to try" (user hasn't eaten it yet). */}
           <Input
-            label={t('f_what')}
+            label={mode === 'todo' ? t('f_what_todo') : t('f_what')}
             placeholder="Brown sugar boba"
             value={name}
             onChangeText={handleNameChange}

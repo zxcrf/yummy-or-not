@@ -74,6 +74,7 @@ jest.mock('@/providers/I18nProvider', () => ({
         save_taste_web: 'Save',
         add_photo: 'Add photo',
         f_what: 'What?',
+        f_what_todo: 'Want to try?',
         f_where: 'Where?',
         f_price: 'Price',
         tags: 'Tags',
@@ -230,6 +231,29 @@ describe('AddModal A2 — to-taste mode', () => {
     expect(findAllText(renderer, 'Want to try').length).toBeGreaterThan(0)
   })
 
+  it('title field asks "what to try" in todo mode, "what you ate" in tasted mode', () => {
+    const { renderer } = renderModal()
+
+    // Default tasted mode: the name field uses the f_what label.
+    expect(
+      renderer.root.findAll((n) => n.props['accessibilityLabel'] === 'What?'),
+    ).not.toHaveLength(0)
+    expect(
+      renderer.root.findAll((n) => n.props['accessibilityLabel'] === 'Want to try?'),
+    ).toHaveLength(0)
+
+    // Switch to todo mode — the label flips to f_what_todo (user hasn't eaten it).
+    const todoBtn = findTodoBtnNode(renderer)
+    act(() => { todoBtn[0].props.onPress() })
+
+    expect(
+      renderer.root.findAll((n) => n.props['accessibilityLabel'] === 'Want to try?'),
+    ).not.toHaveLength(0)
+    expect(
+      renderer.root.findAll((n) => n.props['accessibilityLabel'] === 'What?'),
+    ).toHaveLength(0)
+  })
+
   it('todo mode: Save enabled with name only (no verdict required)', async () => {
     const { renderer } = renderModal()
 
@@ -240,9 +264,9 @@ describe('AddModal A2 — to-taste mode', () => {
       todoBtn[0].props.onPress()
     })
 
-    // Type a name
+    // Type a name — in todo mode the title field uses the f_what_todo label
     const nameInput = renderer.root.findAll(
-      (n) => n.props['accessibilityLabel'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'Want to try?',
     )
     expect(nameInput.length).toBeGreaterThan(0)
     act(() => {
@@ -268,9 +292,9 @@ describe('AddModal A2 — to-taste mode', () => {
     const todoBtn = findTodoBtnNode(renderer)
     act(() => { todoBtn[0].props.onPress() })
 
-    // Type a name
+    // Type a name — todo mode uses the f_what_todo label
     const nameInput = renderer.root.findAll(
-      (n) => n.props['accessibilityLabel'] === 'What?',
+      (n) => n.props['accessibilityLabel'] === 'Want to try?',
     )
     act(() => {
       nameInput[0].props.onChangeText('Matcha Latte')

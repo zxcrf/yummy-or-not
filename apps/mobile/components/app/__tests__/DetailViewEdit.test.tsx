@@ -8,6 +8,7 @@
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
+import { StyleSheet } from 'react-native'
 import { getTaste, updateTaste, type Taste } from '@yon/shared'
 
 import DetailView from '../DetailView'
@@ -182,5 +183,70 @@ describe('DetailView editing', () => {
     })
     expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
     expect(renderer.root.findAll((node) => node.children.includes('Cortado'))).not.toHaveLength(0)
+  })
+
+  it('shows the rating picker when editing a tasted item', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste()) // status: 'tasted'
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    expect(
+      renderer.root.findAll((node) => (node.type as unknown) === 'VerdictPicker'),
+    ).not.toHaveLength(0)
+  })
+
+  it('hides the rating picker when editing a todo item', async () => {
+    // Todo rows have not been eaten yet — editing them must not show a verdict
+    // picker (parity with AddModal todo mode); rating happens on promote.
+    mockedGetTaste.mockResolvedValueOnce(taste({ status: 'todo', verdict: null }))
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    // Edit fields are open (name field present) ...
+    expect(inputByLabel(renderer, 'f_what')).toBeTruthy()
+    // ... but the rating picker is not rendered.
+    expect(
+      renderer.root.findAll((node) => (node.type as unknown) === 'VerdictPicker'),
+    ).toHaveLength(0)
+  })
+
+  it('omits verdict in the PATCH when saving a todo edit', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste({ status: 'todo', verdict: null }))
+    mockedUpdateTaste.mockResolvedValueOnce(taste({ status: 'todo', verdict: null, name: 'Oat Latte' }))
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    const nameInput = inputByLabel(renderer, 'f_what')
+    await act(async () => { nameInput?.props.onChangeText('Oat Latte') })
+
+    const save = buttons(renderer).find((button) => button.children.includes('save_taste_web'))
+    await act(async () => { await save?.props.onPress() })
+
+    expect(mockedUpdateTaste).toHaveBeenCalledTimes(1)
+    const [, payload] = mockedUpdateTaste.mock.calls[0]
+    expect(payload).not.toHaveProperty('verdict')
+    expect(payload.name).toBe('Oat Latte')
+  })
+
+  it('right-aligns the edit action footer (cancel/save on the right, like AddModal)', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    const footer = renderer.root.findAll(
+      (node) => node.props.testID === 'edit-actions-footer',
+    )
+    expect(footer.length).toBeGreaterThanOrEqual(1)
+    const flat = StyleSheet.flatten(footer[0].props.style)
+    expect(flat.justifyContent).toBe('flex-end')
+    expect(flat.flexDirection).toBe('row')
   })
 })
