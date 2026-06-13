@@ -290,7 +290,9 @@ export default function DetailView() {
         name: editName,
         place: editPlace,
         price: editPrice,
-        verdict: editVerdict,
+        // Todo rows carry no verdict (rating is hidden while editing a todo and
+        // only set when promoting), so don't write one here.
+        ...(item.status === 'todo' ? {} : { verdict: editVerdict }),
         tags: editTags,
         notes: editNotes,
       })
@@ -494,16 +496,21 @@ export default function DetailView() {
               placeholder="$5.80"
             />
 
-            <View style={{ gap: space[2] }}>
-              <Text style={{ color: colors.ink700, fontSize: 11, letterSpacing: 1.32, textTransform: 'uppercase' }}>
-                {t('how_was_it')}
-              </Text>
-              <VerdictPicker
-                value={editVerdict}
-                onChange={setEditVerdict}
-                labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
-              />
-            </View>
+            {/* rating section — hidden for todo items (they haven't been eaten
+                yet, so there's nothing to rate; matches AddModal todo mode).
+                Promotion to tasted happens via the dedicated promote sheet. */}
+            {item.status !== 'todo' ? (
+              <View style={{ gap: space[2] }}>
+                <Text style={{ color: colors.ink700, fontSize: 11, letterSpacing: 1.32, textTransform: 'uppercase' }}>
+                  {t('how_was_it')}
+                </Text>
+                <VerdictPicker
+                  value={editVerdict}
+                  onChange={setEditVerdict}
+                  labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
+                />
+              </View>
+            ) : null}
 
             <View style={{ gap: space[2] }}>
               <Text style={{ color: colors.ink700, fontSize: 11, letterSpacing: 1.32, textTransform: 'uppercase' }}>
@@ -532,7 +539,10 @@ export default function DetailView() {
               </Text>
             ) : null}
 
-            <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[1] }}>
+            <View
+              testID="edit-actions-footer"
+              style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3], marginTop: space[1] }}
+            >
               <Button variant="ghost" onPress={cancelEditing}>
                 {t('cancel')}
               </Button>
@@ -767,7 +777,7 @@ export default function DetailView() {
                 testID="buy-place-input"
               />
             </View>
-            <View style={{ flexDirection: 'row', gap: space[3], marginTop: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3], marginTop: 20 }}>
               <Button variant="ghost" onPress={() => setBuySheetOpen(false)}>
                 {t('cancel')}
               </Button>
@@ -801,7 +811,7 @@ export default function DetailView() {
             <Text style={{ color: colors.ink500, fontSize: 15, marginBottom: 20 }}>
               {t('confirm_delete')}
             </Text>
-            <View style={{ flexDirection: 'row', gap: space[3] }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3] }}>
               <Button variant="ghost" onPress={() => setConfirmDeleteOpen(false)}>
                 {t('cancel')}
               </Button>
@@ -835,6 +845,7 @@ export default function DetailView() {
               value={promoteVerdict}
               onChange={setPromoteVerdict}
               labels={{ yum: t('v_yum'), meh: t('v_meh'), nah: t('v_nah') }}
+              staticRender
             />
             <View style={{ marginTop: 12 }}>
               <Input
@@ -845,7 +856,7 @@ export default function DetailView() {
                 testID="promote-price-input"
               />
             </View>
-            <View style={{ flexDirection: 'row', gap: space[3], marginTop: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3], marginTop: 20 }}>
               <Button variant="ghost" onPress={() => setPromoteSheetOpen(false)}>
                 {t('cancel')}
               </Button>

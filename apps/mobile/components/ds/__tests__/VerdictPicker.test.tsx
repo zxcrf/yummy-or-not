@@ -187,6 +187,57 @@ describe('VerdictPicker — press motion (bouncy 0.95)', () => {
   })
 })
 
+describe('VerdictPicker — staticRender (Modal-safe, no Reanimated)', () => {
+  // Inside a React Native <Modal> on the New Architecture, a flex:1
+  // Reanimated Animated.View fails to lay out its Text children, so the option
+  // boxes render blank (the promote sheet bug). staticRender drops Reanimated
+  // for the option frames; press feedback degrades to an opacity dim applied
+  // via the Pressable's style FUNCTION — which is the observable marker that the
+  // static path is active.
+  it('uses a style function on each option Pressable (opacity press feedback)', () => {
+    const renderer = render({ value: null, onChange: jest.fn(), staticRender: true })
+    const pressables = findPressables(renderer)
+    expect(pressables).toHaveLength(3)
+    for (const p of pressables) {
+      expect(typeof p.props.style).toBe('function')
+    }
+  })
+
+  it('the animated path keeps a non-function (static object) Pressable style', () => {
+    const renderer = render({ value: null, onChange: jest.fn() })
+    const pressables = findPressables(renderer)
+    for (const p of pressables) {
+      expect(typeof p.props.style).not.toBe('function')
+    }
+  })
+
+  it('still renders all three faces and labels in static mode', () => {
+    const renderer = render({
+      value: null,
+      staticRender: true,
+      labels: { yum: '好吃', meh: '一般', nah: '别买' },
+    })
+    const texts = renderer.root
+      .findAll((n) => (n.type as unknown as string) === 'Text')
+      .map((t) => t.props.children as string)
+    expect(texts).toContain('好吃')
+    expect(texts).toContain('一般')
+    expect(texts).toContain('别买')
+    // faces from OPTS
+    expect(texts).toContain('◕‿◕')
+  })
+
+  it('fires onChange from a static option press', () => {
+    const onChange = jest.fn()
+    const renderer = render({ value: null, onChange, staticRender: true })
+    const pressables = findPressables(renderer)
+    act(() => {
+      pressables[2].props.onPress()
+    })
+    expect(onChange).toHaveBeenCalledWith('nah')
+  })
+})
+
 describe('VerdictPicker — style? pass-through', () => {
   it('applies style to the outer row container', () => {
     const renderer = render({
