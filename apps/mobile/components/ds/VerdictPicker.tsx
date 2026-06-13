@@ -170,7 +170,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optBase: {
-    flex: 1,
+    // NOTE: deliberately NOT `flex: 1`. Inside a RN <Modal> wrapped in
+    // react-native-keyboard-controller's <KeyboardStickyView> (an animated
+    // transform container), a `flex:1` box gets measured as zero-content on the
+    // New Architecture and its Text children are never laid out — the verdict
+    // boxes render blank (the promote sheet bug). Equal *width* comes from the
+    // `flex:1` on `optPressable`; the box takes its *height* from content +
+    // padding so the face/label always lay out. All three options have uniform
+    // content (one glyph + a short label) so they stay the same height anyway.
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,

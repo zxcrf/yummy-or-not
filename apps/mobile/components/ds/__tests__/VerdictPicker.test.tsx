@@ -238,6 +238,50 @@ describe('VerdictPicker — staticRender (Modal-safe, no Reanimated)', () => {
   })
 })
 
+describe('VerdictPicker — option box sizes to content, not flex (Modal-blank regression)', () => {
+  // The promote sheet bug: inside a RN <Modal> wrapped in
+  // react-native-keyboard-controller's <KeyboardStickyView> (an animated
+  // transform container), a `flex:1` option box is measured as zero-content on
+  // the New Architecture and its face/label Text children never lay out — the
+  // boxes render blank. #86 wrongly blamed VerdictPicker's own Animated.View and
+  // only added staticRender (plain Views), but kept `flex:1` on the box, so the
+  // boxes stayed blank on device. The real fix is to drop `flex:1` from optBase
+  // so the box takes its HEIGHT from content + padding (equal *width* still comes
+  // from `flex:1` on the outer Pressable). This pins that invariant: a layout
+  // assertion react-test-renderer CAN check (it does not run real layout, so the
+  // visual blank itself is untestable here — this guards the cause).
+  function assertNoFlexOnBox(props: React.ComponentProps<typeof VerdictPicker>) {
+    const renderer = render(props)
+    const optViews = findOptionViews(renderer)
+    expect(optViews).toHaveLength(3)
+    for (const v of optViews) {
+      const flat = StyleSheet.flatten(v.props.style)
+      // The box must NOT stretch via flex — that's what blanks the Text under
+      // the animated sticky container. Height comes from paddingVertical.
+      expect(flat.flex).toBeUndefined()
+      expect(flat.paddingVertical).toBeGreaterThan(0)
+    }
+  }
+
+  it('does not put flex on the option box in animated mode', () => {
+    assertNoFlexOnBox({ value: null, onChange: jest.fn() })
+  })
+
+  it('does not put flex on the option box in static (Modal) mode', () => {
+    assertNoFlexOnBox({ value: null, onChange: jest.fn(), staticRender: true })
+  })
+
+  it('keeps flex:1 on the outer Pressable so widths stay equal thirds', () => {
+    const renderer = render({ value: null, onChange: jest.fn() })
+    const pressables = findPressables(renderer)
+    expect(pressables).toHaveLength(3)
+    for (const p of pressables) {
+      const flat = StyleSheet.flatten(p.props.style)
+      expect(flat.flex).toBe(1)
+    }
+  })
+})
+
 describe('VerdictPicker — style? pass-through', () => {
   it('applies style to the outer row container', () => {
     const renderer = render({
