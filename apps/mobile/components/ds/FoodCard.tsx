@@ -30,6 +30,9 @@ export interface FoodCardProps extends Omit<ViewProps, 'style'> {
   name?: string
   /** Place/vendor name. */
   place?: string
+  /** Optional distance string (e.g. "1.2 km") shown under the place when the
+   *  list is sorted by proximity. Omitted when not sorting by distance. */
+  distanceLabel?: string
   /** Display price string, e.g. "$5.80". */
   price?: string
   /** Nullable for todo rows (status==='todo'). When null, renders todoLabel badge instead of VerdictStamp. */
@@ -87,6 +90,7 @@ export function FoodCard({
   imageKey,
   name,
   place,
+  distanceLabel,
   price,
   verdict = 'yum',
   tags = [],
@@ -180,6 +184,12 @@ export function FoodCard({
           </Text>
         ) : null}
 
+        {distanceLabel ? (
+          <Text style={styles.distanceText}>
+            {distanceLabel}
+          </Text>
+        ) : null}
+
         {normalizedTags.length > 0 || showBought ? (
           <View style={styles.tagsRow}>
             {showBought ? (
@@ -249,6 +259,10 @@ const styles = StyleSheet.create({
   placeText: {
     color: colors.colorMuted,
     fontSize: 13,
+  },
+  distanceText: {
+    color: colors.ink400,
+    fontSize: 12,
   },
   tagsRow: {
     flexDirection: 'row',

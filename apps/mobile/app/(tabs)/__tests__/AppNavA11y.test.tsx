@@ -72,7 +72,6 @@ jest.mock('@/components/ds', () => {
 
 const routes = [
   { name: 'index', key: 'index-key' },
-  { name: 'recall', key: 'recall-key' },
   { name: 'todo', key: 'todo-key' },
   { name: 'you', key: 'you-key' },
 ]
@@ -132,7 +131,7 @@ describe('AppNav sidebar — accessibilityState.selected (finding: VoiceOver can
 
     // Only one nav item should be selected
     const selectedOnes = pressables.filter((p) => p.props.accessibilityState?.selected === true)
-    // There are 4 nav items; exactly 1 should be selected
+    // There are 3 nav items; exactly 1 should be selected
     expect(selectedOnes.length).toBe(1)
   })
 })
@@ -140,7 +139,7 @@ describe('AppNav sidebar — accessibilityState.selected (finding: VoiceOver can
 describe('AppNav tab bar — accessibilityState.selected (finding: TalkBack cannot identify active tab)', () => {
   it('active AnimatedTab has accessibilityState.selected=true', () => {
     // Mobile layout (width < 769)
-    const renderer = renderNav('recall', 390)
+    const renderer = renderNav('index', 390)
 
     const pressables = renderer.root.findAll(
       (n) =>

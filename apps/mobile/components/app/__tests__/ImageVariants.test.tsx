@@ -1,10 +1,11 @@
 /* ============================================================
    Regression tests — image variant fields + disk-cache keys in
-   RecallView + DetailView.
+   RecallResults (the recall row) + DetailView.
 
    Behavior under test:
-   - RecallView thumbnail must use imageThumb (54 px slot), not imageDisplay
-     or image. Legacy rows where only `image` is set fall back to image.
+   - The recall result row thumbnail must use imageThumb (54 px slot), not
+     imageDisplay or image. Legacy rows where only `image` is set fall back
+     to image.
    - DetailView hero must use imageThumb (240 px slot) — reusing the SAME
      (uri, cacheKey) the list card already cached — not imageDisplay or image
      directly. Legacy fallback same: if imageThumb absent, use image.
@@ -32,6 +33,10 @@ jest.mock('@yon/shared', () => ({
   updateTaste: jest.fn(),
   getOriginalPhotoUrl: jest.fn(),
   listTastes: jest.fn(),
+  // RecallResults ranks the pool with searchTastes; return every pool item as a
+  // match so the row (and its thumbnail) renders.
+  searchTastes: (items: Array<unknown>) =>
+    items.map((item, i) => ({ item, score: 1000 - i, strength: 'exact' })),
   ProRequiredError: class ProRequiredError extends Error {
     constructor(msg = 'pro_required') {
       super(msg)
@@ -98,7 +103,7 @@ jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'u1', plan: mockPlan } }),
 }))
 
-// Shared taste hook — RecallView reads its list from here; feed items directly
+// Shared taste hook — DetailView reads its list from here; feed items directly
 // so these tests exercise rendering, not the SWR/AsyncStorage plumbing (which
 // has its own suite). invalidateTastes is a no-op spy for DetailView writes.
 let mockItems: Taste[] = []
@@ -159,11 +164,15 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
 async function renderRecall(
   items: Taste[],
 ): Promise<TestRenderer.ReactTestRenderer> {
-  mockItems = items
+  // The recall row lives in RecallResults, rendered when Library has a query.
+  // Pass the pool directly with a non-trivial query so the top match renders.
   let renderer!: TestRenderer.ReactTestRenderer
   await act(async () => {
     renderer = TestRenderer.create(
-      React.createElement(require('../RecallView').default),
+      React.createElement(require('../RecallResults').RecallResults, {
+        pool: items,
+        query: 'espresso',
+      }),
     )
   })
   return renderer
@@ -186,24 +195,19 @@ function findButtons(renderer: TestRenderer.ReactTestRenderer) {
 const mockedGetTaste = jest.mocked(getTaste)
 const mockedGetOriginalPhotoUrl = jest.mocked(getOriginalPhotoUrl)
 
-// ── RecallView thumbnail tests ───────────────────────────────────────────────
+// ── RecallResults thumbnail tests ────────────────────────────────────────────
 
-describe('RecallView thumbnail source', () => {
-  // Track renderers so afterEach can unmount and flush the 250 ms debounce
-  // timer that RecallView arms on every mount. Without fake timers the real
-  // timer fires after environment teardown on Linux and flips jest exit to 1.
+describe('RecallResults thumbnail source', () => {
+  // Track renderers so afterEach can unmount them after each case.
   const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
 
   beforeEach(() => {
-    jest.useFakeTimers()
     jest.clearAllMocks()
   })
 
   afterEach(() => {
-    act(() => { jest.runAllTimers() })
     act(() => { mountedRenderers.forEach((r) => r.unmount()) })
     mountedRenderers.length = 0
-    jest.useRealTimers()
   })
 
   it('uses imageThumb for the 54 px thumbnail with a stable :thumb cacheKey', async () => {
