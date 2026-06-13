@@ -61,6 +61,9 @@ export interface Taste {
   notes: string;
   lat?: number | null;
   lng?: number | null;
+  /** S3b: the taster persona this record is attributed to. null on legacy rows
+   *  that predate the backfill (treated as the owner's self-taster). */
+  tasterId?: string | null;
   /** Display-quality image URL (presigned R2 or /uploads/... path). "" if none.
    *  Kept as the legacy field name for old-APK compatibility; new code should
    *  prefer imageDisplay for display and imageThumb for list thumbnails. */
@@ -95,6 +98,9 @@ export interface CreateTasteInput {
   image?: string;
   lat?: number | null;
   lng?: number | null;
+  /** S3b: the active client taster to attribute this record to. Omitted → the
+   *  server applies the caller's self-taster (never a wrong persona). */
+  tasterId?: string;
 }
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */
@@ -148,6 +154,12 @@ export interface User {
   warningsEnabled: boolean;
   /** Whether this account allows recording location with new tastes. */
   locationEnabled: boolean;
+  /** S3b-media capability flag: when false the server rejects video / live-photo
+   *  uploads (a still image is always allowed). Independent of `plan`. */
+  mediaEnabled: boolean;
+  /** S3c: default visibility applied to NEW records ('private' | 'shared').
+   *  The You-page "new records default to" row binds this. */
+  defaultVisibility: 'private' | 'shared';
   createdAt: string;
 }
 
@@ -159,6 +171,43 @@ export interface UpdateUserInput {
   locationEnabled?: boolean;
   /** Display name (nickname). Trimmed, 1–50 chars. */
   displayName?: string;
+  /** S3c: default visibility for new records ('private' | 'shared'). */
+  defaultVisibility?: 'private' | 'shared';
+}
+
+/* ----------------------------------------------------------------
+   TASTERS — S3b persona model.
+   A taster is a lightweight profile under an owner account (no separate
+   login), so you can log a partner's / family member's taste without them
+   having the app. Every account has exactly one is_self taster (its own
+   default, undeletable). Multi-taster CRUD is pro-gated server-side.
+   ---------------------------------------------------------------- */
+
+/** A taster persona owned by an account. Mirrors the `tasters` table (camelCase). */
+export interface Taster {
+  id: string;
+  /** The owner account this persona belongs to. */
+  ownerAccountId: string;
+  /** Optional family container this taster is hung under. null if none. */
+  familyId: string | null;
+  displayName: string;
+  avatar: string;
+  /** True for the owner's own default persona (undeletable; the implicit default
+   *  attribution when no taster is chosen). Exactly one per account. */
+  isSelf: boolean;
+  createdAt: string;
+}
+
+/** POST /api/tasters — create a persona (pro only). */
+export interface CreateTasterInput {
+  displayName: string;
+  avatar?: string;
+}
+
+/** PATCH /api/tasters/:id — rename / re-avatar a persona (pro only). */
+export interface UpdateTasterInput {
+  displayName?: string;
+  avatar?: string;
 }
 
 /** Social / OAuth providers we can link an account to. */
@@ -269,6 +318,36 @@ export class ProRequiredError extends Error {
     super("pro_required");
     this.name = "ProRequiredError";
   }
+}
+
+/* ----------------------------------------------------------------
+   S3a — single-card share → import into recipient to-taste.
+   ---------------------------------------------------------------- */
+
+/** Response from POST /api/tastes/:id/share (owner mints a thin token). */
+export interface MintShareResponse {
+  /** The crypto-random, non-enumerable share token. */
+  token: string;
+  /** Deep link to embed in the share text: yummyornot://import/<token>. */
+  deepLink: string;
+  /** Short, token-derived code printed on the card (WeChat-forward fallback). */
+  importCode: string;
+  /** ISO expiry, or null when the token does not expire (owner may still revoke). */
+  expiresAt: string | null;
+}
+
+/** Live preview returned by GET /api/share/:token (source read at request time).
+ *  photoUrl is a SHORT-lived (<=60s) presign of the source ORIGINAL — never the
+ *  owner's persisted/long-lived URL. */
+export interface SharePreview {
+  name: string;
+  place: string;
+  price: string;
+  verdict: Verdict | null;
+  tags: string[];
+  notes: string;
+  /** Short-lived presigned URL to the source photo, or "" when there is none. */
+  photoUrl: string;
 }
 
 /** Canonical filter chips shown in the library (first is the "all" sentinel). */

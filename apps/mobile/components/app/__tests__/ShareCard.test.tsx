@@ -110,6 +110,51 @@ describe('ShareCard', () => {
     expect(tree).toMatch(/#14c46b/) // verdictYum resolved hex
   })
 
+  it('S3a: prints the import code as a visible Text node so it rides the captured PNG', () => {
+    // WeChat strips the deep link from forwarded images, so the code MUST be
+    // rendered onto the card itself — that is the only channel that survives
+    // image-only forwarding. Assert a real <Text> node carries the exact code.
+    const renderer = render(
+      <ShareCard
+        taste={BASE_TASTE}
+        verdictLabel="YUM"
+        brandText="Logged with Yummy or Not"
+        priceText="$5.80"
+        importCode="AB12CD"
+        importCodeHint="Import in Yummy or Not with code"
+      />,
+    )
+
+    const textNodes = renderer.root.findAll((node) => String(node.type) === 'Text')
+    const codeNode = textNodes.find(
+      (n) => String(n.props.children) === 'AB12CD',
+    )
+    expect(codeNode).toBeTruthy()
+
+    const hintNode = textNodes.find(
+      (n) => String(n.props.children) === 'Import in Yummy or Not with code',
+    )
+    expect(hintNode).toBeTruthy()
+  })
+
+  it('S3a: omits the import-code block for the plain (S1) share with no importCode', () => {
+    // The plain PNG share passes no importCode → no code block renders, so the
+    // S3a print path never leaks an empty/stray code onto a non-importable card.
+    const renderer = render(
+      <ShareCard
+        taste={BASE_TASTE}
+        verdictLabel="YUM"
+        brandText="Logged with Yummy or Not"
+        priceText="$5.80"
+      />,
+    )
+    const textNodes = renderer.root.findAll((node) => String(node.type) === 'Text')
+    const codeish = textNodes.find((n) =>
+      /^[2-9A-HJ-NP-Z]{6}$/.test(String(n.props.children ?? '')),
+    )
+    expect(codeish).toBeFalsy()
+  })
+
   it('presigned query string never appears in any Text node children', () => {
     // The source URI (with a presigned query string) lives in the image source
     // prop — that is the correct place for it. What must not happen is the URL

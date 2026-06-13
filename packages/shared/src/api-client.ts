@@ -31,6 +31,11 @@ import type {
   UserTag,
   CreateTagInput,
   RenameTagInput,
+  MintShareResponse,
+  SharePreview,
+  Taster,
+  CreateTasterInput,
+  UpdateTasterInput,
 } from "./types";
 import { ProRequiredError } from "./types";
 
@@ -109,11 +114,14 @@ export async function listTastes(params?: {
    *  Pass 'all' to fetch both tasted + todo (the single shared mobile list),
    *  or 'todo' for the wishlist only. */
   status?: "tasted" | "todo" | "all";
+  /** S3b: restrict to one taster persona's records. */
+  taster?: string;
 }): Promise<Taste[]> {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.filter && params.filter !== "All") qs.set("filter", params.filter);
   if (params?.status) qs.set("status", params.status);
+  if (params?.taster) qs.set("taster", params.taster);
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiFetch<Taste[]>(`/api/tastes${suffix}`);
 }
@@ -157,6 +165,10 @@ export async function createTaste(
     if (input.notes) fd.append("notes", input.notes);
     if (input.lat != null) fd.append("lat", String(input.lat));
     if (input.lng != null) fd.append("lng", String(input.lng));
+    // S3b: keep the active-persona attribution on the photo path too. Without
+    // this, every save WITH a photo silently fell back to the self-taster
+    // regardless of the active taster (the JSON path already sends it).
+    if (input.tasterId) fd.append("tasterId", input.tasterId);
     input.tags?.forEach((t) => fd.append("tags", t));
     return apiFetch<Taste>("/api/tastes", { method: "POST", body: fd });
   }
@@ -287,6 +299,36 @@ export async function renameTag(id: string, input: RenameTagInput): Promise<User
   });
 }
 
+/* ── Tasters (S3b personas) ─────────────────────────────────────────────────── */
+
+/** GET /api/tasters — list the account's taster personas (self + others). */
+export async function getTasters(): Promise<Taster[]> {
+  return apiFetch<Taster[]>("/api/tasters");
+}
+
+/** POST /api/tasters — create a persona. Pro only; throws "pro_required" on 403. */
+export async function createTaster(input: CreateTasterInput): Promise<Taster> {
+  return apiFetch<Taster>("/api/tasters", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** PATCH /api/tasters/:id — rename / re-avatar a persona. Pro only. */
+export async function updateTaster(id: string, input: UpdateTasterInput): Promise<Taster> {
+  return apiFetch<Taster>(`/api/tasters/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** DELETE /api/tasters/:id — remove a persona. Pro only; the self-taster is protected. */
+export async function deleteTaster(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/tasters/${id}`, { method: "DELETE" });
+}
+
 /* ── Repurchase warnings & purchases ───────────────────────────────────────── */
 
 /** POST /api/tastes/:id/purchases — record an additional purchase of a taste.
@@ -323,4 +365,46 @@ export async function updateUser(input: UpdateUserInput): Promise<{ user: User }
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+/* ── S3a share / import ─────────────────────────────────────────────────────── */
+
+/** POST /api/tastes/:id/share — owner mints a thin importable share token.
+ *  Returns { token, deepLink, importCode, expiresAt }. The deepLink + importCode
+ *  are appended to the system share text (alongside the existing PNG card). */
+export async function mintShare(tasteId: string): Promise<MintShareResponse> {
+  return apiFetch<MintShareResponse>(`/api/tastes/${tasteId}/share`, {
+    method: "POST",
+  });
+}
+
+/** DELETE /api/tastes/:id/share — owner revokes outstanding share tokens.
+ *  Revocation is immediate: the server stops issuing preview presigns. */
+export async function revokeShare(tasteId: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/tastes/${tasteId}/share`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /api/share/:token — live preview of a shared taste + short presign.
+ *  A revoked/expired/source-deleted share answers 410, which apiFetch surfaces
+ *  as an Error whose message is "share_gone" for the UI to localize. No auth
+ *  required (the unguessable token is the capability). */
+export async function getSharePreview(token: string): Promise<SharePreview> {
+  return apiFetch<SharePreview>(`/api/share/${token}`);
+}
+
+/** POST /api/share/:token/import — copy the shared taste into the signed-in
+ *  user's library as a status='todo', verdict=null row (copy-on-import).
+ *  Idempotent: a repeat import returns the existing copy. 410 → "share_gone". */
+export async function importShare(token: string): Promise<Taste> {
+  return apiFetch<Taste>(`/api/share/${token}/import`, { method: "POST" });
+}
+
+/** GET /api/share/resolve?code=<importCode> — resolve the printed import code
+ *  (the WeChat-forward fallback) back to a live token. 404 → "share_gone". */
+export async function resolveImportCode(code: string): Promise<{ token: string }> {
+  return apiFetch<{ token: string }>(
+    `/api/share/resolve?code=${encodeURIComponent(code)}`,
+  );
 }

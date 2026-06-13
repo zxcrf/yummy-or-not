@@ -86,7 +86,20 @@ function createSchema() {
       image          text NOT NULL DEFAULT '',
       lat            double precision,
       lng            double precision,
+      taster_id      text,
       created_at     timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+  // S3b (migration 0008): createTaste resolves a self-taster — mirror prod.
+  db.public.none(`
+    CREATE TABLE tasters (
+      id               text PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_account_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      family_id        text,
+      display_name     text NOT NULL,
+      avatar           text NOT NULL DEFAULT '',
+      is_self          boolean NOT NULL DEFAULT false,
+      created_at       timestamptz NOT NULL DEFAULT now()
     );
   `);
   db.public.none(`

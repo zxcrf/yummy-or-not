@@ -12,6 +12,7 @@ import { forwardRef, useEffect } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
 import { Text } from '@/theme'
 import { Image as ExpoImage } from 'expo-image'
+import QRCode from 'react-native-qrcode-svg'
 import type { Taste, Verdict } from '@yon/shared'
 import { VerdictStamp } from '@/components/ds'
 
@@ -28,6 +29,24 @@ export type ShareCardProps = {
   verdictLabel: string
   brandText: string
   priceText: string
+  /**
+   * S3a importable share — the short import code PRINTED on the card so it
+   * survives image-only forwarding (WeChat strips the deep link from forwarded
+   * images, so the printed code is the ONLY channel that reaches the recipient).
+   * Omitted for the plain S1 PNG share, where no code block is rendered.
+   */
+  importCode?: string
+  /** Already-translated hint shown above the printed code (e.g. "Import in
+   *  Yummy or Not with code"). Only used when importCode is set. */
+  importCodeHint?: string
+  /**
+   * S3a 可导入 mode — the https landing URL for the token (e.g.
+   * https://yon.baobao.click/i/<importCode>). When supplied, a QR encoding this
+   * URL is rendered on the card so WeChat "识别图中二维码" jumps straight to the
+   * import landing. OMITTED in pure-PNG mode: the plain image MUST stay
+   * link-free (no scannable link embedded), so no QR is rendered.
+   */
+  landingUrl?: string
   /** Called once the card is ready to capture: image loaded (or no photo). */
   onReady?: () => void
 }
@@ -42,7 +61,7 @@ export type ShareCardProps = {
  * - No photo: fires synchronously via useEffect after first paint.
  */
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
-  { taste, verdictLabel, brandText, priceText, onReady },
+  { taste, verdictLabel, brandText, priceText, importCode, importCodeHint, landingUrl, onReady },
   ref,
 ) {
   const hasPhoto = !!(taste.imageThumb || taste.image)
@@ -116,6 +135,28 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         <View style={styles.brandBadge}>
           <Text style={styles.brandText}>{brandText}</Text>
         </View>
+
+        {/* S3a importable share — the import code is PRINTED here so it rides
+            the captured PNG and survives image-only forwarding (the deep link
+            in the share text does not survive WeChat). This is the must-have
+            delivery channel for the magic-word downgrade path. */}
+        {importCode ? (
+          <View style={styles.importBlock}>
+            {importCodeHint ? (
+              <Text style={styles.importHint}>{importCodeHint}</Text>
+            ) : null}
+            <Text style={styles.importCode}>{importCode}</Text>
+            {/* 可导入 mode only: a QR encoding the https landing URL so WeChat
+                "识别图中二维码" reaches the import landing without the deep link
+                (which forwarded images strip). Pure-PNG mode passes no
+                landingUrl, so no scannable link is ever embedded. */}
+            {landingUrl ? (
+              <View style={styles.qrWrap}>
+                <QRCode value={landingUrl} size={96} backgroundColor="#191017" color="#fff" />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   )
@@ -195,5 +236,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#7a6d76',
     letterSpacing: 0.3,
+  },
+  // Printed import code block — high contrast + monospace-ish spacing so the
+  // code stays legible when the recipient reads it off a forwarded image.
+  importBlock: {
+    marginTop: 10,
+    alignSelf: 'stretch',
+    backgroundColor: '#191017',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 2,
+  },
+  importHint: {
+    fontSize: 10,
+    color: '#d8cfd4',
+    letterSpacing: 0.3,
+  },
+  importCode: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 4,
+  },
+  qrWrap: {
+    marginTop: 8,
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#191017',
   },
 })

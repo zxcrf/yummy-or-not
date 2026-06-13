@@ -88,6 +88,21 @@ export default function RootLayout() {
                       headerShown: false,
                     }}
                   />
+                  {/* S3a — share import landing (deep link import/<token>) + code entry */}
+                  <Stack.Screen
+                    name="import/[token]"
+                    options={{
+                      presentation: 'card',
+                      headerShown: false,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="import-code"
+                    options={{
+                      presentation: 'card',
+                      headerShown: false,
+                    }}
+                  />
                 </Stack>
               </AddTransitionProvider>
             </AppGate>

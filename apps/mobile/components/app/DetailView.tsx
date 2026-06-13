@@ -16,9 +16,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { colors, radius, space } from '@/theme'
 import { Text } from '@/theme'
-import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, encodeShareToken, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
+import * as Clipboard from 'expo-clipboard'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
 import {
@@ -37,6 +38,15 @@ import {
 import { ShareCard } from '@/components/app/ShareCard'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
+
+// S3a 可导入: build the https landing URL encoded as the card QR (识别图中二维码).
+// `/i/<importCode>` mirrors the WeChat-forward fallback resolve path; the host
+// is the API origin (EXPO_PUBLIC_API_URL, burned into the build). Empty host
+// (web same-origin) still yields a usable relative `/i/<code>` for the QR.
+const LANDING_HOST = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/$/, '')
+function landingUrlForCode(importCode: string): string {
+  return `${LANDING_HOST}/i/${importCode}`
+}
 
 export default function DetailView() {
   const { t, formatMoney } = useI18n()
@@ -98,6 +108,17 @@ export default function DetailView() {
   // Share card state — A1.
   const [sharing, setSharing] = useState(false)
   const [sharingAvailable, setSharingAvailable] = useState(false)
+  // S3a: the import code to PRINT on the ShareCard for the importable-share
+  // path (null for the plain S1 PNG share). Set before capture so the code
+  // rides the captured PNG — the only channel that survives image-only
+  // forwarding (WeChat strips the deep link from forwarded images).
+  const [shareImportCode, setShareImportCode] = useState<string | null>(null)
+  // S3a 可导入: the https landing URL (https://host/i/<code>) encoded as a QR on
+  // the card in 可导入 mode. Null in pure-PNG mode → no QR / no scannable link.
+  const [shareLandingUrl, setShareLandingUrl] = useState<string | null>(null)
+  // The two-mode share picker (pure-PNG vs 可导入). Opened by the share-to-friend
+  // button; the user explicitly picks which kind of share to produce.
+  const [shareMenuOpen, setShareMenuOpen] = useState(false)
   const shareCardRef = useRef<RNView>(null)
   // Resolves the onReady race: set by handleShare, called by ShareCard.
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
@@ -126,6 +147,9 @@ export default function DetailView() {
     setOriginalUrl(null)
     setOriginalLoading(false)
     setSharing(false)
+    setShareImportCode(null)
+    setShareLandingUrl(null)
+    setShareMenuOpen(false)
     // Reset repurchase state so taste A's open sheet / typed inputs / remind value
     // don't bleed onto taste B before the data effect catches up.
     setRemind(cached?.warnBeforeBuy ?? false)
@@ -339,32 +363,123 @@ export default function DetailView() {
     setBuySheetOpen(true)
   }
 
-  const handleShare = async () => {
-    if (!item || sharing) return
-    const captureId = item.id
-    setSharing(true)
-    try {
-      // Race: wait for ShareCard image onLoad callback (onReady) against a
-      // 600 ms timeout fallback (no-photo case / already disk-cached thumb).
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          shareReadyResolveRef.current = resolve
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 600)),
-      ])
-      shareReadyResolveRef.current = null
+  // Start the ShareCard readiness race: wait for the image onLoad callback
+  // (onReady) against a 600 ms timeout fallback (no-photo / disk-cached thumb).
+  // Returned synchronously so the timer is scheduled in the SAME tick as the
+  // button press, even when the caller awaits other work (mintShare) first.
+  const waitForShareCardReady = (): Promise<void> =>
+    Promise.race([
+      new Promise<void>((resolve) => {
+        shareReadyResolveRef.current = resolve
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 600)),
+    ])
 
-      // Guard: nav moved to a different taste while we waited — abort silently.
-      if (idRef.current !== captureId) return
-      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
-      if (idRef.current !== captureId) return
-      await Sharing.shareAsync(uri, { mimeType: 'image/png' })
+  // Capture the off-screen ShareCard to a PNG and hand it to the system share
+  // sheet. When `extraText` is set (importable share) it rides in the share
+  // sheet alongside the PNG so the recipient gets the deep link + import code
+  // (S3a). The owner's presigned photo URL is never in the payload — only the
+  // rendered PNG file URI travels. `ready` lets the caller pre-start the race.
+  const captureAndShare = async (ready: Promise<void>, extraText?: string) => {
+    if (!item) return
+    const captureId = item.id
+    await ready
+    shareReadyResolveRef.current = null
+
+    // Guard: nav moved to a different taste while we waited — abort silently.
+    if (idRef.current !== captureId) return
+    const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
+    if (idRef.current !== captureId) return
+    await Sharing.shareAsync(uri, {
+      mimeType: 'image/png',
+      // extraText (deep link + code) is offered to share targets that accept a
+      // subject/text alongside the image. It is BEST-EFFORT only: WeChat strips
+      // it from forwarded images, so it is NOT the delivery channel for the
+      // import code. The code is PRINTED on the captured PNG itself (see
+      // handleImportableShare → shareImportCode → ShareCard) so it always
+      // reaches the recipient regardless of how the image is forwarded.
+      ...(extraText ? { dialogTitle: extraText } : {}),
+    })
+  }
+
+  // ── Pure-PNG share mode ──────────────────────────────────────────────────
+  // The original behavior: capture the off-screen ShareCard → share the PNG.
+  // NO token is minted, NOTHING is written to the clipboard, and the card stays
+  // link-free (no importCode, no QR / landing URL). A pure image must never
+  // carry a scannable link or a copyable 口令 — that is the privacy contract of
+  // this mode.
+  const handleSharePng = async () => {
+    if (!item || sharing) return
+    setShareMenuOpen(false)
+    setSharing(true)
+    setShareImportCode(null)
+    setShareLandingUrl(null)
+    const ready = waitForShareCardReady()
+    try {
+      await captureAndShare(ready)
     } catch {
       Alert.alert(t('share_failed'))
     } finally {
       // Always reset sharing — idRef guard only gates the shareAsync call,
       // not the state reset, so the button is always re-enabled after this.
       setSharing(false)
+      setShareImportCode(null)
+      setShareLandingUrl(null)
+    }
+  }
+
+  // The original top-row "Share" button now uses the pure-PNG mode.
+  const handleShare = handleSharePng
+
+  // ── 可导入 (淘口令) share mode ────────────────────────────────────────────
+  // Mint a thin token, then deliver the importCode through THREE channels so it
+  // reaches the recipient no matter how the share is forwarded:
+  //   1. a collision-resistant 口令 (encodeShareToken) written to the clipboard
+  //      (expo-clipboard) — the app auto-detects it on the recipient's next
+  //      foreground (useShareTokenImport);
+  //   2. the same 口令 + deep link in the system share text;
+  //   3. the importCode PRINTED on the PNG + a QR encoding the https landing URL
+  //      (识别图中二维码) — the channels that survive image-only forwarding (WeChat
+  //      strips the deep link and share text from forwarded images).
+  const handleShareImportable = async () => {
+    if (!item || sharing) return
+    const shareId = item.id
+    setShareMenuOpen(false)
+    setSharing(true)
+    // Start the readiness race synchronously (same tick as the press) so its
+    // 600ms fallback timer is scheduled before we await mintShare — matching
+    // handleSharePng's timing.
+    const ready = waitForShareCardReady()
+    try {
+      const { deepLink, importCode } = await mintShare(item.id)
+      if (idRef.current !== shareId) return
+      // Print the code + render the QR on the card BEFORE capture so the
+      // captured PNG carries both (the channels that survive image-only
+      // forwarding). React commits this re-render synchronously, so they are on
+      // the card by capture time.
+      setShareImportCode(importCode)
+      setShareLandingUrl(landingUrlForCode(importCode))
+      // The collision-resistant 口令 wraps the EXISTING importCode (no new code
+      // space) and is what the recipient's foreground auto-detect parses back
+      // out. We compute it now so it can ride the share text, but we DON'T write
+      // it to the sender's own clipboard until the share actually completes —
+      // see below.
+      const passphrase = encodeShareToken(importCode)
+      // Plain text (not via t() interpolation) so the link/口令 survive verbatim.
+      const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}\n${passphrase}`
+      await captureAndShare(ready, text)
+      // Only NOW write the 口令 to the clipboard. If the user cancelled the
+      // system share sheet (or captureAndShare threw), we never reach here, so
+      // the sender's token does NOT leak into their own clipboard — which would
+      // otherwise auto-import on their next foreground even though nothing was
+      // actually shared.
+      await Clipboard.setStringAsync(passphrase)
+    } catch {
+      Alert.alert(t('share_failed'))
+    } finally {
+      setSharing(false)
+      setShareImportCode(null)
+      setShareLandingUrl(null)
     }
   }
 
@@ -689,6 +804,44 @@ export default function DetailView() {
                   {t('share')}
                 </Button>
               ) : null}
+              {/* S3a — share to a friend: opens a picker for the TWO modes. */}
+              {item.status !== 'todo' && sharingAvailable ? (
+                <Button
+                  variant="secondary"
+                  iconLeft={<Icon name="arrow-right" size={18} />}
+                  disabled={sharing}
+                  onPress={() => setShareMenuOpen((open) => !open)}
+                  testID="share-import-btn"
+                >
+                  {t('share_to_friend')}
+                </Button>
+              ) : null}
+
+              {/* The two explicit share modes (revealed by share-import-btn):
+                  • pure-PNG  — image only, link-free, nothing copied.
+                  • 可导入     — mints a token, copies the 口令, prints code + QR. */}
+              {shareMenuOpen && item.status !== 'todo' && sharingAvailable ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    iconLeft={<Icon name="image" size={18} />}
+                    disabled={sharing}
+                    onPress={handleSharePng}
+                    testID="share-mode-png"
+                  >
+                    {t('share_mode_png')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    iconLeft={<Icon name="arrow-right" size={18} />}
+                    disabled={sharing}
+                    onPress={handleShareImportable}
+                    testID="share-mode-importable"
+                  >
+                    {t('share_mode_importable')}
+                  </Button>
+                </>
+              ) : null}
             </View>
 
             {/* Off-screen ShareCard mount for capture — A1 */}
@@ -704,6 +857,9 @@ export default function DetailView() {
                   verdictLabel={t('v_' + (item.verdict ?? 'yum'))}
                   brandText={t('share_brand_tag')}
                   priceText={item.price ? formatMoney(item.price) : ''}
+                  importCode={shareImportCode ?? undefined}
+                  importCodeHint={shareImportCode ? t('share_card_import_hint') : undefined}
+                  landingUrl={shareLandingUrl ?? undefined}
                   onReady={onShareCardReady}
                 />
               </RNView>

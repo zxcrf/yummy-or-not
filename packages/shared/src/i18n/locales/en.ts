@@ -14,6 +14,7 @@ export const en: Record<string, string> = {
   delete_log: "Delete log", edit: "Edit", del: "Delete", stats_title: "Your stats", saved_amt: "{amt} saved",
   saved_sub: "by skipping repeat “nah” buys", settings: "Settings", set_warnings: "Buy-again warnings",
   set_location: "Record location",
+  set_default_visibility: "New records default to nearby",
   loc_recorded: "Location recorded",
   loc_failed: "Couldn't get location",
   loc_locating: "Locating…",
@@ -64,6 +65,26 @@ export const en: Record<string, string> = {
   share: "Share",
   share_failed: "Couldn't share, try again",
   share_brand_tag: "Logged with Yummy or Not · yon.baobao.click",
+  // S3a — importable share / import landing
+  share_to_friend: "Share to a friend",
+  // The two explicit share modes the share-to-friend button reveals.
+  share_mode_png: "Image only (no link)",
+  share_mode_importable: "Importable (copy code + QR)",
+  share_import_intro: "I tried this — open the link in Yummy or Not to save it to your to-try list:",
+  share_import_code_label: "Import code:",
+  // Printed on the share card itself so it survives image-only forwarding
+  // (e.g. WeChat strips the link). Recipient types it in Yummy or Not → import.
+  share_card_import_hint: "Import in Yummy or Not with code",
+  share_unavailable: "This share is no longer available",
+  share_unavailable_body: "The link may have been revoked or expired.",
+  import_back_home: "Back to home",
+  import_preview_title: "Save this to your to-try list?",
+  import_save_to_todo: "Save to my to-try",
+  import_code_entry: "Enter import code",
+  import_code_hint: "Pasted a Yummy or Not card without the link? Type its import code here.",
+  import_code_placeholder: "e.g. AB12CD",
+  import_code_lookup: "Look up",
+  import_code_not_found: "No share found for that code",
   // B/C
   edit_profile: "Edit nickname",
   display_name_label: "Nickname",

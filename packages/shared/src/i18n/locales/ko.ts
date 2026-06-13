@@ -14,6 +14,7 @@ export const ko: Record<string, string> = {
   delete_log: "기록 삭제", edit: "수정", del: "삭제", stats_title: "내 통계", saved_amt: "{amt} 절약",
   saved_sub: "“별로”인 항목 재구매를 피해서", settings: "설정", set_warnings: "재구매 경고",
   set_location: "위치 기록",
+  set_default_visibility: "새 기록 기본 공개: 주변",
   loc_recorded: "위치 기록됨",
   loc_failed: "위치를 가져올 수 없습니다",
   loc_locating: "위치 확인 중…",

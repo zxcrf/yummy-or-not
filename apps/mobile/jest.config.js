@@ -23,6 +23,10 @@ module.exports = {
     '^expo-secure-store$': '<rootDir>/__mocks__/expo-secure-store.js',
     '^react-native-view-shot$': '<rootDir>/__mocks__/react-native-view-shot.js',
     '^expo-sharing$': '<rootDir>/__mocks__/expo-sharing.js',
+    // S3a 可导入 patch deps — stubbed so tests run before the real packages are
+    // installed; the impl adds expo-clipboard + react-native-qrcode-svg.
+    '^expo-clipboard$': '<rootDir>/__mocks__/expo-clipboard.js',
+    '^react-native-qrcode-svg$': '<rootDir>/__mocks__/react-native-qrcode-svg.js',
     // Map workspace package to its TypeScript source — no build step needed.
     '^@yon/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@yon/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1.ts',

@@ -14,6 +14,7 @@ export const es: Record<string, string> = {
   delete_log: "Eliminar registro", edit: "Editar", del: "Eliminar", stats_title: "Tus datos", saved_amt: "{amt} ahorrados",
   saved_sub: "por no recomprar lo que no valió la pena", settings: "Ajustes", set_warnings: "Avisos de recompra",
   set_location: "Registrar ubicación",
+  set_default_visibility: "Nuevos registros visibles cerca por defecto",
   loc_recorded: "Ubicación registrada",
   loc_failed: "No se pudo obtener la ubicación",
   loc_locating: "Localizando…",

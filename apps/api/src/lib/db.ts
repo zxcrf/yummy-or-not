@@ -2,8 +2,8 @@
 // Uses a globalThis-cached Pool so Next.js hot reloads don't exhaust connections.
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
-import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput } from '@yon/shared';
-import { FILTERS } from '@yon/shared';
+import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput, Taster, CreateTasterInput, UpdateTasterInput } from '@yon/shared';
+import { FILTERS, geohashCellsInRadius, geohashCellsInBbox } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
 import { getSignedPhotoUrl } from './storage';
@@ -232,6 +232,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     notes:         row.notes ?? '',
     lat:           row.lat ?? null,
     lng:           row.lng ?? null,
+    tasterId:      row.taster_id ?? null,
     image:         urls.image,
     imageThumb:    urls.imageThumb,
     imageDisplay:  urls.imageDisplay,
@@ -284,12 +285,16 @@ export async function listTastes(
     q,
     filter,
     status = 'tasted',
+    taster,
   }: {
     q?: string;
     filter?: string;
     /** Lifecycle filter: 'tasted' (DEFAULT — old clients never see todos),
      *  'todo' (wishlist only), or 'all' (no status condition). */
     status?: 'tasted' | 'todo' | 'all';
+    /** S3b: restrict to records attributed to this taster persona. Omitted →
+     *  no taster condition (all of the owner's personas). */
+    taster?: string;
   } = {}
 ): Promise<Taste[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -311,6 +316,20 @@ export async function listTastes(
   if (status !== 'all') {
     values.push(status);
     conditions.push(`status = $${values.length}`);
+  }
+
+  if (taster) {
+    // Scope the taster filter to a persona THIS account owns. The existing
+    // `user_id = $1` conjunct already prevents a cross-user read, but don't
+    // rely on it alone: bind the taster to its owner in the condition itself so
+    // a foreign taster id can never match even if the query is later refactored.
+    values.push(taster);
+    const tasterParam = values.length;
+    values.push(userId);
+    const ownerParam = values.length;
+    conditions.push(
+      `taster_id = (SELECT id FROM tasters WHERE id = $${tasterParam} AND owner_account_id = $${ownerParam})`
+    );
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -335,8 +354,22 @@ export async function getTaste(userId: string, id: string): Promise<Taste | null
   return rows.length ? await rowToTaste(rows[0]) : null;
 }
 
+/** Thrown by createTaste when an explicit tasterId does not belong to the
+ *  calling account (IDOR guard). The route maps `.code` to a 400 error body.
+ *  A thrown error (rather than a union return) keeps the happy-path return type
+ *  a plain Taste for the many existing callers, while still enforcing ownership
+ *  at the DB-helper level — not only at the route. */
+export class CreateTasteError extends Error {
+  constructor(public readonly code: 'invalid_taster') {
+    super(code);
+    this.name = 'CreateTasteError';
+  }
+}
+
 /** Insert a new taste owned by the user, optionally overriding the image URL.
- *  warn_before_buy defaults to true when verdict is 'nah', false otherwise. */
+ *  warn_before_buy defaults to true when verdict is 'nah', false otherwise.
+ *  Throws CreateTasteError('invalid_taster') when an explicit tasterId is not
+ *  owned by userId. */
 export async function createTaste(
   userId: string,
   input: CreateTasteInput,
@@ -370,11 +403,28 @@ export async function createTaste(
       ? input.lng
       : null;
 
+  // S3b: attribute the record to the active taster. An explicit tasterId (the
+  // client's active persona) must belong to THIS account — otherwise an
+  // authenticated user could stamp a record onto a foreign persona (IDOR). The
+  // DB FK only requires the taster to exist globally, so verify ownership here
+  // before insert. No explicit tasterId → fall back to the owner's self-taster
+  // so every row is attributed (never NULL on a fresh insert). The self-taster
+  // is auto-created on registration but ensure it here too so a pre-S3b account
+  // that hasn't been touched still resolves to a stable id.
+  let tasterId: string;
+  if (input.tasterId) {
+    const owned = await getTaster(userId, input.tasterId);
+    if (!owned) throw new CreateTasteError('invalid_taster');
+    tasterId = owned.id;
+  } else {
+    tasterId = (await ensureSelfTaster(userId)).id;
+  }
+
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng, taster_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng]
+    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng, tasterId]
   );
   // New taste has no purchases yet — pass empty aggregates directly.
   const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
@@ -520,6 +570,436 @@ export async function getStats(userId: string): Promise<Stats> {
   };
 }
 
+// ── Tasters & families (S3b) ──────────────────────────────────────────────────
+
+/** Map a tasters row (snake_case) → the client-facing Taster (camelCase). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToTaster(row: any): Taster {
+  return {
+    id:             row.id,
+    ownerAccountId: row.owner_account_id,
+    familyId:       row.family_id ?? null,
+    displayName:    row.display_name ?? '',
+    avatar:         row.avatar ?? '',
+    isSelf:         Boolean(row.is_self),
+    createdAt:      new Date(row.created_at).toISOString(),
+  };
+}
+
+/** Return the owner's is_self taster, creating it on first call. Idempotent:
+ *  a repeat call returns the SAME row (never mints a second self-taster). Called
+ *  on registration (auto-create) and as the createTaste self-default fallback. */
+export async function ensureSelfTaster(userId: string): Promise<Taster> {
+  const existing = await pool.query(
+    'SELECT * FROM tasters WHERE owner_account_id = $1 AND is_self = true LIMIT 1',
+    [userId]
+  );
+  if (existing.rows.length) return rowToTaster(existing.rows[0]);
+
+  // Name the self-taster after the account's display_name when present.
+  const u = await pool.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+  const name = (u.rows[0]?.display_name as string | undefined)?.trim() || 'Me';
+  // Race-safe insert. The SELECT above usually decides, but two concurrent
+  // first-saves (or registration racing the first POST) can both miss it and
+  // try to insert. The tasters_one_self_per_owner partial unique index makes the
+  // loser's INSERT raise a unique violation; catch it and re-SELECT the winner's
+  // row so both callers get the SAME id (no duplicate self-tasters → no split
+  // attribution downstream). Catching the violation rather than using ON CONFLICT
+  // (owner_account_id) WHERE is_self avoids the partial-index arbiter clause,
+  // which behaves identically on real Postgres and the pg-mem test adapter.
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO tasters (owner_account_id, display_name, is_self) VALUES ($1, $2, true) RETURNING *`,
+      [userId, name]
+    );
+    return rowToTaster(rows[0]);
+  } catch (err) {
+    // Postgres unique_violation = 23505. The concurrent caller won; re-read it.
+    if ((err as { code?: string })?.code !== '23505') throw err;
+    const winner = await pool.query(
+      'SELECT * FROM tasters WHERE owner_account_id = $1 AND is_self = true LIMIT 1',
+      [userId]
+    );
+    if (!winner.rows.length) throw err;
+    return rowToTaster(winner.rows[0]);
+  }
+}
+
+/** Migration 0008 backfill (also runnable from app code / a one-off script):
+ *  give every user exactly one is_self taster and point each of their
+ *  still-unattributed tastes at it. Idempotent — re-running creates no
+ *  duplicate self-tasters and never re-points an already-attributed row. */
+export async function backfillSelfTasters(): Promise<void> {
+  const { rows: users } = await pool.query('SELECT id FROM users');
+  for (const u of users as Array<{ id: string }>) {
+    const self = await ensureSelfTaster(u.id);
+    await pool.query(
+      'UPDATE tastes SET taster_id = $1 WHERE user_id = $2 AND taster_id IS NULL',
+      [self.id, u.id]
+    );
+  }
+}
+
+/** List all personas owned by the account (self first, then newest). */
+export async function listTasters(userId: string): Promise<Taster[]> {
+  const { rows } = await pool.query(
+    'SELECT * FROM tasters WHERE owner_account_id = $1 ORDER BY is_self DESC, created_at ASC',
+    [userId]
+  );
+  return rows.map(rowToTaster);
+}
+
+/** Fetch a single taster owned by the account, or null. */
+export async function getTaster(userId: string, id: string): Promise<Taster | null> {
+  const { rows } = await pool.query(
+    'SELECT * FROM tasters WHERE id = $1 AND owner_account_id = $2',
+    [id, userId]
+  );
+  return rows.length ? rowToTaster(rows[0]) : null;
+}
+
+/** Create a non-self persona under the account. (Pro gating is enforced at the
+ *  route layer — this helper is unconditional so the self-taster auto-create
+ *  path stays usable.) */
+export async function createTaster(
+  userId: string,
+  input: CreateTasterInput
+): Promise<Taster> {
+  const { rows } = await pool.query(
+    `INSERT INTO tasters (owner_account_id, display_name, avatar, is_self)
+     VALUES ($1, $2, $3, false) RETURNING *`,
+    [userId, input.displayName.trim(), input.avatar ?? '']
+  );
+  return rowToTaster(rows[0]);
+}
+
+/** Patch a persona owned by the account; returns the updated row or null. */
+export async function updateTaster(
+  userId: string,
+  id: string,
+  patch: UpdateTasterInput
+): Promise<Taster | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+
+  if (patch.displayName !== undefined) {
+    values.push(patch.displayName.trim());
+    setClauses.push(`display_name = $${values.length}`);
+  }
+  if (patch.avatar !== undefined) {
+    values.push(patch.avatar);
+    setClauses.push(`avatar = $${values.length}`);
+  }
+  if (setClauses.length === 0) return getTaster(userId, id);
+
+  values.push(id);
+  const idParam = values.length;
+  values.push(userId);
+  const ownerParam = values.length;
+  const { rows } = await pool.query(
+    `UPDATE tasters SET ${setClauses.join(', ')} WHERE id = $${idParam} AND owner_account_id = $${ownerParam} RETURNING *`,
+    values
+  );
+  return rows.length ? rowToTaster(rows[0]) : null;
+}
+
+/** Delete a persona owned by the account. Returns true if a row was deleted.
+ *  Refuses to drop a self-taster (the route also guards this, defence in depth).
+ *  Tastes attributed to it keep their data (FK is ON DELETE SET NULL). */
+export async function deleteTaster(userId: string, id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM tasters WHERE id = $1 AND owner_account_id = $2 AND is_self = false',
+    [id, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+// ── S3c: geo visibility + targeted publish + heat ─────────────────────────────
+
+/** A targeted-publish instruction handed to setTasteVisibility. For 'geo' the
+ *  route precomputes the coarsened gridCell + supplies the precise lat/lng for the
+ *  geography point (the DOUBLE-WRITE). For 'family'/'member' only targetId is set. */
+export interface VisibilityTarget {
+  type: 'geo' | 'family' | 'member';
+  /** geo only: precise coordinate to materialize as geog. */
+  lat?: number;
+  lng?: number;
+  /** geo only: precomputed precision-5 geohash (the coarsened cell). */
+  gridCell?: string;
+  /** family/member only: family_id or member (taster_id). */
+  targetId?: string | null;
+}
+
+/** A coarsened, anonymous geo-feed card. NEVER carries precise coords, owner
+ *  identity, or precise address — only the privacy-safe grid_cell + display
+ *  fields. This is the ONLY shape the cross-user geo feeds may return. */
+export interface GeoFeedCard {
+  id: string;
+  name: string;
+  verdict: string | null;
+  image: string;
+  imageThumb: string;
+  imageDisplay: string;
+  gridCell: string;
+}
+
+/** SELECT list shared by the coarsened geo feeds: the taste's display fields +
+ *  the share's grid_cell. Deliberately omits ts.geog, t.lat, t.lng, t.user_id,
+ *  t.place — anything that would deanonymize the card. */
+const GEO_FEED_COLUMNS = `t.id, t.name, t.verdict, t.image, ts.grid_cell`;
+
+async function rowToGeoFeedCard(row: {
+  id: string;
+  name: string;
+  verdict: string | null;
+  image: string | null;
+  grid_cell: string | null;
+}): Promise<GeoFeedCard> {
+  const urls = await resolvePhotoUrls(row.image);
+  return {
+    id: row.id,
+    name: row.name,
+    verdict: row.verdict ?? null,
+    image: urls.image,
+    imageThumb: urls.imageThumb,
+    imageDisplay: urls.imageDisplay,
+    gridCell: row.grid_cell ?? '',
+  };
+}
+
+/** Return the subset of `targetIds` that the caller does NOT own as either a
+ *  taster (member target) or a family (family target). Used by the visibility
+ *  route to reject publishing to an arbitrary/foreign target_id (record
+ *  poisoning): a pro user could otherwise write a taste_shares row targeted at
+ *  `some_other_user_id` and have it surface in that account's family feed.
+ *
+ *  S3c scope (no real cross-account membership): a valid family/member target is
+ *  one of the caller's OWN personas (tasters.owner_account_id = caller) or OWN
+ *  family containers (families.owner_id = caller). Anything else is unowned →
+ *  the route 422s it. An empty input returns []. */
+export async function findUnownedShareTargets(
+  userId: string,
+  targetIds: string[],
+): Promise<string[]> {
+  const unique = Array.from(new Set(targetIds.filter((t) => typeof t === 'string' && t.length > 0)));
+  if (unique.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT id FROM tasters  WHERE owner_account_id = $1 AND id = ANY($2::text[])
+     UNION
+     SELECT id FROM families WHERE owner_id         = $1 AND id = ANY($2::text[])`,
+    [userId, unique],
+  );
+  const owned = new Set(rows.map((r) => String(r.id)));
+  return unique.filter((t) => !owned.has(t));
+}
+
+/** Targeted publish: write taste_shares rows for the given targets and flip the
+ *  taste to visibility='shared'. Ownership-checked (the taste must belong to
+ *  userId). Returns the updated Taste, or null if the taste is not owned by the
+ *  caller. geo targets DOUBLE-WRITE geog (from lat/lng) + grid_cell.
+ *
+ *  Idempotent at the taste level: re-publishing replaces this owner's existing
+ *  shares for the taste so a second PATCH doesn't pile up duplicate rows. */
+export async function setTasteVisibility(
+  userId: string,
+  id: string,
+  targets: VisibilityTarget[],
+): Promise<Taste | null> {
+  // Ownership gate — the route already checks, but enforce at the helper too so a
+  // foreign taste can never be published even if a future caller skips the route.
+  const { rows: owned } = await pool.query(
+    'SELECT id FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  );
+  if (!owned.length) return null;
+
+  // Geo consistency guard (defence in depth — the route also 422s a coord-less
+  // geo publish): a geo target MUST carry both a precise point and a coarsened
+  // grid_cell. The migration's CHECK forbids a geo row with null geog/grid_cell,
+  // so writing one would throw mid-loop; reject up front instead of leaving a
+  // half-written publish. This protects future callers that skip the route guard.
+  for (const target of targets) {
+    if (target.type === 'geo') {
+      const hasPoint = typeof target.lat === 'number' && typeof target.lng === 'number';
+      if (!hasPoint || !target.gridCell) {
+        throw new Error('setTasteVisibility: geo target requires lat, lng, and gridCell');
+      }
+    }
+  }
+
+  // Atomic publish: DELETE old shares + INSERT new + flip visibility must all
+  // commit together. Without the transaction a crash between steps leaves the
+  // taste marked 'shared' with no share rows (or stale shares with the flag),
+  // i.e. an inconsistent visibility state that leaks or hides the wrong rows.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Replace this taste's existing shares so re-publishing is idempotent.
+    await client.query('DELETE FROM taste_shares WHERE taste_id = $1 AND owner_id = $2', [id, userId]);
+
+    for (const target of targets) {
+      if (target.type === 'geo') {
+        // DOUBLE-WRITE: geog from the precise point, grid_cell coarsened. ST_MakePoint
+        // takes (lng, lat). The cast to geography sets SRID 4326.
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO taste_shares (taste_id, owner_id, target_type, geog, grid_cell)
+           VALUES ($1, $2, 'geo', ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)`,
+          [id, userId, target.lng, target.lat, target.gridCell],
+        );
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO taste_shares (taste_id, owner_id, target_type, target_id)
+           VALUES ($1, $2, $3, $4)`,
+          [id, userId, target.type, target.targetId ?? null],
+        );
+      }
+    }
+
+    await client.query(`UPDATE tastes SET visibility = 'shared' WHERE id = $1 AND user_id = $2`, [id, userId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getTaste(userId, id);
+}
+
+/** Cross-user GEO radius feed. Returns COARSENED cards for every PUBLISHED
+ *  ('shared') geo taste whose grid_cell falls within the cells covering the
+ *  query circle. visibility='shared' is the bypass-proof filter: a private /
+ *  unpublished taste is never returned regardless of distance.
+ *
+ *  PRIVACY INVARIANT (S3c): this feed must NOT filter on the precise `ts.geog`.
+ *  A precise ST_DWithin against an attacker-chosen tiny radius is a binary-search
+ *  oracle that recovers exact coordinates even when the RESPONSE is coarsened.
+ *  Instead we quantize the query to the SET of geohash-5 cells it covers and
+ *  filter `grid_cell = ANY(cells)`. The finest resolution any radius can yield
+ *  is then one ~5 km cell — two shares in the same cell are indistinguishable.
+ *  The response still carries grid_cell only, never precise coords or identity. */
+export async function listGeoFeedNear(q: {
+  lat: number;
+  lng: number;
+  radiusM: number;
+}): Promise<GeoFeedCard[]> {
+  const cells = geohashCellsInRadius(q.lat, q.lng, q.radiusM, 5);
+  if (cells.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT ${GEO_FEED_COLUMNS}
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ts.grid_cell = ANY($1::text[])
+      ORDER BY t.created_at DESC`,
+    [cells],
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
+/** Cross-user GEO feed for one grid cell. Returns COARSENED cards for every
+ *  PUBLISHED geo taste whose share landed in `cell`. Same visibility filter +
+ *  same anonymous shape as the radius feed. */
+export async function listGeoFeedByCell(cell: string): Promise<GeoFeedCard[]> {
+  const { rows } = await pool.query(
+    `SELECT ${GEO_FEED_COLUMNS}
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ts.grid_cell = $1
+      ORDER BY t.created_at DESC`,
+    [cell],
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
+/** Minimum shares in a grid cell before its heat bucket is published. Buckets
+ *  below this are SUPPRESSED (k-anonymity): a count of 1 in a ~5 km cell is close
+ *  to pinpointing a single person; only aggregates of ≥3 surface. */
+export const HEAT_MIN_COUNT = 3;
+
+/** Grid heat aggregation: count of PUBLISHED geo shares per grid_cell within a
+ *  bounding box. Drives the heat map. Returns ONLY { cell, count } — no records,
+ *  no coords, no identity.
+ *
+ *  PRIVACY INVARIANT (S3c): like the radius feed, this must NOT filter on the
+ *  precise `ts.geog`. ST_Intersects against an attacker-shrunk envelope is a
+ *  binary-search oracle that recovers exact coordinates. Instead we quantize the
+ *  bbox to the SET of geohash-5 cells it covers and filter `grid_cell = ANY(...)`
+ *  — the finest spatial resolution is one cell. A k-anonymity floor
+ *  (HAVING COUNT(*) >= HEAT_MIN_COUNT) suppresses cells with too few shares so a
+ *  surviving bucket never points at a single person. */
+export async function geoHeat(bbox: {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}): Promise<Array<{ cell: string; count: number }>> {
+  const cells = geohashCellsInBbox(
+    { minLat: bbox.minLat, maxLat: bbox.maxLat, minLng: bbox.minLng, maxLng: bbox.maxLng },
+    5,
+  );
+  if (cells.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT ts.grid_cell AS cell, COUNT(*)::int AS count
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ts.grid_cell = ANY($1::text[])
+      GROUP BY ts.grid_cell
+     HAVING COUNT(*) >= $2
+      ORDER BY ts.grid_cell ASC`,
+    [cells, HEAT_MIN_COUNT],
+  );
+  return rows.map((r) => ({ cell: String(r.cell), count: Number(r.count) }));
+}
+
+/** Family / member feed: tastes the viewer is allowed to see via a family/member
+ *  targeted publish. `member` (a taster/member id) narrows to one target. Only
+ *  PUBLISHED ('shared') rows are ever returned.
+ *
+ *  VIEWER SCOPING (IDOR boundary — plan §S3c "family/member feed 均不得泄漏"):
+ *  in S3c tasters are personas under the OWNER's account with NO real
+ *  cross-account membership (plan: 真实账号互联…不在本期). The only legitimate
+ *  reader of a family/member share is therefore the OWNER who published it,
+ *  viewing their own personas' shares. We bind `ts.owner_id = $viewerId` so a
+ *  caller can ONLY ever see their own rows — without this predicate every
+ *  authenticated user would read every owner's family/member-targeted tastes
+ *  across the whole platform. When a real cross-account membership model lands,
+ *  this is where an explicit membership lookup would replace the owner check;
+ *  never return family/member rows with no owner/viewer predicate. */
+export async function listFamilyFeed(q: {
+  viewerId: string;
+  member?: string;
+}): Promise<GeoFeedCard[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const values: any[] = [q.viewerId];
+  const conditions: string[] = [
+    `ts.owner_id = $1`,
+    `ts.target_type IN ('family','member')`,
+    `t.visibility = 'shared'`,
+  ];
+  if (q.member) {
+    values.push(q.member);
+    conditions.push(`ts.target_id = $${values.length}`);
+  }
+  const { rows } = await pool.query(
+    `SELECT t.id, t.name, t.verdict, t.image, NULL AS grid_cell
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY t.created_at DESC`,
+    values,
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
 // ── Users & auth ────────────────────────────────────────────────────────────
 
 /** Map a users row → the client-safe User (never includes password_hash). */
@@ -535,6 +1015,8 @@ function rowToUser(row: any): User {
     plan:            row.plan ?? 'free',
     warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
     locationEnabled: row.location_enabled != null ? Boolean(row.location_enabled) : false,
+    mediaEnabled:    row.media_enabled != null ? Boolean(row.media_enabled) : false,
+    defaultVisibility: row.default_visibility === 'shared' ? 'shared' : 'private',
     createdAt:       new Date(row.created_at).toISOString(),
   };
 }
@@ -581,7 +1063,12 @@ export async function createUser(input: {
       input.plan ?? 'free',
     ]
   );
-  return rowToUser(rows[0]);
+  const user = rowToUser(rows[0]);
+  // S3b: every new account gets its self-taster up front, so its records are
+  // attributed from the very first save (idempotent — the createTaste fallback
+  // also ensures one for pre-S3b accounts).
+  await ensureSelfTaster(user.id);
+  return user;
 }
 
 /** Phone-OTP login: return the existing user for this phone, or create one. */
@@ -975,6 +1462,10 @@ export async function updateUserSettings(
     values.push(input.displayName);
     setClauses.push(`display_name = $${values.length}`);
   }
+  if (input.defaultVisibility !== undefined) {
+    values.push(input.defaultVisibility);
+    setClauses.push(`default_visibility = $${values.length}`);
+  }
 
   if (setClauses.length === 0) return findUserById(userId);
 
@@ -1034,3 +1525,17 @@ export async function listTastePurchases(
   );
   return rows.map(rowToPurchase);
 }
+
+// ── S3a share / import ────────────────────────────────────────────────────────
+// The share helpers live in share-db.ts (thin pointer + copy-on-import) but are
+// re-exported here so route handlers import them from '@/lib/db' alongside
+// getTaste/getRawImage — the single DB entry point the route layer mocks.
+export {
+  createShareToken,
+  getShareToken,
+  revokeShareToken,
+  resolveImportCode,
+  importSharedTaste,
+  type ShareTokenRow,
+  type ImportResult,
+} from './share-db';

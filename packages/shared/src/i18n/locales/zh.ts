@@ -14,6 +14,7 @@ export const zh: Record<string, string> = {
   delete_log: "删除记录", edit: "编辑", del: "删除", stats_title: "你的统计", saved_amt: "省下 {amt}",
   saved_sub: "靠避免重复买“别买”的东西", settings: "设置", set_warnings: "重复购买提醒",
   set_location: "记录位置",
+  set_default_visibility: "新记录默认公开到附近",
   loc_recorded: "位置已记录",
   loc_failed: "定位失败，可手动填写",
   loc_locating: "定位中…",
@@ -64,6 +65,26 @@ export const zh: Record<string, string> = {
   share: "分享",
   share_failed: "分享失败，请重试",
   share_brand_tag: "记录于 Yummy or Not · yon.baobao.click",
+  // S3a — 可导入分享 / 导入落地页
+  share_to_friend: "分享给朋友",
+  // 分享给朋友按钮展开的两种分享模式。
+  share_mode_png: "仅图片（无链接）",
+  share_mode_importable: "可导入（复制口令 + 二维码）",
+  share_import_intro: "我吃了这个，用 Yummy or Not 打开链接就能存进你的想吃清单：",
+  share_import_code_label: "导入码：",
+  // 直接印在分享卡片上，图片被转发后（如微信吃掉链接）仍可用：
+  // 对方在 Yummy or Not 里输入此码即可导入。
+  share_card_import_hint: "在 Yummy or Not 输入导入码",
+  share_unavailable: "该分享已不可用",
+  share_unavailable_body: "链接可能已被撤销或过期。",
+  import_back_home: "返回首页",
+  import_preview_title: "把它存进你的想吃清单？",
+  import_save_to_todo: "存入我的想吃",
+  import_code_entry: "输入导入码",
+  import_code_hint: "收到的 Yummy or Not 卡片没有链接？在这里输入卡片上的导入码。",
+  import_code_placeholder: "例如 AB12CD",
+  import_code_lookup: "查找",
+  import_code_not_found: "没有找到对应的分享",
   // B/C
   edit_profile: "编辑昵称",
   display_name_label: "昵称",

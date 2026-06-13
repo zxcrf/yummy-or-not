@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest) {
     const hasWarnings = Object.prototype.hasOwnProperty.call(body ?? {}, 'warningsEnabled');
     const hasLocation = Object.prototype.hasOwnProperty.call(body ?? {}, 'locationEnabled');
     const hasDisplayName = Object.prototype.hasOwnProperty.call(body ?? {}, 'displayName');
+    const hasVisibility = Object.prototype.hasOwnProperty.call(body ?? {}, 'defaultVisibility');
 
     if (hasWarnings && typeof body?.warningsEnabled !== 'boolean') {
       return withCors(
@@ -49,7 +50,13 @@ export async function PATCH(req: NextRequest) {
         );
       }
     }
-    if (!hasWarnings && !hasLocation && !hasDisplayName) {
+    if (hasVisibility && body?.defaultVisibility !== 'private' && body?.defaultVisibility !== 'shared') {
+      return withCors(
+        NextResponse.json({ error: 'invalid_default_visibility' }, { status: 400 }),
+        origin
+      );
+    }
+    if (!hasWarnings && !hasLocation && !hasDisplayName && !hasVisibility) {
       return withCors(
         NextResponse.json({ error: 'warningsEnabled or locationEnabled must be a boolean' }, { status: 400 }),
         origin
@@ -60,6 +67,7 @@ export async function PATCH(req: NextRequest) {
       ...(hasWarnings ? { warningsEnabled: body.warningsEnabled } : {}),
       ...(hasLocation ? { locationEnabled: body.locationEnabled } : {}),
       ...(hasDisplayName ? { displayName: (body.displayName as string).trim() } : {}),
+      ...(hasVisibility ? { defaultVisibility: body.defaultVisibility as 'private' | 'shared' } : {}),
     });
     if (!updated) {
       return withCors(NextResponse.json({ error: 'not_found' }, { status: 404 }), origin);
