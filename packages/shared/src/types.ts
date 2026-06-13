@@ -157,6 +157,9 @@ export interface User {
   /** S3b-media capability flag: when false the server rejects video / live-photo
    *  uploads (a still image is always allowed). Independent of `plan`. */
   mediaEnabled: boolean;
+  /** S3c: default visibility applied to NEW records ('private' | 'shared').
+   *  The You-page "new records default to" row binds this. */
+  defaultVisibility: 'private' | 'shared';
   createdAt: string;
 }
 
@@ -168,6 +171,8 @@ export interface UpdateUserInput {
   locationEnabled?: boolean;
   /** Display name (nickname). Trimmed, 1–50 chars. */
   displayName?: string;
+  /** S3c: default visibility for new records ('private' | 'shared'). */
+  defaultVisibility?: 'private' | 'shared';
 }
 
 /* ----------------------------------------------------------------

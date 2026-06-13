@@ -1,5 +1,6 @@
 -- Yummy or Not — multi-user schema.
 -- Drops in dependency order so a re-run is a clean rebuild.
+DROP TABLE IF EXISTS taste_shares;
 DROP TABLE IF EXISTS promo_redemptions;
 DROP TABLE IF EXISTS promo_codes;
 -- S3a share/import tables reference tastes + users, so they must drop BEFORE
@@ -18,6 +19,11 @@ DROP TABLE IF EXISTS rate_limits;
 DROP TABLE IF EXISTS tastes;
 DROP TABLE IF EXISTS users;
 
+-- PostGIS (S3c) — geography type + ST_DWithin for the cross-user geo radius feed.
+-- IF NOT EXISTS so a re-run / restore is safe; declared first because taste_shares
+-- below uses geography(Point,4326).
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- ── Users ──────────────────────────────────────────────────────────────────
 -- A user is identified by a phone (domestic habit) and/or an email
 -- (international habit). Either can be null; at least one auth handle exists.
@@ -34,6 +40,8 @@ CREATE TABLE users (
   location_enabled boolean     NOT NULL DEFAULT false,
   -- S3b-media capability flag (NOT a plan-enum change): gates video/live-photo uploads.
   media_enabled    boolean     NOT NULL DEFAULT false,
+  -- S3c: default visibility for NEW records (the You-page row binds this).
+  default_visibility text      NOT NULL DEFAULT 'private' CHECK (default_visibility IN ('private', 'shared')),
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
@@ -106,6 +114,8 @@ CREATE TABLE tastes (
   -- S3b: attribute a taste to a taster persona (nullable; defaults to the
   -- owner's self-taster, backfilled). FK declared after the tasters table below.
   taster_id      text,
+  -- S3c: 'private' (default — never in any cross-user feed) or 'shared' (≥1 publish).
+  visibility     text        NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'shared')),
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tastes_status_verdict_check CHECK (status <> 'tasted' OR verdict IS NOT NULL)
 );
@@ -147,6 +157,31 @@ CREATE INDEX tastes_user_status_created_idx ON tastes (user_id, status, created_
 
 -- Fast tag filtering
 CREATE INDEX tastes_tags_gin_idx ON tastes USING GIN (tags);
+
+-- ── Targeted publish (S3c — geo / family / member) ────────────────────────────
+-- One taste may be published to several targets. geo publish DOUBLE-WRITES geog
+-- (PostGIS radius query engine) + grid_cell (geohash precision 5 — heat bucket +
+-- the coarsened position shown to others). geog = query, grid_cell = display/privacy.
+CREATE TABLE taste_shares (
+  id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  taste_id    text        NOT NULL REFERENCES tastes(id) ON DELETE CASCADE,
+  owner_id    text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  target_type text        NOT NULL CHECK (target_type IN ('geo', 'family', 'member')),
+  target_id   text,                              -- family_id / member; NULL for geo
+  geog        geography(Point, 4326),            -- geo only — ST_DWithin radius query
+  grid_cell   text,                              -- geo only — geohash p5 (coarsened)
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  -- Geo consistency: a geo share MUST carry both geog (radius engine) and
+  -- grid_cell (heat + coarsened display). Forbids a half-written geo row at the
+  -- DB. Non-geo rows are unconstrained (they carry neither). Mirrors migration
+  -- 0009's taste_shares_geo_complete so a fresh schema and a migrated DB match.
+  CONSTRAINT taste_shares_geo_complete
+    CHECK (target_type != 'geo' OR (geog IS NOT NULL AND grid_cell IS NOT NULL))
+);
+-- GiST radius index, scoped to geo rows (only they carry geog).
+CREATE INDEX taste_shares_geog_idx   ON taste_shares USING GIST (geog) WHERE target_type = 'geo';
+CREATE INDEX taste_shares_grid_idx   ON taste_shares (grid_cell)       WHERE target_type = 'geo';
+CREATE INDEX taste_shares_target_idx ON taste_shares (target_type, target_id);
 
 -- ── Promo codes ──────────────────────────────────────────────────────────────
 -- A code grants a plan (e.g. 'pro') when redeemed — at sign-up

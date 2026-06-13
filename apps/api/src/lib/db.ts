@@ -714,6 +714,269 @@ export async function deleteTaster(userId: string, id: string): Promise<boolean>
   return (rowCount ?? 0) > 0;
 }
 
+// ── S3c: geo visibility + targeted publish + heat ─────────────────────────────
+
+/** A targeted-publish instruction handed to setTasteVisibility. For 'geo' the
+ *  route precomputes the coarsened gridCell + supplies the precise lat/lng for the
+ *  geography point (the DOUBLE-WRITE). For 'family'/'member' only targetId is set. */
+export interface VisibilityTarget {
+  type: 'geo' | 'family' | 'member';
+  /** geo only: precise coordinate to materialize as geog. */
+  lat?: number;
+  lng?: number;
+  /** geo only: precomputed precision-5 geohash (the coarsened cell). */
+  gridCell?: string;
+  /** family/member only: family_id or member (taster_id). */
+  targetId?: string | null;
+}
+
+/** A coarsened, anonymous geo-feed card. NEVER carries precise coords, owner
+ *  identity, or precise address — only the privacy-safe grid_cell + display
+ *  fields. This is the ONLY shape the cross-user geo feeds may return. */
+export interface GeoFeedCard {
+  id: string;
+  name: string;
+  verdict: string | null;
+  image: string;
+  imageThumb: string;
+  imageDisplay: string;
+  gridCell: string;
+}
+
+/** SELECT list shared by the coarsened geo feeds: the taste's display fields +
+ *  the share's grid_cell. Deliberately omits ts.geog, t.lat, t.lng, t.user_id,
+ *  t.place — anything that would deanonymize the card. */
+const GEO_FEED_COLUMNS = `t.id, t.name, t.verdict, t.image, ts.grid_cell`;
+
+async function rowToGeoFeedCard(row: {
+  id: string;
+  name: string;
+  verdict: string | null;
+  image: string | null;
+  grid_cell: string | null;
+}): Promise<GeoFeedCard> {
+  const urls = await resolvePhotoUrls(row.image);
+  return {
+    id: row.id,
+    name: row.name,
+    verdict: row.verdict ?? null,
+    image: urls.image,
+    imageThumb: urls.imageThumb,
+    imageDisplay: urls.imageDisplay,
+    gridCell: row.grid_cell ?? '',
+  };
+}
+
+/** Return the subset of `targetIds` that the caller does NOT own as either a
+ *  taster (member target) or a family (family target). Used by the visibility
+ *  route to reject publishing to an arbitrary/foreign target_id (record
+ *  poisoning): a pro user could otherwise write a taste_shares row targeted at
+ *  `some_other_user_id` and have it surface in that account's family feed.
+ *
+ *  S3c scope (no real cross-account membership): a valid family/member target is
+ *  one of the caller's OWN personas (tasters.owner_account_id = caller) or OWN
+ *  family containers (families.owner_id = caller). Anything else is unowned →
+ *  the route 422s it. An empty input returns []. */
+export async function findUnownedShareTargets(
+  userId: string,
+  targetIds: string[],
+): Promise<string[]> {
+  const unique = Array.from(new Set(targetIds.filter((t) => typeof t === 'string' && t.length > 0)));
+  if (unique.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT id FROM tasters  WHERE owner_account_id = $1 AND id = ANY($2::text[])
+     UNION
+     SELECT id FROM families WHERE owner_id         = $1 AND id = ANY($2::text[])`,
+    [userId, unique],
+  );
+  const owned = new Set(rows.map((r) => String(r.id)));
+  return unique.filter((t) => !owned.has(t));
+}
+
+/** Targeted publish: write taste_shares rows for the given targets and flip the
+ *  taste to visibility='shared'. Ownership-checked (the taste must belong to
+ *  userId). Returns the updated Taste, or null if the taste is not owned by the
+ *  caller. geo targets DOUBLE-WRITE geog (from lat/lng) + grid_cell.
+ *
+ *  Idempotent at the taste level: re-publishing replaces this owner's existing
+ *  shares for the taste so a second PATCH doesn't pile up duplicate rows. */
+export async function setTasteVisibility(
+  userId: string,
+  id: string,
+  targets: VisibilityTarget[],
+): Promise<Taste | null> {
+  // Ownership gate — the route already checks, but enforce at the helper too so a
+  // foreign taste can never be published even if a future caller skips the route.
+  const { rows: owned } = await pool.query(
+    'SELECT id FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  );
+  if (!owned.length) return null;
+
+  // Geo consistency guard (defence in depth — the route also 422s a coord-less
+  // geo publish): a geo target MUST carry both a precise point and a coarsened
+  // grid_cell. The migration's CHECK forbids a geo row with null geog/grid_cell,
+  // so writing one would throw mid-loop; reject up front instead of leaving a
+  // half-written publish. This protects future callers that skip the route guard.
+  for (const target of targets) {
+    if (target.type === 'geo') {
+      const hasPoint = typeof target.lat === 'number' && typeof target.lng === 'number';
+      if (!hasPoint || !target.gridCell) {
+        throw new Error('setTasteVisibility: geo target requires lat, lng, and gridCell');
+      }
+    }
+  }
+
+  // Atomic publish: DELETE old shares + INSERT new + flip visibility must all
+  // commit together. Without the transaction a crash between steps leaves the
+  // taste marked 'shared' with no share rows (or stale shares with the flag),
+  // i.e. an inconsistent visibility state that leaks or hides the wrong rows.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Replace this taste's existing shares so re-publishing is idempotent.
+    await client.query('DELETE FROM taste_shares WHERE taste_id = $1 AND owner_id = $2', [id, userId]);
+
+    for (const target of targets) {
+      if (target.type === 'geo') {
+        // DOUBLE-WRITE: geog from the precise point, grid_cell coarsened. ST_MakePoint
+        // takes (lng, lat). The cast to geography sets SRID 4326.
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO taste_shares (taste_id, owner_id, target_type, geog, grid_cell)
+           VALUES ($1, $2, 'geo', ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)`,
+          [id, userId, target.lng, target.lat, target.gridCell],
+        );
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        await client.query(
+          `INSERT INTO taste_shares (taste_id, owner_id, target_type, target_id)
+           VALUES ($1, $2, $3, $4)`,
+          [id, userId, target.type, target.targetId ?? null],
+        );
+      }
+    }
+
+    await client.query(`UPDATE tastes SET visibility = 'shared' WHERE id = $1 AND user_id = $2`, [id, userId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getTaste(userId, id);
+}
+
+/** Cross-user GEO radius feed (PostGIS ST_DWithin). Returns COARSENED cards for
+ *  every PUBLISHED ('shared') geo taste within `radiusM` metres of (lat,lng).
+ *  visibility='shared' is the bypass-proof filter: a private/unpublished taste
+ *  is never returned regardless of distance. The response carries grid_cell, NOT
+ *  precise coords or owner identity. */
+export async function listGeoFeedNear(q: {
+  lat: number;
+  lng: number;
+  radiusM: number;
+}): Promise<GeoFeedCard[]> {
+  const { rows } = await pool.query(
+    `SELECT ${GEO_FEED_COLUMNS}
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ST_DWithin(ts.geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+      ORDER BY t.created_at DESC`,
+    [q.lng, q.lat, q.radiusM],
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
+/** Cross-user GEO feed for one grid cell. Returns COARSENED cards for every
+ *  PUBLISHED geo taste whose share landed in `cell`. Same visibility filter +
+ *  same anonymous shape as the radius feed. */
+export async function listGeoFeedByCell(cell: string): Promise<GeoFeedCard[]> {
+  const { rows } = await pool.query(
+    `SELECT ${GEO_FEED_COLUMNS}
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ts.grid_cell = $1
+      ORDER BY t.created_at DESC`,
+    [cell],
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
+/** Grid heat aggregation: count of PUBLISHED geo shares per grid_cell within a
+ *  bounding box. Drives the heat map. Returns ONLY { cell, count } — no records,
+ *  no coords, no identity. The bbox is applied on geog (ST_MakeEnvelope) so the
+ *  GiST index can be used. */
+export async function geoHeat(bbox: {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}): Promise<Array<{ cell: string; count: number }>> {
+  const { rows } = await pool.query(
+    `SELECT ts.grid_cell AS cell, COUNT(*)::int AS count
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ts.target_type = 'geo'
+        AND t.visibility = 'shared'
+        AND ts.grid_cell IS NOT NULL
+        AND ST_Intersects(
+              ts.geog,
+              ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+            )
+      GROUP BY ts.grid_cell
+      ORDER BY ts.grid_cell ASC`,
+    [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
+  );
+  return rows.map((r) => ({ cell: String(r.cell), count: Number(r.count) }));
+}
+
+/** Family / member feed: tastes the viewer is allowed to see via a family/member
+ *  targeted publish. `member` (a taster/member id) narrows to one target. Only
+ *  PUBLISHED ('shared') rows are ever returned.
+ *
+ *  VIEWER SCOPING (IDOR boundary — plan §S3c "family/member feed 均不得泄漏"):
+ *  in S3c tasters are personas under the OWNER's account with NO real
+ *  cross-account membership (plan: 真实账号互联…不在本期). The only legitimate
+ *  reader of a family/member share is therefore the OWNER who published it,
+ *  viewing their own personas' shares. We bind `ts.owner_id = $viewerId` so a
+ *  caller can ONLY ever see their own rows — without this predicate every
+ *  authenticated user would read every owner's family/member-targeted tastes
+ *  across the whole platform. When a real cross-account membership model lands,
+ *  this is where an explicit membership lookup would replace the owner check;
+ *  never return family/member rows with no owner/viewer predicate. */
+export async function listFamilyFeed(q: {
+  viewerId: string;
+  member?: string;
+}): Promise<GeoFeedCard[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const values: any[] = [q.viewerId];
+  const conditions: string[] = [
+    `ts.owner_id = $1`,
+    `ts.target_type IN ('family','member')`,
+    `t.visibility = 'shared'`,
+  ];
+  if (q.member) {
+    values.push(q.member);
+    conditions.push(`ts.target_id = $${values.length}`);
+  }
+  const { rows } = await pool.query(
+    `SELECT t.id, t.name, t.verdict, t.image, NULL AS grid_cell
+       FROM taste_shares ts
+       JOIN tastes t ON t.id = ts.taste_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY t.created_at DESC`,
+    values,
+  );
+  return Promise.all(rows.map(rowToGeoFeedCard));
+}
+
 // ── Users & auth ────────────────────────────────────────────────────────────
 
 /** Map a users row → the client-safe User (never includes password_hash). */
@@ -730,6 +993,7 @@ function rowToUser(row: any): User {
     warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
     locationEnabled: row.location_enabled != null ? Boolean(row.location_enabled) : false,
     mediaEnabled:    row.media_enabled != null ? Boolean(row.media_enabled) : false,
+    defaultVisibility: row.default_visibility === 'shared' ? 'shared' : 'private',
     createdAt:       new Date(row.created_at).toISOString(),
   };
 }
@@ -1174,6 +1438,10 @@ export async function updateUserSettings(
   if (input.displayName !== undefined) {
     values.push(input.displayName);
     setClauses.push(`display_name = $${values.length}`);
+  }
+  if (input.defaultVisibility !== undefined) {
+    values.push(input.defaultVisibility);
+    setClauses.push(`default_visibility = $${values.length}`);
   }
 
   if (setClauses.length === 0) return findUserById(userId);
