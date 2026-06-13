@@ -66,6 +66,9 @@ export const en: Record<string, string> = {
   share_brand_tag: "Logged with Yummy or Not · yon.baobao.click",
   // S3a — importable share / import landing
   share_to_friend: "Share to a friend",
+  // The two explicit share modes the share-to-friend button reveals.
+  share_mode_png: "Image only (no link)",
+  share_mode_importable: "Importable (copy code + QR)",
   share_import_intro: "I tried this — open the link in Yummy or Not to save it to your to-try list:",
   share_import_code_label: "Import code:",
   // Printed on the share card itself so it survives image-only forwarding

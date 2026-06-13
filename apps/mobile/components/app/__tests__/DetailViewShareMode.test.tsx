@@ -1,31 +1,37 @@
 /* ============================================================
-   Tests — S3a "share to friend (importable)" entry in DetailView.
+   Tests — S3a 可导入 (淘口令) patch: TWO explicit share modes in DetailView.
 
-   On top of the existing S1 PNG-card share, S3a adds an importable-share
-   action that mints a thin token and appends the deep link + import code to
-   the system share text (keeping the PNG card). The 可导入 patch turned the
-   single importable-share entry into a TWO-mode picker, so the importable path
-   is now reached via share-import-btn → share-mode-importable.
+   The patch upgrades the single importable-share entry into a user-picked
+   choice between:
+     • pure-PNG mode  (testID 'share-mode-png')        — existing behavior:
+       ShareCard → captureRef → shareAsync. NO 口令 to clipboard, NO link.
+     • 可导入 mode    (testID 'share-mode-importable') — mints a token, writes a
+       collision-resistant 口令 (encodeShareToken(importCode)) to the clipboard
+       (expo-clipboard) AND into the system share text, prints the code + QR on
+       the PNG.
 
-   Pins:
-   1. Picking 可导入 calls mintShare(tasteId) and PRINTS the importCode (+ hint)
-      on the captured ShareCard — the channel that survives image-only
-      forwarding (WeChat strips the deep link).
-   2. The owner's raw presigned thumb URL is still never in the shared payload.
-   3. The plain (S1) PNG share (share-btn) never prints an import code.
+   Pins behavior NOT yet implemented → FAIL now, PASS after the patch:
+   1. The share picker offers BOTH modes (both testIDs present).
+   2. 可导入 mode: mints, writes the 口令 to the clipboard (expo-clipboard mock
+      asserted) AND the 口令 is in the share text passed to shareAsync.
+   3. pure-PNG mode: writes NO token to the clipboard, and the card gets NO
+      importCode (privacy regression guard — a pure image must stay link-free).
    ============================================================ */
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
-import { getTaste, mintShare, type Taste } from '@yon/shared'
+import { getTaste, mintShare, encodeShareToken, type Taste } from '@yon/shared'
 
 import DetailView from '../DetailView'
 
-// ── module mocks (mirror DetailViewShare.test.tsx, plus mintShare) ────────────
+// expo-clipboard is mapped (via jest.config moduleNameMapper) to a stub whose
+// setStringAsync is a jest.fn — we require it to assert the 口令 is written.
+const { setStringAsync: mockSetStringAsync } = require('expo-clipboard')
 
+// ── shared: real codec, mocked network ────────────────────────────────────────
 jest.mock('@yon/shared', () => {
-  // Real encodeShareToken so the importable share writes the ACTUAL 口令 (the
-  // 可导入 handler calls it before sharing).
+  // Real encodeShareToken so the test asserts the ACTUAL 口令 wrapping, not a
+  // stand-in. parseShareToken kept real too for symmetry.
   const actual = jest.requireActual('@yon/shared')
   return {
     TAG_CHOICES: ['Coffee', 'Dessert'],
@@ -36,6 +42,7 @@ jest.mock('@yon/shared', () => {
     getOriginalPhotoUrl: jest.fn(),
     mintShare: jest.fn(),
     encodeShareToken: actual.encodeShareToken,
+    parseShareToken: actual.parseShareToken,
     ProRequiredError: class ProRequiredError extends Error {},
   }
 })
@@ -88,18 +95,14 @@ jest.mock('@/components/ds', () => {
   }
 })
 
-// Record the props ShareCard is rendered with. The import code printed on the
-// captured PNG is the REAL delivery channel (WeChat strips the deep link from
-// forwarded images), so the test asserts the code reaches the card's importCode
-// prop at capture time — not merely that it sits in a shareAsync option that is
-// not delivered to the recipient.
-const shareCardProps: Array<{ importCode?: string; importCodeHint?: string }> = []
+// Record the props ShareCard is rendered with across the whole share flow.
+const shareCardProps: Array<{ importCode?: string; landingUrl?: string }> = []
 jest.mock('@/components/app/ShareCard', () => {
   const React = require('react')
   const { forwardRef } = React
   const ShareCard = forwardRef(
-    (p: { importCode?: string; importCodeHint?: string }, ref: React.Ref<unknown>) => {
-      shareCardProps.push({ importCode: p.importCode, importCodeHint: p.importCodeHint })
+    (p: { importCode?: string; landingUrl?: string }, ref: React.Ref<unknown>) => {
+      shareCardProps.push({ importCode: p.importCode, landingUrl: p.landingUrl })
       return React.createElement('View', { ref })
     },
   )
@@ -142,22 +145,39 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   return r
 }
 
-function findImportableShareBtn(r: TestRenderer.ReactTestRenderer) {
-  return r.root.findAll((n) => n.props?.testID === 'share-import-btn')[0]
+function byTestID(r: TestRenderer.ReactTestRenderer, id: string) {
+  return r.root.findAll((n) => n.props?.testID === id)[0]
 }
 
-// ── tests ───────────────────────────────────────────────────────────────────
+// Open the share-mode picker (the existing importable-share entry now opens a
+// choice between the two modes).
+function openSharePicker(r: TestRenderer.ReactTestRenderer) {
+  const entry = byTestID(r, 'share-import-btn')
+  expect(entry).toBeTruthy()
+  act(() => { entry.props.onPress() })
+}
 
-describe('DetailView importable share (S3a)', () => {
+describe('DetailView share modes (S3a 可导入 patch)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     shareCardProps.length = 0
+    mockSetStringAsync.mockClear()
     jest.useFakeTimers()
     routeParams.id = 'taste-1'
   })
   afterEach(() => { jest.useRealTimers() })
 
-  it('mints a token and PRINTS the import code on the ShareCard (the delivered channel)', async () => {
+  it('the share picker offers BOTH modes (pure-PNG and 可导入)', async () => {
+    mockedGetTaste.mockResolvedValueOnce(makeTaste())
+    const r = await renderDetail()
+
+    openSharePicker(r)
+
+    expect(byTestID(r, 'share-mode-png')).toBeTruthy()
+    expect(byTestID(r, 'share-mode-importable')).toBeTruthy()
+  })
+
+  it('可导入 mode writes the 口令 to the clipboard AND into the share text', async () => {
     mockedGetTaste.mockResolvedValueOnce(makeTaste())
     mockedMintShare.mockResolvedValueOnce({
       token: 'tok_abc',
@@ -169,61 +189,62 @@ describe('DetailView importable share (S3a)', () => {
     const r = await renderDetail()
     const { shareAsync } = require('expo-sharing')
 
-    // The share-to-friend entry now opens a TWO-mode picker; pick 可导入.
-    const entry = findImportableShareBtn(r)
-    expect(entry).toBeTruthy()
-    act(() => { entry.props.onPress() })
-    const btn = r.root.findAll((n) => n.props?.testID === 'share-mode-importable')[0]
-    expect(btn).toBeTruthy()
+    openSharePicker(r)
+    const importable = byTestID(r, 'share-mode-importable')
+    expect(importable).toBeTruthy()
 
     await act(async () => {
-      btn.props.onPress()
+      importable.props.onPress()
       jest.runAllTimers()
       await Promise.resolve()
       await Promise.resolve()
     })
 
     expect(mockedMintShare).toHaveBeenCalledWith('taste-1')
+
+    const expectedToken = encodeShareToken('AB12CD')
+
+    // CLIPBOARD: the 口令 (delimited, wrapping the importCode) is copied so the
+    // recipient can paste it and the app auto-detects it on foreground.
+    expect(mockSetStringAsync).toHaveBeenCalledTimes(1)
+    const clipboardArg = String(mockSetStringAsync.mock.calls[0][0])
+    expect(clipboardArg).toContain(expectedToken)
+
+    // SHARE TEXT: the same 口令 also rides the system share sheet text.
     expect(shareAsync).toHaveBeenCalledTimes(1)
+    const shareCallStr = JSON.stringify(shareAsync.mock.calls[0])
+    expect(shareCallStr).toContain(expectedToken)
 
-    // DELIVERY CHANNEL: the import code must be PRINTED on the captured PNG so it
-    // survives image-only forwarding (WeChat strips the deep link + any
-    // shareAsync text option). Assert the code reached the ShareCard at capture
-    // time via its importCode prop — i.e. it is on the image, not merely in a
-    // non-delivered shareAsync option.
-    const printed = shareCardProps.filter((p) => p.importCode === 'AB12CD')
-    expect(printed.length).toBeGreaterThanOrEqual(1)
-    // The hint that accompanies the printed code is also supplied (already
-    // translated) so the recipient knows what the code is for.
-    expect(printed[printed.length - 1].importCodeHint).toBeTruthy()
-
-    // The owner's raw presigned thumb URL is still never in the shared payload.
-    const callArgs = JSON.stringify(shareAsync.mock.calls[0])
-    expect(callArgs).not.toContain('X-Amz-Signature')
-    expect(callArgs).not.toContain('presignedtoken')
+    // The owner's raw presigned thumb URL is still never in the payload.
+    expect(shareCallStr).not.toContain('X-Amz-Signature')
+    expect(shareCallStr).not.toContain('presignedtoken')
   })
 
-  it('does NOT print an import code on the plain (S1) PNG share', async () => {
-    // The plain share path (handleShare) must never set an import code on the
-    // card, so a non-importable share can't accidentally print a stray code.
+  it('pure-PNG mode writes NO token to the clipboard and the card stays link-free', async () => {
     mockedGetTaste.mockResolvedValueOnce(makeTaste())
 
     const r = await renderDetail()
     const { shareAsync } = require('expo-sharing')
 
-    const plainBtn = r.root.findAll((n) => n.props?.testID === 'share-btn')[0]
-    expect(plainBtn).toBeTruthy()
+    openSharePicker(r)
+    const png = byTestID(r, 'share-mode-png')
+    expect(png).toBeTruthy()
 
     await act(async () => {
-      plainBtn.props.onPress()
+      png.props.onPress()
       jest.runAllTimers()
       await Promise.resolve()
       await Promise.resolve()
     })
 
+    // Shared the PNG, but minted nothing and copied nothing.
     expect(shareAsync).toHaveBeenCalledTimes(1)
     expect(mockedMintShare).not.toHaveBeenCalled()
-    // Every render of the card during the plain share had no importCode.
+    expect(mockSetStringAsync).not.toHaveBeenCalled()
+
+    // Privacy regression guard: every render of the card during the pure-PNG
+    // share had NO importCode and NO landingUrl (no QR / no link on the image).
     expect(shareCardProps.every((p) => !p.importCode)).toBe(true)
+    expect(shareCardProps.every((p) => !p.landingUrl)).toBe(true)
   })
 })

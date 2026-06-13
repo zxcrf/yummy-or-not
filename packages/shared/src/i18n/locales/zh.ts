@@ -66,6 +66,9 @@ export const zh: Record<string, string> = {
   share_brand_tag: "记录于 Yummy or Not · yon.baobao.click",
   // S3a — 可导入分享 / 导入落地页
   share_to_friend: "分享给朋友",
+  // 分享给朋友按钮展开的两种分享模式。
+  share_mode_png: "仅图片（无链接）",
+  share_mode_importable: "可导入（复制口令 + 二维码）",
   share_import_intro: "我吃了这个，用 Yummy or Not 打开链接就能存进你的想吃清单：",
   share_import_code_label: "导入码：",
   // 直接印在分享卡片上，图片被转发后（如微信吃掉链接）仍可用：
