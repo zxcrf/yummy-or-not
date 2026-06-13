@@ -29,6 +29,8 @@ import {
 } from '@yon/shared'
 import { clearPersistedTastes, setTastesUser } from '@/app/(tabs)/_useTastes'
 import { clearTagsCache, setTagsUser } from '@/app/(tabs)/_useTags'
+import { setTastersUser } from '@/app/(tabs)/_useTasters'
+import { setActiveTasterUser, clearActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 
 // ----------------------------------------------------------------
 // Context shape
@@ -121,6 +123,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Scope the shared taste + tag caches to this account before any view reads them.
       setTastesUser(user?.id ?? null)
       setTagsUser(user?.id ?? null)
+      setTastersUser(user?.id ?? null)
+      setActiveTasterUser(user?.id ?? null)
       setUser(user)
       setProviders(providers)
       // Capture the token a just-completed login put in memory.
@@ -165,6 +169,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await clearPersistedTastes()
       setTastesUser(null)
       clearTagsCache()
+      setTastersUser(null)
+      await clearActiveTaster()
       try {
         await Promise.all([Image.clearDiskCache(), Image.clearMemoryCache()])
       } catch {

@@ -3,10 +3,10 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listTastes, createTaste, countTastes } from '@/lib/db';
+import { listTastes, createTaste, countTastes, CreateTasteError } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
-import { uploadPhoto, deletePhoto } from '@/lib/storage';
+import { uploadPhoto, deletePhoto, assertMediaAllowed } from '@/lib/storage';
 import { getPhotoStorage } from '@/lib/env';
 import { origKey, variantKeys, makeVariants, safeExt } from '@/lib/image-variants';
 import { FREE_TASTE_CAP, type CreateTasteInput, type Verdict, type TasteStatus } from '@yon/shared';
@@ -55,9 +55,11 @@ export async function GET(req: NextRequest) {
   const statusParam = searchParams.get('status');
   const status: 'tasted' | 'todo' | 'all' =
     statusParam === 'todo' || statusParam === 'all' ? statusParam : 'tasted';
+  // S3b: optional taster filter — restrict the list to one persona's records.
+  const taster = searchParams.get('taster') ?? undefined;
 
   try {
-    const tastes = await listTastes(user.id, { q, filter, status });
+    const tastes = await listTastes(user.id, { q, filter, status, taster });
     return withCors(NextResponse.json(tastes), origin);
   } catch (err) {
     console.error('GET /api/tastes error:', err);
@@ -99,6 +101,7 @@ export async function POST(req: NextRequest) {
       const imageField = (form.get('image') as string | null) ?? '';
       const lat = parseOptionalFloat(form.get('lat'));
       const lng = parseOptionalFloat(form.get('lng'));
+      const tasterField = (form.get('tasterId') as string | null)?.trim() || undefined;
 
       // Read all 'tags' values (one per fd.append call from the client).
       // Also handle legacy backward-compat where a single JSON-array string was sent.
@@ -127,11 +130,18 @@ export async function POST(req: NextRequest) {
         image: sanitizeClientImage(imageField),
         ...(lat !== undefined ? { lat } : {}),
         ...(lng !== undefined ? { lng } : {}),
+        ...(tasterField ? { tasterId: tasterField } : {}),
       };
 
       // Handle optional photo upload
       const photo = form.get('photo') as File | null;
       if (photo && photo.size > 0) {
+        // S3b-media gate: reject a video / live-photo upload unless the account
+        // has the media capability. Still images always pass. Server-side only.
+        const blocked = assertMediaAllowed(user, photo.type || 'application/octet-stream', photo.name);
+        if (blocked) {
+          return withCors(NextResponse.json({ error: blocked }, { status: 403 }), origin);
+        }
         if (photo.size > 25 * 1024 * 1024) {
           return withCors(NextResponse.json({ error: 'photo_too_large' }, { status: 413 }), origin);
         }
@@ -186,6 +196,10 @@ export async function POST(req: NextRequest) {
       // JSON body
       input = (await req.json()) as CreateTasteInput;
       input.image = sanitizeClientImage(input.image);
+      // S3b: only forward a non-empty taster id; the DB layer applies the
+      // self-taster default when none is given (never invent one here).
+      const taster = typeof input.tasterId === 'string' ? input.tasterId.trim() : '';
+      input.tasterId = taster || undefined;
       if (!tastedRequiresVerdict(input)) {
         return withCors(NextResponse.json({ error: 'verdict_required' }, { status: 400 }), origin);
       }
@@ -193,6 +207,12 @@ export async function POST(req: NextRequest) {
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     }
   } catch (err) {
+    // IDOR guard: a client-supplied tasterId not owned by this account is a bad
+    // request, not a server error — surface 400 'invalid_taster'. Applies to both
+    // the JSON and multipart paths (both call createTaste inside this try).
+    if (err instanceof CreateTasteError) {
+      return withCors(NextResponse.json({ error: err.code }, { status: 400 }), origin);
+    }
     console.error('POST /api/tastes error:', err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);
   }

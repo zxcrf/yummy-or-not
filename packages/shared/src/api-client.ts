@@ -33,6 +33,9 @@ import type {
   RenameTagInput,
   MintShareResponse,
   SharePreview,
+  Taster,
+  CreateTasterInput,
+  UpdateTasterInput,
 } from "./types";
 import { ProRequiredError } from "./types";
 
@@ -111,11 +114,14 @@ export async function listTastes(params?: {
    *  Pass 'all' to fetch both tasted + todo (the single shared mobile list),
    *  or 'todo' for the wishlist only. */
   status?: "tasted" | "todo" | "all";
+  /** S3b: restrict to one taster persona's records. */
+  taster?: string;
 }): Promise<Taste[]> {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.filter && params.filter !== "All") qs.set("filter", params.filter);
   if (params?.status) qs.set("status", params.status);
+  if (params?.taster) qs.set("taster", params.taster);
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiFetch<Taste[]>(`/api/tastes${suffix}`);
 }
@@ -159,6 +165,10 @@ export async function createTaste(
     if (input.notes) fd.append("notes", input.notes);
     if (input.lat != null) fd.append("lat", String(input.lat));
     if (input.lng != null) fd.append("lng", String(input.lng));
+    // S3b: keep the active-persona attribution on the photo path too. Without
+    // this, every save WITH a photo silently fell back to the self-taster
+    // regardless of the active taster (the JSON path already sends it).
+    if (input.tasterId) fd.append("tasterId", input.tasterId);
     input.tags?.forEach((t) => fd.append("tags", t));
     return apiFetch<Taste>("/api/tastes", { method: "POST", body: fd });
   }
@@ -287,6 +297,36 @@ export async function renameTag(id: string, input: RenameTagInput): Promise<User
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+/* ── Tasters (S3b personas) ─────────────────────────────────────────────────── */
+
+/** GET /api/tasters — list the account's taster personas (self + others). */
+export async function getTasters(): Promise<Taster[]> {
+  return apiFetch<Taster[]>("/api/tasters");
+}
+
+/** POST /api/tasters — create a persona. Pro only; throws "pro_required" on 403. */
+export async function createTaster(input: CreateTasterInput): Promise<Taster> {
+  return apiFetch<Taster>("/api/tasters", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** PATCH /api/tasters/:id — rename / re-avatar a persona. Pro only. */
+export async function updateTaster(id: string, input: UpdateTasterInput): Promise<Taster> {
+  return apiFetch<Taster>(`/api/tasters/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** DELETE /api/tasters/:id — remove a persona. Pro only; the self-taster is protected. */
+export async function deleteTaster(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/tasters/${id}`, { method: "DELETE" });
 }
 
 /* ── Repurchase warnings & purchases ───────────────────────────────────────── */

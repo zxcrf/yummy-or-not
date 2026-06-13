@@ -61,6 +61,9 @@ export interface Taste {
   notes: string;
   lat?: number | null;
   lng?: number | null;
+  /** S3b: the taster persona this record is attributed to. null on legacy rows
+   *  that predate the backfill (treated as the owner's self-taster). */
+  tasterId?: string | null;
   /** Display-quality image URL (presigned R2 or /uploads/... path). "" if none.
    *  Kept as the legacy field name for old-APK compatibility; new code should
    *  prefer imageDisplay for display and imageThumb for list thumbnails. */
@@ -95,6 +98,9 @@ export interface CreateTasteInput {
   image?: string;
   lat?: number | null;
   lng?: number | null;
+  /** S3b: the active client taster to attribute this record to. Omitted → the
+   *  server applies the caller's self-taster (never a wrong persona). */
+  tasterId?: string;
 }
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */
@@ -148,6 +154,9 @@ export interface User {
   warningsEnabled: boolean;
   /** Whether this account allows recording location with new tastes. */
   locationEnabled: boolean;
+  /** S3b-media capability flag: when false the server rejects video / live-photo
+   *  uploads (a still image is always allowed). Independent of `plan`. */
+  mediaEnabled: boolean;
   createdAt: string;
 }
 
@@ -159,6 +168,41 @@ export interface UpdateUserInput {
   locationEnabled?: boolean;
   /** Display name (nickname). Trimmed, 1–50 chars. */
   displayName?: string;
+}
+
+/* ----------------------------------------------------------------
+   TASTERS — S3b persona model.
+   A taster is a lightweight profile under an owner account (no separate
+   login), so you can log a partner's / family member's taste without them
+   having the app. Every account has exactly one is_self taster (its own
+   default, undeletable). Multi-taster CRUD is pro-gated server-side.
+   ---------------------------------------------------------------- */
+
+/** A taster persona owned by an account. Mirrors the `tasters` table (camelCase). */
+export interface Taster {
+  id: string;
+  /** The owner account this persona belongs to. */
+  ownerAccountId: string;
+  /** Optional family container this taster is hung under. null if none. */
+  familyId: string | null;
+  displayName: string;
+  avatar: string;
+  /** True for the owner's own default persona (undeletable; the implicit default
+   *  attribution when no taster is chosen). Exactly one per account. */
+  isSelf: boolean;
+  createdAt: string;
+}
+
+/** POST /api/tasters — create a persona (pro only). */
+export interface CreateTasterInput {
+  displayName: string;
+  avatar?: string;
+}
+
+/** PATCH /api/tasters/:id — rename / re-avatar a persona (pro only). */
+export interface UpdateTasterInput {
+  displayName?: string;
+  avatar?: string;
 }
 
 /** Social / OAuth providers we can link an account to. */
