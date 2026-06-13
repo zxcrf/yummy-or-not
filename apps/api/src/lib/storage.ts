@@ -34,8 +34,8 @@
 //   serverless / ephemeral hosts.
 
 import path from 'path';
-import { writeFile, mkdir, unlink } from 'fs/promises';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { writeFile, mkdir, unlink, copyFile } from 'fs/promises';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getPhotoStorage } from './env';
 
@@ -62,6 +62,26 @@ export async function uploadPhoto(
     return uploadToBlob(buffer, opts);
   }
   return uploadToLocal(buffer, opts);
+}
+
+/**
+ * Copy an existing object to a NEW bare key (copy-on-import for S3a share).
+ * Returns the value to persist in the DB `image` column for the destination
+ * (the bare key for local/s3; the full URL for blob, like uploadPhoto).
+ * Backend is selected by getPhotoStorage(). The destination key is server-
+ * generated under the importer's namespace, so this never re-exposes the
+ * owner's storage path to the importer.
+ */
+export async function copyPhoto(srcKey: string, destKey: string): Promise<string> {
+  const backend = getPhotoStorage();
+
+  if (backend === 's3') {
+    return copyOnS3(srcKey, destKey);
+  }
+  if (backend === 'blob') {
+    return copyOnBlob(srcKey, destKey);
+  }
+  return copyOnLocal(srcKey, destKey);
 }
 
 /**
@@ -93,6 +113,14 @@ async function uploadToLocal(buffer: Buffer, { key }: UploadOptions): Promise<st
 
 async function deleteFromLocal(key: string): Promise<void> {
   await unlink(path.join(process.cwd(), 'public', 'uploads', key));
+}
+
+async function copyOnLocal(srcKey: string, destKey: string): Promise<string> {
+  const src = path.join(process.cwd(), 'public', 'uploads', srcKey);
+  const dest = path.join(process.cwd(), 'public', 'uploads', destKey);
+  await mkdir(path.dirname(dest), { recursive: true });
+  await copyFile(src, dest);
+  return destKey;
 }
 
 // ── S3 backend ────────────────────────────────────────────────────────────────
@@ -138,6 +166,24 @@ async function deleteFromS3(key: string): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
+async function copyOnS3(srcKey: string, destKey: string): Promise<string> {
+  const client = s3Client();
+  const bucket = process.env.S3_BUCKET ?? '';
+  const noAcl = (process.env.S3_NO_ACL ?? '').toLowerCase() === 'true';
+
+  // Server-side copy: the object bytes never transit the API host. CopySource
+  // must be URL-encoded "<bucket>/<key>".
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      Key: destKey,
+      CopySource: `/${bucket}/${srcKey}`,
+      ...(noAcl ? {} : { ACL: 'public-read' as const }),
+    })
+  );
+  return destKey;
+}
+
 // ── Presigned read URL ───────────────────────────────────────────────────────
 
 export const PRESIGN_TTL_SECONDS = 3600; // 1h — limit leaked URL lifetime
@@ -172,4 +218,14 @@ async function uploadToBlob(buffer: Buffer, { key, contentType }: UploadOptions)
 async function deleteFromBlob(urlOrKey: string): Promise<void> {
   const { del } = await import('@vercel/blob');
   await del(urlOrKey, { token: process.env.BLOB_READ_WRITE_TOKEN });
+}
+
+async function copyOnBlob(srcUrlOrKey: string, destKey: string): Promise<string> {
+  // Blob has no server-side copy; fetch the source bytes (the persisted value is
+  // a full public URL for blob) and re-put under the importer's key.
+  const res = await fetch(srcUrlOrKey);
+  if (!res.ok) throw new Error(`copyOnBlob: source fetch ${res.status}`);
+  const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return uploadToBlob(buffer, { key: destKey, contentType });
 }

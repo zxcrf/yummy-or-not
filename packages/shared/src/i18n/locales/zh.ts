@@ -64,6 +64,23 @@ export const zh: Record<string, string> = {
   share: "分享",
   share_failed: "分享失败，请重试",
   share_brand_tag: "记录于 Yummy or Not · yon.baobao.click",
+  // S3a — 可导入分享 / 导入落地页
+  share_to_friend: "分享给朋友",
+  share_import_intro: "我吃了这个，用 Yummy or Not 打开链接就能存进你的想吃清单：",
+  share_import_code_label: "导入码：",
+  // 直接印在分享卡片上，图片被转发后（如微信吃掉链接）仍可用：
+  // 对方在 Yummy or Not 里输入此码即可导入。
+  share_card_import_hint: "在 Yummy or Not 输入导入码",
+  share_unavailable: "该分享已不可用",
+  share_unavailable_body: "链接可能已被撤销或过期。",
+  import_back_home: "返回首页",
+  import_preview_title: "把它存进你的想吃清单？",
+  import_save_to_todo: "存入我的想吃",
+  import_code_entry: "输入导入码",
+  import_code_hint: "收到的 Yummy or Not 卡片没有链接？在这里输入卡片上的导入码。",
+  import_code_placeholder: "例如 AB12CD",
+  import_code_lookup: "查找",
+  import_code_not_found: "没有找到对应的分享",
   // B/C
   edit_profile: "编辑昵称",
   display_name_label: "昵称",

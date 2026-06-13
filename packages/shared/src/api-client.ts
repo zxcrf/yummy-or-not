@@ -31,6 +31,8 @@ import type {
   UserTag,
   CreateTagInput,
   RenameTagInput,
+  MintShareResponse,
+  SharePreview,
 } from "./types";
 import { ProRequiredError } from "./types";
 
@@ -323,4 +325,46 @@ export async function updateUser(input: UpdateUserInput): Promise<{ user: User }
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+/* ── S3a share / import ─────────────────────────────────────────────────────── */
+
+/** POST /api/tastes/:id/share — owner mints a thin importable share token.
+ *  Returns { token, deepLink, importCode, expiresAt }. The deepLink + importCode
+ *  are appended to the system share text (alongside the existing PNG card). */
+export async function mintShare(tasteId: string): Promise<MintShareResponse> {
+  return apiFetch<MintShareResponse>(`/api/tastes/${tasteId}/share`, {
+    method: "POST",
+  });
+}
+
+/** DELETE /api/tastes/:id/share — owner revokes outstanding share tokens.
+ *  Revocation is immediate: the server stops issuing preview presigns. */
+export async function revokeShare(tasteId: string): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/tastes/${tasteId}/share`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /api/share/:token — live preview of a shared taste + short presign.
+ *  A revoked/expired/source-deleted share answers 410, which apiFetch surfaces
+ *  as an Error whose message is "share_gone" for the UI to localize. No auth
+ *  required (the unguessable token is the capability). */
+export async function getSharePreview(token: string): Promise<SharePreview> {
+  return apiFetch<SharePreview>(`/api/share/${token}`);
+}
+
+/** POST /api/share/:token/import — copy the shared taste into the signed-in
+ *  user's library as a status='todo', verdict=null row (copy-on-import).
+ *  Idempotent: a repeat import returns the existing copy. 410 → "share_gone". */
+export async function importShare(token: string): Promise<Taste> {
+  return apiFetch<Taste>(`/api/share/${token}/import`, { method: "POST" });
+}
+
+/** GET /api/share/resolve?code=<importCode> — resolve the printed import code
+ *  (the WeChat-forward fallback) back to a live token. 404 → "share_gone". */
+export async function resolveImportCode(code: string): Promise<{ token: string }> {
+  return apiFetch<{ token: string }>(
+    `/api/share/resolve?code=${encodeURIComponent(code)}`,
+  );
 }

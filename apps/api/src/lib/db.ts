@@ -1034,3 +1034,17 @@ export async function listTastePurchases(
   );
   return rows.map(rowToPurchase);
 }
+
+// ── S3a share / import ────────────────────────────────────────────────────────
+// The share helpers live in share-db.ts (thin pointer + copy-on-import) but are
+// re-exported here so route handlers import them from '@/lib/db' alongside
+// getTaste/getRawImage — the single DB entry point the route layer mocks.
+export {
+  createShareToken,
+  getShareToken,
+  revokeShareToken,
+  resolveImportCode,
+  importSharedTaste,
+  type ShareTokenRow,
+  type ImportResult,
+} from './share-db';

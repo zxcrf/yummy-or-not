@@ -2,10 +2,19 @@
 -- Drops in dependency order so a re-run is a clean rebuild.
 DROP TABLE IF EXISTS promo_redemptions;
 DROP TABLE IF EXISTS promo_codes;
+-- S3a share/import tables reference tastes + users, so they must drop BEFORE
+-- those (FK dependents first) for a re-run to be a clean rebuild.
+DROP TABLE IF EXISTS taste_imports;
+DROP TABLE IF EXISTS share_tokens;
 DROP TABLE IF EXISTS taste_purchases;
 DROP TABLE IF EXISTS otp_codes;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS auth_identities;
+-- user_tags + rate_limits also reference / accompany users; list them so a
+-- re-run of this file is a clean rebuild (they were previously omitted, which
+-- left `DROP TABLE users` blocked by user_tags_user_id_fkey on re-run).
+DROP TABLE IF EXISTS user_tags;
+DROP TABLE IF EXISTS rate_limits;
 DROP TABLE IF EXISTS tastes;
 DROP TABLE IF EXISTS users;
 

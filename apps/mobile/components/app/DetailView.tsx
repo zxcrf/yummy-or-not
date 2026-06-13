@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { colors, radius, space } from '@/theme'
 import { Text } from '@/theme'
-import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
@@ -98,6 +98,11 @@ export default function DetailView() {
   // Share card state — A1.
   const [sharing, setSharing] = useState(false)
   const [sharingAvailable, setSharingAvailable] = useState(false)
+  // S3a: the import code to PRINT on the ShareCard for the importable-share
+  // path (null for the plain S1 PNG share). Set before capture so the code
+  // rides the captured PNG — the only channel that survives image-only
+  // forwarding (WeChat strips the deep link from forwarded images).
+  const [shareImportCode, setShareImportCode] = useState<string | null>(null)
   const shareCardRef = useRef<RNView>(null)
   // Resolves the onReady race: set by handleShare, called by ShareCard.
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
@@ -126,6 +131,7 @@ export default function DetailView() {
     setOriginalUrl(null)
     setOriginalLoading(false)
     setSharing(false)
+    setShareImportCode(null)
     // Reset repurchase state so taste A's open sheet / typed inputs / remind value
     // don't bleed onto taste B before the data effect catches up.
     setRemind(cached?.warnBeforeBuy ?? false)
@@ -339,32 +345,89 @@ export default function DetailView() {
     setBuySheetOpen(true)
   }
 
+  // Start the ShareCard readiness race: wait for the image onLoad callback
+  // (onReady) against a 600 ms timeout fallback (no-photo / disk-cached thumb).
+  // Returned synchronously so the timer is scheduled in the SAME tick as the
+  // button press, even when the caller awaits other work (mintShare) first.
+  const waitForShareCardReady = (): Promise<void> =>
+    Promise.race([
+      new Promise<void>((resolve) => {
+        shareReadyResolveRef.current = resolve
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 600)),
+    ])
+
+  // Capture the off-screen ShareCard to a PNG and hand it to the system share
+  // sheet. When `extraText` is set (importable share) it rides in the share
+  // sheet alongside the PNG so the recipient gets the deep link + import code
+  // (S3a). The owner's presigned photo URL is never in the payload — only the
+  // rendered PNG file URI travels. `ready` lets the caller pre-start the race.
+  const captureAndShare = async (ready: Promise<void>, extraText?: string) => {
+    if (!item) return
+    const captureId = item.id
+    await ready
+    shareReadyResolveRef.current = null
+
+    // Guard: nav moved to a different taste while we waited — abort silently.
+    if (idRef.current !== captureId) return
+    const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
+    if (idRef.current !== captureId) return
+    await Sharing.shareAsync(uri, {
+      mimeType: 'image/png',
+      // extraText (deep link + code) is offered to share targets that accept a
+      // subject/text alongside the image. It is BEST-EFFORT only: WeChat strips
+      // it from forwarded images, so it is NOT the delivery channel for the
+      // import code. The code is PRINTED on the captured PNG itself (see
+      // handleImportableShare → shareImportCode → ShareCard) so it always
+      // reaches the recipient regardless of how the image is forwarded.
+      ...(extraText ? { dialogTitle: extraText } : {}),
+    })
+  }
+
   const handleShare = async () => {
     if (!item || sharing) return
-    const captureId = item.id
     setSharing(true)
+    setShareImportCode(null)
+    const ready = waitForShareCardReady()
     try {
-      // Race: wait for ShareCard image onLoad callback (onReady) against a
-      // 600 ms timeout fallback (no-photo case / already disk-cached thumb).
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          shareReadyResolveRef.current = resolve
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 600)),
-      ])
-      shareReadyResolveRef.current = null
-
-      // Guard: nav moved to a different taste while we waited — abort silently.
-      if (idRef.current !== captureId) return
-      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' })
-      if (idRef.current !== captureId) return
-      await Sharing.shareAsync(uri, { mimeType: 'image/png' })
+      await captureAndShare(ready)
     } catch {
       Alert.alert(t('share_failed'))
     } finally {
       // Always reset sharing — idRef guard only gates the shareAsync call,
       // not the state reset, so the button is always re-enabled after this.
       setSharing(false)
+      setShareImportCode(null)
+    }
+  }
+
+  // Importable share (S3a): mint a thin token, PRINT the import code onto the
+  // ShareCard PNG (the only channel that survives image-only forwarding — e.g.
+  // WeChat strips the deep link), then share the PNG. The deep link still rides
+  // the share text as a best-effort convenience for targets that keep it.
+  const handleImportableShare = async () => {
+    if (!item || sharing) return
+    const shareId = item.id
+    setSharing(true)
+    // Start the readiness race synchronously (same tick as the press) so its
+    // 600ms fallback timer is scheduled before we await mintShare — matching
+    // handleShare's timing.
+    const ready = waitForShareCardReady()
+    try {
+      const { deepLink, importCode } = await mintShare(item.id)
+      if (idRef.current !== shareId) return
+      // Print the code on the card BEFORE capture so the captured PNG carries
+      // it (the only channel that survives image-only forwarding). React commits
+      // this re-render synchronously, so the code is on the card by capture time.
+      setShareImportCode(importCode)
+      // Plain text (not via t() interpolation) so the link/code survive verbatim.
+      const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}`
+      await captureAndShare(ready, text)
+    } catch {
+      Alert.alert(t('share_failed'))
+    } finally {
+      setSharing(false)
+      setShareImportCode(null)
     }
   }
 
@@ -689,6 +752,18 @@ export default function DetailView() {
                   {t('share')}
                 </Button>
               ) : null}
+              {/* S3a — importable share: card + deep link + import code. */}
+              {item.status !== 'todo' && sharingAvailable ? (
+                <Button
+                  variant="secondary"
+                  iconLeft={<Icon name="arrow-right" size={18} />}
+                  disabled={sharing}
+                  onPress={handleImportableShare}
+                  testID="share-import-btn"
+                >
+                  {t('share_to_friend')}
+                </Button>
+              ) : null}
             </View>
 
             {/* Off-screen ShareCard mount for capture — A1 */}
@@ -704,6 +779,8 @@ export default function DetailView() {
                   verdictLabel={t('v_' + (item.verdict ?? 'yum'))}
                   brandText={t('share_brand_tag')}
                   priceText={item.price ? formatMoney(item.price) : ''}
+                  importCode={shareImportCode ?? undefined}
+                  importCodeHint={shareImportCode ? t('share_card_import_hint') : undefined}
                   onReady={onShareCardReady}
                 />
               </RNView>

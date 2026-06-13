@@ -290,6 +290,12 @@ export default function YouView({ items }: Props) {
           icon="tag"
           label={t('tag_manage')}
           onPress={() => router.push('/tags')}
+        />
+        {/* S3a — "enter import code" fallback (WeChat strips the deep link). */}
+        <SettingRow
+          icon="download"
+          label={t('import_code_entry')}
+          onPress={() => router.push('/import-code')}
           last
         />
         {/* set_private row removed until S3 */}

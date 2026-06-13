@@ -271,6 +271,36 @@ export class ProRequiredError extends Error {
   }
 }
 
+/* ----------------------------------------------------------------
+   S3a — single-card share → import into recipient to-taste.
+   ---------------------------------------------------------------- */
+
+/** Response from POST /api/tastes/:id/share (owner mints a thin token). */
+export interface MintShareResponse {
+  /** The crypto-random, non-enumerable share token. */
+  token: string;
+  /** Deep link to embed in the share text: yummyornot://import/<token>. */
+  deepLink: string;
+  /** Short, token-derived code printed on the card (WeChat-forward fallback). */
+  importCode: string;
+  /** ISO expiry, or null when the token does not expire (owner may still revoke). */
+  expiresAt: string | null;
+}
+
+/** Live preview returned by GET /api/share/:token (source read at request time).
+ *  photoUrl is a SHORT-lived (<=60s) presign of the source ORIGINAL — never the
+ *  owner's persisted/long-lived URL. */
+export interface SharePreview {
+  name: string;
+  place: string;
+  price: string;
+  verdict: Verdict | null;
+  tags: string[];
+  notes: string;
+  /** Short-lived presigned URL to the source photo, or "" when there is none. */
+  photoUrl: string;
+}
+
 /** Canonical filter chips shown in the library (first is the "all" sentinel). */
 export const FILTERS = [
   "All",
