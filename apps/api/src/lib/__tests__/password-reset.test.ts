@@ -1,12 +1,18 @@
 /* Password-reset db helpers — exercised against an in-memory Postgres (pg-mem)
-   so the real SQL (single-use UPDATE, expiry, FK) runs, not a mock.
+   so the real SQL (single-use UPDATE, email binding, expiry, FK, transaction)
+   runs, not a mock.
 
-   Pins the security-critical behaviors of the reset flow:
+   Security properties pinned:
      • the token is stored HASHED, never raw;
      • an expired token is rejected;
-     • a used token is rejected (single-use), and consuming is atomic;
-     • setUserPasswordHash swaps the hash so the old password stops verifying;
-     • deleteUserSessions revokes every session for the user. */
+     • a used token is rejected (single-use);
+     • token must be bound to the issuing email — can't swap email to bypass
+       the per-email rate-limit (MED 3);
+     • a successful reset burns ALL other outstanding tokens for the user (MED 4);
+     • the whole op (consume + burn + set-password + revoke-sessions) is atomic:
+       when the consume step fails (wrong email, expired, unknown) the password
+       and token remain unchanged (HIGH 2);
+     • sessions are revoked after a successful reset. */
 import { createHash } from 'crypto';
 import { type IMemoryDb } from 'pg-mem';
 
@@ -29,13 +35,12 @@ import {
   createSession,
   getSessionUser,
   savePasswordResetToken,
-  consumePasswordResetToken,
-  setUserPasswordHash,
-  deleteUserSessions,
+  applyPasswordReset,
 } from '../db';
 import { hashCode, hashPassword, verifyPassword } from '../auth';
 
 const memdb = () => (globalThis as Record<string, unknown>).__pwResetMemdb as IMemoryDb;
+const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
 function createSchema() {
   const db = memdb();
@@ -85,14 +90,16 @@ beforeEach(() => {
   db.public.none('DELETE FROM password_reset_tokens;');
   db.public.none('DELETE FROM sessions;');
   db.public.none('DELETE FROM users;');
-  db.public.none(`
-    INSERT INTO users (id, display_name, email, password_hash)
-    VALUES ('u1', 'A', 'a@x.com', ${"'" + hashPassword('oldpassword') + "'"});
-  `);
+  db.public.none(
+    `INSERT INTO users (id, display_name, email, password_hash)
+     VALUES ('u1', 'A', 'a@x.com', '${hashPassword('oldpassword')}');`
+  );
 });
 
 const future = () => new Date(Date.now() + 30 * 60 * 1000);
-const past = () => new Date(Date.now() - 60 * 1000);
+const past   = () => new Date(Date.now() - 60 * 1000);
+
+// ── savePasswordResetToken ────────────────────────────────────────────────────
 
 describe('savePasswordResetToken', () => {
   it('stores only the token hash — never the raw token', async () => {
@@ -103,74 +110,147 @@ describe('savePasswordResetToken', () => {
       'SELECT token_hash, email FROM password_reset_tokens'
     ) as { token_hash: string; email: string };
 
-    expect(row.token_hash).toBe(hashCode(raw));
-    // The raw token must not be recoverable from the row.
+    expect(row.token_hash).toBe(sha256(raw));
     expect(row.token_hash).not.toBe(raw);
-    expect(row.token_hash).toBe(createHash('sha256').update(raw).digest('hex'));
   });
 });
 
-describe('consumePasswordResetToken', () => {
-  it('returns the user id for a valid unexpired token', async () => {
+// ── applyPasswordReset — happy path ──────────────────────────────────────────
+
+describe('applyPasswordReset — happy path', () => {
+  it('returns the user id for a valid unexpired token matching the correct email', async () => {
     const raw = 'valid-token';
     await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
-    await expect(consumePasswordResetToken(hashCode(raw))).resolves.toEqual({ userId: 'u1' });
+    await expect(
+      applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('newpass123'))
+    ).resolves.toEqual({ userId: 'u1' });
   });
 
-  it('rejects an expired token', async () => {
-    const raw = 'expired-token';
-    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), past());
-    await expect(consumePasswordResetToken(hashCode(raw))).resolves.toBeNull();
-  });
-
-  it('rejects an unknown token', async () => {
-    await expect(consumePasswordResetToken(hashCode('never-issued'))).resolves.toBeNull();
-  });
-
-  it('is single-use: a second consume of the same token fails', async () => {
-    const raw = 'one-shot-token';
-    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
-
-    await expect(consumePasswordResetToken(hashCode(raw))).resolves.toEqual({ userId: 'u1' });
-    // already consumed → rejected
-    await expect(consumePasswordResetToken(hashCode(raw))).resolves.toBeNull();
-
-    const row = memdb().public.one(
-      'SELECT used_at FROM password_reset_tokens'
-    ) as { used_at: Date | null };
-    expect(row.used_at).not.toBeNull();
-  });
-});
-
-describe('the full reset effect (set hash + revoke sessions)', () => {
-  it('replaces the password so the old one no longer verifies and the new one does', async () => {
+  it('old password stops verifying; new one does', async () => {
     const raw = 'reset-then-login';
     await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
+    await applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('brandnewpass'));
 
-    const consumed = await consumePasswordResetToken(hashCode(raw));
-    expect(consumed).toEqual({ userId: 'u1' });
-
-    await setUserPasswordHash('u1', hashPassword('brandnewpass'));
-
-    const row = memdb().public.one(
+    const { password_hash } = memdb().public.one(
       "SELECT password_hash FROM users WHERE id = 'u1'"
     ) as { password_hash: string };
-    expect(verifyPassword('oldpassword', row.password_hash)).toBe(false);
-    expect(verifyPassword('brandnewpass', row.password_hash)).toBe(true);
+    expect(verifyPassword('oldpassword', password_hash)).toBe(false);
+    expect(verifyPassword('brandnewpass', password_hash)).toBe(true);
   });
 
   it('revokes every existing session for the user', async () => {
     await createSession('sess-a', 'u1', future(), 'jest');
     await createSession('sess-b', 'u1', future(), 'jest');
-    await expect(getSessionUser('sess-a')).resolves.toMatchObject({ id: 'u1' });
 
-    await deleteUserSessions('u1');
+    const raw = 'revoke-test';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
+    await applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('newpass123'));
 
     await expect(getSessionUser('sess-a')).resolves.toBeNull();
     await expect(getSessionUser('sess-b')).resolves.toBeNull();
-    const { length } = memdb().public.many(
-      "SELECT 1 FROM sessions WHERE user_id = 'u1'"
-    );
-    expect(length).toBe(0);
+    const rows = memdb().public.many("SELECT 1 FROM sessions WHERE user_id = 'u1'");
+    expect(rows).toHaveLength(0);
+  });
+});
+
+// ── applyPasswordReset — rejection cases ─────────────────────────────────────
+
+describe('applyPasswordReset — rejection cases', () => {
+  it('rejects an expired token', async () => {
+    const raw = 'expired-token';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), past());
+    await expect(
+      applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('p'))
+    ).resolves.toBeNull();
+  });
+
+  it('rejects an unknown token', async () => {
+    await expect(
+      applyPasswordReset(hashCode('never-issued'), 'a@x.com', hashPassword('p'))
+    ).resolves.toBeNull();
+  });
+
+  it('is single-use: a second consume of the same token fails', async () => {
+    const raw = 'one-shot';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
+    await expect(
+      applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('newpass'))
+    ).resolves.toEqual({ userId: 'u1' });
+    await expect(
+      applyPasswordReset(hashCode(raw), 'a@x.com', hashPassword('newpass'))
+    ).resolves.toBeNull();
+
+    // pg-mem's .one()/.many() don't support parameterised queries in test reads.
+    // There is exactly one token row in this test so we can select all.
+    const { used_at } = memdb().public.one(
+      'SELECT used_at FROM password_reset_tokens'
+    ) as { used_at: Date | null };
+    expect(used_at).not.toBeNull();
+  });
+
+  it('rejects a token when supplied email differs from the issuing email (MED 3)', async () => {
+    // Token issued for a@x.com; attacker supplies b@x.com to bypass the
+    // per-email rate limiter while reusing the real token.
+    const raw = 'email-bound-token';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
+
+    const result = await applyPasswordReset(hashCode(raw), 'b@x.com', hashPassword('newpass'));
+    expect(result).toBeNull();
+
+    // Token must still be unconsumed so the real owner can still use it.
+    const { used_at } = memdb().public.one(
+      'SELECT used_at FROM password_reset_tokens'
+    ) as { used_at: Date | null };
+    expect(used_at).toBeNull();
+  });
+});
+
+// ── stale token invalidation (MED 4) ─────────────────────────────────────────
+
+describe('stale token invalidation (MED 4)', () => {
+  it('burns all other outstanding tokens for the user when one is consumed', async () => {
+    const rawA = 'token-a';
+    const rawB = 'token-b';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(rawA), future());
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(rawB), future());
+
+    // Consume token-a → token-b must be burned automatically.
+    await applyPasswordReset(hashCode(rawA), 'a@x.com', hashPassword('newpass'));
+
+    // token-b is now used and must be rejected.
+    const result = await applyPasswordReset(hashCode(rawB), 'a@x.com', hashPassword('another'));
+    expect(result).toBeNull();
+
+    const rows = memdb().public.many(
+      'SELECT used_at FROM password_reset_tokens'
+    ) as { used_at: Date | null }[];
+    // Both tokens must have used_at set.
+    expect(rows.every((r) => r.used_at !== null)).toBe(true);
+  });
+});
+
+// ── atomicity (HIGH 2) ───────────────────────────────────────────────────────
+
+describe('atomicity (HIGH 2)', () => {
+  it('leaves password unchanged and token not consumed when the email does not match', async () => {
+    // The consume step finds no row (wrong email) → early ROLLBACK; the
+    // password and token must be exactly as before.
+    const raw = 'atomic-test';
+    await savePasswordResetToken('u1', 'a@x.com', hashCode(raw), future());
+
+    const result = await applyPasswordReset(hashCode(raw), 'wrong@x.com', hashPassword('newpass'));
+    expect(result).toBeNull();
+
+    // Password unchanged.
+    const { password_hash } = memdb().public.one(
+      "SELECT password_hash FROM users WHERE id = 'u1'"
+    ) as { password_hash: string };
+    expect(verifyPassword('oldpassword', password_hash)).toBe(true);
+
+    // Token not consumed.
+    const { used_at } = memdb().public.one(
+      'SELECT used_at FROM password_reset_tokens'
+    ) as { used_at: Date | null };
+    expect(used_at).toBeNull();
   });
 });

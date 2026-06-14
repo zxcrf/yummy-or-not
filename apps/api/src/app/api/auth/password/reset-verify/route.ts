@@ -6,11 +6,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  consumePasswordResetToken,
-  setUserPasswordHash,
-  deleteUserSessions,
-} from '@/lib/db';
+import { applyPasswordReset } from '@/lib/db';
 import {
   hashCode,
   hashPassword,
@@ -42,15 +38,14 @@ export async function POST(req: NextRequest) {
     ]);
     if (limited.limited) return rateLimitedResponse(origin, limited.retryAfterSeconds);
 
-    const consumed = await consumePasswordResetToken(hashCode(token));
-    if (!consumed) {
+    // All four steps (consume token, burn other outstanding tokens, set new
+    // password, revoke sessions) run in one DB transaction — all commit or all
+    // roll back. Token is bound to the supplied email to close the rate-limit
+    // bypass described in the security review.
+    const applied = await applyPasswordReset(hashCode(token), email, hashPassword(newPassword));
+    if (!applied) {
       return withCors(NextResponse.json({ error: 'bad_token' }, { status: 401 }), origin);
     }
-
-    await setUserPasswordHash(consumed.userId, hashPassword(newPassword));
-    // Revoke existing sessions: a successful reset must not leave any pre-reset
-    // bearer token valid.
-    await deleteUserSessions(consumed.userId);
 
     return withCors(NextResponse.json({ ok: true }), origin);
   } catch (err) {

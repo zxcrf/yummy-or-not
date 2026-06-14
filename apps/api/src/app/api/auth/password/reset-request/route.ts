@@ -8,6 +8,9 @@
 //
 // Enumeration-safe: ALWAYS returns 200 regardless of whether the email exists.
 // The token-creating work happens only when a user is actually found.
+//
+// Timing-safe: deliver() is fire-and-forget (void, not awaited) so the webhook
+// RTT is never on the hot path and cannot distinguish a hit from a miss.
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
         hashCode(token),
         new Date(Date.now() + PW_RESET_TTL_MS)
       );
-      await deliver(email, token);
+      void deliver(email, token); // fire-and-forget: webhook RTT must not be observable
     }
 
     const body: { ok: true; devToken?: string } = { ok: true };

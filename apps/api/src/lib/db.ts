@@ -1232,41 +1232,70 @@ export async function savePasswordResetToken(
 }
 
 /**
- * Atomically consume a password-reset token: succeeds only when the token
- * exists, is unexpired, and has NOT been used. On success it stamps used_at in
- * the same statement (single-use, race-safe) and returns the owning user id;
- * returns null for any expired / already-used / unknown token.
+ * Apply a password reset atomically inside a single transaction:
+ *   1. Consume the token (must match BOTH hash AND the normalized email; rejects
+ *      if already used, expired, or issued for a different address — MED 3).
+ *   2. Burn ALL other unexpired/unused tokens for the same user so an older link
+ *      cannot be replayed after a successful reset (MED 4).
+ *   3. Set the new password hash on the user row.
+ *   4. Revoke every session for the user.
+ * All four steps commit together or roll back together (HIGH 2). Returns the
+ * user id on success, null when the token is invalid/mismatched.
  */
-export async function consumePasswordResetToken(
-  tokenHash: string
+export async function applyPasswordReset(
+  tokenHash: string,
+  email: string,
+  newPasswordHash: string
 ): Promise<{ userId: string } | null> {
-  const { rows } = await pool.query(
-    `UPDATE password_reset_tokens
-        SET used_at = now()
-      WHERE token_hash = $1
-        AND used_at IS NULL
-        AND expires_at > now()
-      RETURNING user_id`,
-    [tokenHash]
-  );
-  return rows.length ? { userId: rows[0].user_id } : null;
-}
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-/** Set a user's password hash (used by the password-reset flow). */
-export async function setUserPasswordHash(
-  userId: string,
-  passwordHash: string
-): Promise<void> {
-  await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-    passwordHash,
-    userId,
-  ]);
-}
+    // Step 1 — consume this specific token (bound to email to prevent
+    // rate-limit bypass via email rotation, MED 3).
+    const { rows } = await client.query(
+      `UPDATE password_reset_tokens
+          SET used_at = now()
+        WHERE token_hash = $1
+          AND email      = $2
+          AND used_at IS NULL
+          AND expires_at > now()
+        RETURNING user_id`,
+      [tokenHash, email]
+    );
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const userId: string = rows[0].user_id;
 
-/** Revoke every session for a user — called after a password reset so a stolen
- *  old session can't persist past the reset. */
-export async function deleteUserSessions(userId: string): Promise<void> {
-  await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    // Step 2 — burn every OTHER outstanding token for this user (MED 4).
+    await client.query(
+      `UPDATE password_reset_tokens
+          SET used_at = now()
+        WHERE user_id   = $1
+          AND token_hash <> $2
+          AND used_at IS NULL`,
+      [userId, tokenHash]
+    );
+
+    // Step 3 — set the new password.
+    await client.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [newPasswordHash, userId]
+    );
+
+    // Step 4 — revoke all sessions so no pre-reset bearer token survives.
+    await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+
+    await client.query('COMMIT');
+    return { userId };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ── User tag candidate set ────────────────────────────────────────────────────
