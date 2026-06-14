@@ -125,7 +125,9 @@ export default function NearbyHeatView() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqSeq = useRef(0)
-  const lastBboxRef = useRef<Bbox | null>(null)
+  // Tracks the most-recently SEEN viewport (set unconditionally in onCameraIdle).
+  // Refresh reads this so it always re-fetches what the user is currently looking at.
+  const currentViewportBboxRef = useRef<Bbox | null>(null)
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null)
 
   // Restore persisted consent on mount; init the SDK if already consented.
@@ -175,7 +177,6 @@ export default function NearbyHeatView() {
       return
     }
 
-    lastBboxRef.current = box
     const seq = ++reqSeq.current
     setLoading(true)
     try {
@@ -228,6 +229,9 @@ export default function NearbyHeatView() {
         longitudeDelta: Math.abs(ne.lng - sw.lng),
       }
       const box = regionToBbox(region)
+      // Always record the current viewport for Refresh, regardless of whether
+      // decideHeatFetch would approve the bbox (e.g. zoomed out too far).
+      currentViewportBboxRef.current = box
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         void loadHeat(box)
@@ -286,8 +290,35 @@ export default function NearbyHeatView() {
   }, [locate.coords])
 
   const handleRefresh = useCallback(() => {
-    if (lastBboxRef.current) void loadHeat(lastBboxRef.current)
-  }, [loadHeat])
+    const box = currentViewportBboxRef.current
+    if (!box) return // no viewport seen yet — safe no-op
+    // Bypass decideHeatFetch: an explicit user refresh should always hit the
+    // network for whatever the user is currently looking at, even if the bbox
+    // would normally be skipped (oversized, dedup, etc.).
+    const seq = ++reqSeq.current
+    setLoading(true)
+    setHint(null)
+    void getGeoHeat(box)
+      .then((heat) => {
+        if (seq !== reqSeq.current) return
+        const next: HeatCell[] = heat.map(({ cell, count }) => ({
+          cell,
+          count,
+          points: geohashCellRectGcj02(cell),
+        }))
+        setCells(next)
+        setHint(next.length === 0 ? '这一带还没有公开的味道' : null)
+      })
+      .catch((err) => {
+        if (seq !== reqSeq.current) return
+        const code = err instanceof Error ? err.message : ''
+        setCells([])
+        setHint(code === 'area_too_large' ? '放大查看附近热力' : '加载失败，稍后再试')
+      })
+      .finally(() => {
+        if (seq === reqSeq.current) setLoading(false)
+      })
+  }, [])
 
   // Camera is computed from the settled locate result. While locating we keep
   // it null (we don't mount the map yet — see below) so the very first frame is
