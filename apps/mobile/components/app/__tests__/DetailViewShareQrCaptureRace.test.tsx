@@ -100,8 +100,18 @@ jest.mock('@/components/ds', () => {
 // The first importable mount is link-free (code/url not set until mintShare
 // resolves); it must NOT fire onReady, matching the fixed handler which only
 // registers the readiness resolver AFTER the code/url commit.
+//
+// Mock ShareCard records renders and drives onReady.
+//
+// `mockDelayQrReady`: when a test sets this to `true` BEFORE the card renders
+//   with landingUrl, the mock does NOT auto-fire onReady for the QR path.
+//   Instead it parks the callback in `mockShareCardOnReady` so the test can
+//   release it manually — simulating a QR layout that stalls past any timer.
+//   When false (default) onReady fires immediately, mimicking a fast layout.
 type CardProps = { importCode?: string; landingUrl?: string }
 const mockShareCardRenders: CardProps[] = []
+let mockDelayQrReady = false
+let mockShareCardOnReady: (() => void) | null = null
 jest.mock('@/components/app/ShareCard', () => {
   const React = require('react')
   const { forwardRef, useEffect } = React
@@ -112,8 +122,18 @@ jest.mock('@/components/app/ShareCard', () => {
     ) => {
       mockShareCardRenders.push({ importCode: p.importCode, landingUrl: p.landingUrl })
       useEffect(() => {
-        if (p.landingUrl) p.onReady?.() // 可导入: QR onLayout gate
-        else if (!p.importCode) p.onReady?.() // pure-PNG: image onLoad gate
+        if (p.landingUrl) {
+          // 可导入: QR onLayout gate.
+          if (mockDelayQrReady) {
+            // Park the callback — the test drives readiness manually to
+            // simulate a QR layout that stalls well past the 600ms window.
+            mockShareCardOnReady = p.onReady ?? null
+          } else {
+            p.onReady?.() // normal fast layout
+          }
+        } else if (!p.importCode) {
+          p.onReady?.() // pure-PNG: image onLoad / no-photo gate
+        }
       })
       return React.createElement('View', { ref })
     },
@@ -179,6 +199,8 @@ describe('DetailView 可导入 share — QR capture race (PR #105 follow-up)', (
   beforeEach(() => {
     jest.clearAllMocks()
     mockShareCardRenders.length = 0
+    mockDelayQrReady = false
+    mockShareCardOnReady = null
     captureSnapshots = []
     jest.useFakeTimers()
     routeParams.id = 'taste-1'
@@ -240,6 +262,94 @@ describe('DetailView 可导入 share — QR capture race (PR #105 follow-up)', (
     // captureRef must have run exactly once, and the card it captured MUST have
     // carried BOTH the import code AND the landing URL (the QR). The pre-fix code
     // captured the stale link-free card (importCode/landingUrl undefined).
+    expect(captureSnapshots.length).toBe(1)
+    expect(captureSnapshots[0].importCode).toBe('AB12CD')
+    expect(captureSnapshots[0].landingUrl).toMatch(/\/i\/AB12CD$/)
+  })
+
+  it('does NOT capture before QR onLayout fires — 600ms timer must not pre-empt a slow layout', async () => {
+    // This test pins BLOCKER 1: the readiness gate for 可导入 must be the actual
+    // qrWrap onLayout, not a 600ms timeout that can fire before the QR exists.
+    //
+    // Scenario: mintShare resolves quickly, but the QR layout stalls (slow
+    // device / GC). We advance time past the OLD 600ms window and assert that
+    // captureRef has NOT fired yet. Then we release the stalled onLayout and
+    // assert capture runs with the QR-bearing card (importCode + landingUrl).
+    //
+    // With the old code (600ms race): captureRef fires at 600ms → captures the
+    // link-free card → this test FAILS (captureSnapshots[0].importCode undefined
+    // OR capture happened before we released the layout).
+    // With the fixed code (waitForQrReady, 2500ms ceiling): captureRef waits
+    // for the actual onLayout → captureSnapshots[0] carries AB12CD → PASSES.
+    mockedGetTaste.mockResolvedValueOnce(makeTaste())
+    mockedMintShare.mockResolvedValueOnce({
+      token: 'tok_abc',
+      deepLink: 'yummyornot://import/tok_abc',
+      importCode: 'AB12CD',
+      expiresAt: null,
+    } as Awaited<ReturnType<typeof mintShare>>)
+
+    // Tell the mock to stall onReady for the QR path — simulating a slow layout.
+    mockDelayQrReady = true
+
+    const r = await renderDetail()
+
+    const entry = r.root.findAll((n) => n.props?.testID === 'share-import-btn')[0]
+    act(() => { entry.props.onPress() })
+    const btn = r.root.findAll((n) => n.props?.testID === 'share-mode-importable')[0]
+
+    // Fire the share. mintShare resolves via microtask (mockResolvedValueOnce).
+    // In the OLD (pre-fix) code, waitForShareCardReady() with the 600ms timer
+    // was called SYNCHRONOUSLY in the handler body BEFORE awaiting mintShare —
+    // so the 600ms setTimeout is scheduled at press time.
+    // In the FIXED code, waitForQrReady() (2500ms) is called only AFTER mintShare
+    // resolves and setState runs — so its timer is scheduled later.
+    await act(async () => { btn.props.onPress(); await Promise.resolve() })
+
+    // Flush microtasks only (no timer advance) so mintShare resolves and React
+    // commits the QR render — but neither the 600ms (old) nor the 2500ms (new)
+    // timer fires yet. The QR layout onReady is stalled (mockDelayQrReady=true).
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+    }
+
+    // Advance to 700ms — past the OLD 600ms window but below the new 2500ms
+    // ceiling. In the old code the 600ms timer (scheduled at press time) fires
+    // here and resolves `ready`, which causes capture to proceed against the
+    // stale link-free card. In the fixed code the 2500ms timer (scheduled after
+    // mintShare) has not fired → capture MUST NOT have happened yet.
+    await act(async () => {
+      jest.advanceTimersByTime(700)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Assert capture has NOT happened — the 600ms window elapsed but the QR
+    // layout hasn't fired. Fixed code is still waiting for onLayout.
+    expect(captureSnapshots.length).toBe(0)
+
+    // Now release the stalled QR layout (simulates onLayout firing on device).
+    await act(async () => {
+      mockShareCardOnReady?.()
+      await Promise.resolve()
+    })
+    // Drain the remaining chain (rAF frames → captureRef → shareAsync).
+    // runAllTimers is safe now — the 2500ms timeout fires but we already
+    // resolved via onLayout so it's a no-op (Promise.race: first wins).
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        jest.runAllTimers()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+    }
+
+    const { shareAsync } = require('expo-sharing')
+    expect(shareAsync).toHaveBeenCalledTimes(1)
+    // Capture happened AFTER the QR layout — the card carries the code + QR URL.
     expect(captureSnapshots.length).toBe(1)
     expect(captureSnapshots[0].importCode).toBe('AB12CD')
     expect(captureSnapshots[0].landingUrl).toMatch(/\/i\/AB12CD$/)

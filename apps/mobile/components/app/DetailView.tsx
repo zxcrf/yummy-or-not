@@ -364,19 +364,46 @@ export default function DetailView() {
     setBuySheetOpen(true)
   }
 
-  // Start the ShareCard readiness race: wait for the card's onReady callback
-  // (pure-PNG: image onLoad / no-photo first paint; 可导入: qrWrap onLayout)
-  // against a 600 ms timeout fallback (no-photo / disk-cached thumb). The
-  // resolver ref is registered synchronously when this is called, so the caller
-  // MUST call it only AFTER the props that drive that onReady (importCode /
-  // landingUrl for 可导入) have been committed — otherwise the timer can win the
-  // race before the QR subtree exists. See handleShareImportable.
+  // ── Pure-PNG readiness wait ───────────────────────────────────────────────
+  // Wait for the ShareCard's onReady callback (image onLoad on the photo path,
+  // or the no-photo useEffect after first paint) against a 600ms fallback so a
+  // disk-cached thumb that fires onLoad after the capture window does not hang
+  // the share indefinitely. Used ONLY by handleSharePng — the importable path
+  // uses waitForQrReady below, which has a much longer crash-safety ceiling.
   const waitForShareCardReady = (): Promise<void> =>
     Promise.race([
       new Promise<void>((resolve) => {
         shareReadyResolveRef.current = resolve
       }),
       new Promise<void>((resolve) => setTimeout(resolve, 600)),
+    ])
+
+  // ── 可导入 (importable) QR readiness wait ────────────────────────────────
+  // For importable mode the readiness signal is the qrWrap onLayout in
+  // ShareCard — which fires only AFTER React has committed the re-render that
+  // sets importCode/landingUrl AND the native layout engine has measured the QR
+  // subtree. The flow is:
+  //   1. setShareImportCode / setShareLandingUrl — schedules a React commit
+  //      (NOT synchronous; the commit happens asynchronously after this returns)
+  //   2. waitForQrReady() — registers the resolver ref synchronously so it is
+  //      in place before React flushes the commit
+  //   3. React commits → ShareCard re-renders with landingUrl → qrWrap
+  //      onLayout fires → onShareCardReady() → resolver resolves → capture
+  //
+  // The 600ms fallback used by the PNG path MUST NOT be used here: on a slow
+  // device, GC pause, or large card the commit + layout can take longer than
+  // 600ms, and a 600ms timer win would snapshot the card BEFORE the QR subtree
+  // exists — reproducing the exact bug we are fixing. The 2500ms ceiling below
+  // is a pure crash-safety net so a never-firing layout (e.g. the card was
+  // unmounted mid-share) can't hang the share UI forever. Under normal
+  // operation the onLayout fires well within 100–200ms and the timeout never
+  // triggers.
+  const waitForQrReady = (): Promise<void> =>
+    Promise.race([
+      new Promise<void>((resolve) => {
+        shareReadyResolveRef.current = resolve
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
     ])
 
   // Wait a couple of animation frames so a freshly-committed subtree (the QR
@@ -485,10 +512,13 @@ export default function DetailView() {
       // view — and only then capture.
       setShareImportCode(importCode)
       setShareLandingUrl(landingUrlForCode(importCode))
-      // Started AFTER the state commit so the resolver ref is registered before
-      // the QR's onLayout fires, and the 600ms fallback budget is fresh (not
-      // consumed by mintShare).
-      const ready = waitForShareCardReady()
+      // Register the resolver ref NOW — before React flushes the commit — so
+      // the qrWrap onLayout (which fires post-commit on the native thread) can
+      // resolve it. setState above schedules the commit; it has NOT happened
+      // yet at this point. waitForQrReady uses a 2500ms crash-safety ceiling
+      // (not a 600ms race) so the 600ms timeout cannot pre-empt the layout on
+      // a slow device or under GC pressure.
+      const ready = waitForQrReady()
       // The collision-resistant 口令 wraps the EXISTING importCode (no new code
       // space) and is what the recipient's foreground auto-detect parses back
       // out. We compute it now so it can ride the share text, but we DON'T write
