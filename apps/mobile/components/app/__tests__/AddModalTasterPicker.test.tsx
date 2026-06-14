@@ -209,4 +209,19 @@ describe('AddModal — taster attribution selector', () => {
     const renderer = renderModal()
     expect(renderer.root.findAllByProps({ testID: 'add-taster-picker' })).toHaveLength(0)
   })
+
+  // Regression: when the picker is hidden the user cannot see or change who a
+  // record is attributed to, so Save must never carry a stale/invisible taster
+  // id (even if the active persona somehow points at a family member).
+  it('does not submit a tasterId when the picker is hidden (no family personas)', async () => {
+    mockTasters = [{ id: 'ts_self', isSelf: true, displayName: 'You' }]
+    mockActiveTaster = 'ts_wife' // stale/dangling active id, picker not shown
+    const renderer = renderModal()
+    expect(renderer.root.findAllByProps({ testID: 'add-taster-picker' })).toHaveLength(0)
+    fillReady(renderer)
+    await save(renderer)
+
+    expect(mockCreateTaste).toHaveBeenCalledTimes(1)
+    expect(mockCreateTaste.mock.calls[0][0].tasterId).toBeUndefined()
+  })
 })

@@ -520,4 +520,22 @@ describe('LibraryView persona filter (issue #104)', () => {
     expect(cards(renderer, 'Legacy Self Snack')).toHaveLength(1)
     expect(cards(renderer, 'Wife Cake')).toHaveLength(0)
   })
+
+  // Robustness: before the taster list resolves (or if it fails), the self-taster
+  // id is unknown. New self records carry a concrete self id, so a null-only
+  // filter would hide the user's own records — the self default must stay
+  // permissive until the id is known.
+  it('self default shows own concrete-id records even before tasters load', () => {
+    mockItems.push(
+      taste({ name: 'My Coffee', tasterId: 'ts_self' }),
+      taste({ name: 'Legacy Self Snack', tasterId: null }),
+    )
+    mockActiveTaster = null
+    mockTasters = [] // tasters not loaded yet → selfTasterId unknown
+
+    const renderer = renderLibrary()
+
+    expect(cards(renderer, 'My Coffee')).toHaveLength(1)
+    expect(cards(renderer, 'Legacy Self Snack')).toHaveLength(1)
+  })
 })

@@ -38,11 +38,12 @@ describe('filterTastesByTaster', () => {
     expect(out).toEqual(['wife'])
   })
 
-  it('self default with an unknown self id still keeps legacy null rows', () => {
-    // Pre-S3b accounts may not have a resolved self-taster id on the client yet;
-    // legacy null-taster rows must still surface under self.
+  it('self default with an unknown self id shows everything (no own records hidden)', () => {
+    // Until useTasters resolves (or if it fails), the self-taster id is unknown.
+    // New self records carry a concrete self id, so a null-only filter would hide
+    // them — fall back to the permissive pre-S3b behaviour instead.
     const out = filterTastesByTaster(items, null, null).map((t) => t.name)
-    expect(out).toEqual(['legacy', 'undef'])
+    expect(out).toEqual(['mine', 'legacy', 'undef', 'wife', 'kid'])
   })
 
   it('a family persona with no matching records returns empty', () => {

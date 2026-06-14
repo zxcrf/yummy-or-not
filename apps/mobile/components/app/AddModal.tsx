@@ -564,9 +564,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
           notes: notes || undefined,
           lat,
           lng,
-          // Only send a non-self taster; null (self) → omitted so the server
-          // applies the self-taster default, never a wrong persona.
-          ...(assignTaster ? { tasterId: assignTaster } : {}),
+          // Only attribute to a persona the user can actually see and change:
+          // send the chosen taster only when the picker is shown. If it's hidden
+          // (free account, or family personas not loaded/removed) we never carry
+          // a stale/invisible id — null (self) → omitted so the server applies
+          // the self-taster default.
+          ...(showTasterPicker && assignTaster ? { tasterId: assignTaster } : {}),
         },
         photo,
       )

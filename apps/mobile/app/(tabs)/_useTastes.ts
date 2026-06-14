@@ -210,6 +210,12 @@ export function getCachedTaste(id: string): Taste | undefined {
  * Self default (active === null) matches records with no taster (legacy rows that
  * pre-date S3b have a null tasterId) OR records attributed to the self-taster.
  * A family persona matches only records carrying exactly that taster id.
+ *
+ * Robustness: the self default needs the self-taster id to recognise own records
+ * (new self records carry a concrete self-taster id, not null). Until useTasters
+ * resolves — or if that fetch fails — `selfTasterId` is null; rather than hide
+ * the user's own records, fall back to showing everything (the pre-S3b
+ * behaviour). The precise self filter applies once the id is known.
  */
 export function filterTastesByTaster(
   items: Taste[],
@@ -217,6 +223,7 @@ export function filterTastesByTaster(
   selfTasterId: string | null,
 ): Taste[] {
   if (active === null) {
+    if (selfTasterId == null) return items
     return items.filter((t) => t.tasterId == null || t.tasterId === selfTasterId)
   }
   return items.filter((t) => t.tasterId === active)
