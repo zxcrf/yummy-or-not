@@ -594,13 +594,21 @@ export default function AddModal({ onClose, onSaved }: Props) {
         try {
           await publishTasteGeo(created.id)
         } catch {
-          // Record is saved but publish failed — surface a non-blocking message
-          // so the user knows it is still private. They can retry from DetailView.
+          // Record is saved but publish failed. Show the error and keep the
+          // modal OPEN so the message is visible — calling onSaved here would
+          // unmount the modal before it paints, silently hiding the failure.
+          // The user reads the message (record saved but stayed private) and
+          // can close via Cancel; the record already appears in their list via
+          // the invalidateTastes() call below. They can retry from DetailView.
           setError(t('vis_publish_failed'))
           setSaving(false)
-          // Still navigate: the taste exists on the server, just unpublished.
+          // Invalidate so the (private) record appears in the list, and clear
+          // the draft since the record is server-persisted regardless.
+          savedRef.current = true
+          void clearDraft(draftUserId)
           void invalidateTastes()
-          onSaved(created.id)
+          // Do NOT call onSaved — that would navigate away, unmounting this
+          // modal and making the error message invisible to the user.
           return
         }
       }

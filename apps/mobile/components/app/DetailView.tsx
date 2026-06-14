@@ -374,6 +374,10 @@ export default function DetailView() {
   // record can't geo-publish (server 422s), so the UI disables it there.
   const setVisibilityPublic = async (next: boolean) => {
     if (!item || visSaving) return
+    // Defense-in-depth: the UI disables publish when there are no coords, but
+    // guard here too so a handler call can never reach the server 422 path.
+    const hasCoords = item.lat != null && item.lng != null
+    if (next && !hasCoords) return
     const toggleId = item.id
     setVisSaving(true)
     try {

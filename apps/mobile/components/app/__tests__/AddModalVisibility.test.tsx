@@ -278,10 +278,18 @@ describe('AddModal — per-record visibility (S3c)', () => {
     expect(mockPublishTasteGeo).not.toHaveBeenCalled()
   })
 
-  it('publishTasteGeo rejects → error surfaced, onSaved still called, record NOT implied public', async () => {
-    // RED: old fire-and-forget swallows the error; no error text rendered, user
-    // thinks record is public. GREEN: await + setError on failure so the user sees
-    // the message and knows the record stayed private.
+  it('publishTasteGeo rejects → modal stays open (error visible), onSaved NOT called', async () => {
+    // Pins the "fail explicitly" contract: when the user chose Nearby and the
+    // publish fails, the modal must STAY OPEN so the error message is actually
+    // visible. The previous fix called onSaved after setError, which unmounted
+    // the modal before the error painted — the user was STILL not informed.
+    //
+    // RED (old fire-and-forget): error never set, so errorNodes.length === 0.
+    // RED (previous fix): onSaved called immediately after setError, unmounting
+    //   the modal — test would have passed only because onSaved is an inert mock
+    //   that doesn't unmount. The assertion `expect(onSaved).not.toHaveBeenCalled()`
+    //   fails the previous fix, making the real regression detectable.
+    // GREEN (this fix): error shown AND onSaved not called (modal open).
     authUser.defaultVisibility = 'shared'
     mockPublishTasteGeo.mockRejectedValueOnce(new Error('network error'))
     const { renderer, onSaved } = renderModal()
@@ -291,18 +299,20 @@ describe('AddModal — per-record visibility (S3c)', () => {
     const save = findSaveButton(renderer)
     await act(async () => { save[0].props.onClick() })
 
-    // createTaste was called (record saved).
+    // createTaste was called (record is persisted server-side).
     expect(mockCreateTaste).toHaveBeenCalledTimes(1)
-    // publishTasteGeo was attempted.
+    // publishTasteGeo was attempted then rejected.
     expect(mockPublishTasteGeo).toHaveBeenCalledTimes(1)
-    // An error message is visible — user knows publish failed.
+    // Error message is visible in the still-open modal.
     const errorNodes = renderer.root.findAll(
       (n) => typeof n.props.children === 'string' &&
         (n.props.children as string).includes('Saved — but could not publish'),
     )
     expect(errorNodes.length).toBeGreaterThan(0)
-    // onSaved is still called so navigation proceeds (record exists server-side).
-    expect(onSaved).toHaveBeenCalledWith('new-id')
+    // CRITICAL: onSaved must NOT have been called — the modal must stay open so
+    // the error is visible. Calling onSaved would unmount the modal (navigating
+    // away) before the error paints, making the message invisible to the user.
+    expect(onSaved).not.toHaveBeenCalled()
   })
 
   it('no location → public is disabled and Save never publishes even when seed was shared', async () => {
