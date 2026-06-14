@@ -184,12 +184,19 @@ describe('DetailView importable share (S3a)', () => {
     const btn = r.root.findAll((n) => n.props?.testID === 'share-mode-importable')[0]
     expect(btn).toBeTruthy()
 
-    await act(async () => {
-      btn.props.onPress()
-      jest.runAllTimers()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
+    // Fire the share, then drain the async chain in a loop. The fixed handler
+    // commits the import code / QR, then waits the readiness signal + a couple
+    // of rAF "paint" frames before capturing, so the chain (mintShare →
+    // setState commit → onReady → rAF → captureRef → shareAsync) needs several
+    // interleaved timer + microtask passes to complete under fake timers.
+    await act(async () => { btn.props.onPress(); await Promise.resolve() })
+    for (let i = 0; i < 12; i++) {
+      await act(async () => {
+        jest.runAllTimers()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+    }
 
     expect(mockedMintShare).toHaveBeenCalledWith('taste-1')
     expect(shareAsync).toHaveBeenCalledTimes(1)

@@ -364,10 +364,13 @@ export default function DetailView() {
     setBuySheetOpen(true)
   }
 
-  // Start the ShareCard readiness race: wait for the image onLoad callback
-  // (onReady) against a 600 ms timeout fallback (no-photo / disk-cached thumb).
-  // Returned synchronously so the timer is scheduled in the SAME tick as the
-  // button press, even when the caller awaits other work (mintShare) first.
+  // Start the ShareCard readiness race: wait for the card's onReady callback
+  // (pure-PNG: image onLoad / no-photo first paint; 可导入: qrWrap onLayout)
+  // against a 600 ms timeout fallback (no-photo / disk-cached thumb). The
+  // resolver ref is registered synchronously when this is called, so the caller
+  // MUST call it only AFTER the props that drive that onReady (importCode /
+  // landingUrl for 可导入) have been committed — otherwise the timer can win the
+  // race before the QR subtree exists. See handleShareImportable.
   const waitForShareCardReady = (): Promise<void> =>
     Promise.race([
       new Promise<void>((resolve) => {
@@ -376,16 +379,40 @@ export default function DetailView() {
       new Promise<void>((resolve) => setTimeout(resolve, 600)),
     ])
 
+  // Wait a couple of animation frames so a freshly-committed subtree (the QR
+  // SVG in 可导入 mode) has actually painted into the native backing view before
+  // captureRef snapshots it. onReady (qrWrap onLayout) tells us the QR has a
+  // layout box; these frames give react-native-svg time to draw into it.
+  const waitFrames = (count = 2): Promise<void> =>
+    new Promise<void>((resolve) => {
+      let remaining = count
+      const tick = () => {
+        remaining -= 1
+        if (remaining <= 0) resolve()
+        else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+
   // Capture the off-screen ShareCard to a PNG and hand it to the system share
   // sheet. When `extraText` is set (importable share) it rides in the share
   // sheet alongside the PNG so the recipient gets the deep link + import code
   // (S3a). The owner's presigned photo URL is never in the payload — only the
   // rendered PNG file URI travels. `ready` lets the caller pre-start the race.
-  const captureAndShare = async (ready: Promise<void>, extraText?: string) => {
+  // `paintFrames` (可导入 mode) adds a couple of rAF ticks after readiness so the
+  // QR SVG has painted into the native backing view before captureRef.
+  const captureAndShare = async (
+    ready: Promise<void>,
+    extraText?: string,
+    paintFrames = false,
+  ) => {
     if (!item) return
     const captureId = item.id
     await ready
     shareReadyResolveRef.current = null
+    // After onReady (QR laid out) give react-native-svg a couple of frames to
+    // paint into the native backing view, or captureRef snapshots an empty box.
+    if (paintFrames) await waitFrames()
 
     // Guard: nav moved to a different taste while we waited — abort silently.
     if (idRef.current !== captureId) return
@@ -444,19 +471,24 @@ export default function DetailView() {
     const shareId = item.id
     setShareMenuOpen(false)
     setSharing(true)
-    // Start the readiness race synchronously (same tick as the press) so its
-    // 600ms fallback timer is scheduled before we await mintShare — matching
-    // handleSharePng's timing.
-    const ready = waitForShareCardReady()
     try {
       const { deepLink, importCode } = await mintShare(item.id)
       if (idRef.current !== shareId) return
       // Print the code + render the QR on the card BEFORE capture so the
       // captured PNG carries both (the channels that survive image-only
-      // forwarding). React commits this re-render synchronously, so they are on
-      // the card by capture time.
+      // forwarding). mintShare is a network call, so we must NOT start the
+      // readiness race before it — otherwise its latency eats the 600ms budget
+      // and the timer can resolve `ready` before the QR even exists, snapshotting
+      // a stale link-free card. Instead we commit the code/url first, THEN start
+      // the readiness wait (whose onReady fires from the QR's onLayout), THEN
+      // wait a couple of frames so the SVG has painted into the native backing
+      // view — and only then capture.
       setShareImportCode(importCode)
       setShareLandingUrl(landingUrlForCode(importCode))
+      // Started AFTER the state commit so the resolver ref is registered before
+      // the QR's onLayout fires, and the 600ms fallback budget is fresh (not
+      // consumed by mintShare).
+      const ready = waitForShareCardReady()
       // The collision-resistant 口令 wraps the EXISTING importCode (no new code
       // space) and is what the recipient's foreground auto-detect parses back
       // out. We compute it now so it can ride the share text, but we DON'T write
@@ -465,7 +497,7 @@ export default function DetailView() {
       const passphrase = encodeShareToken(importCode)
       // Plain text (not via t() interpolation) so the link/口令 survive verbatim.
       const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}\n${passphrase}`
-      await captureAndShare(ready, text)
+      await captureAndShare(ready, text, /* paintFrames (await QR paint) */ true)
       // The share completed. Record the self-import guard BEFORE the 口令 ever
       // enters this device's clipboard, so the marker is persisted by the time
       // any foreground transition can read that clipboard. Marking first (then

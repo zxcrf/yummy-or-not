@@ -66,12 +66,19 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 ) {
   const hasPhoto = !!(taste.imageThumb || taste.image)
   const photoUri = taste.imageThumb || taste.image || ''
+  // 可导入 mode renders a QR (react-native-qrcode-svg). The image onLoad alone is
+  // NOT a sufficient readiness gate then: the QR is a separate subtree that must
+  // be laid out (and painted into the native backing view) before captureRef, or
+  // the captured PNG omits it. We fire onReady from the qrWrap onLayout instead,
+  // so the caller only captures once the QR block has a layout box.
+  const hasQr = !!landingUrl
 
-  // No-photo path: signal ready after first paint so the caller's race
-  // timer does not have to wait the full 600 ms fallback.
+  // No-photo, no-QR path: signal ready after first paint so the caller's race
+  // timer does not have to wait the full 600 ms fallback. When a QR is present
+  // the qrWrap onLayout drives readiness instead (see below).
   useEffect(() => {
-    if (!hasPhoto) onReady?.()
-  }, [hasPhoto, onReady])
+    if (!hasPhoto && !hasQr) onReady?.()
+  }, [hasPhoto, hasQr, onReady])
 
   return (
     <View ref={ref} style={styles.card} collapsable={false}>
@@ -86,7 +93,10 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             cachePolicy="disk"
             style={styles.photo}
             contentFit="cover"
-            onLoad={onReady}
+            // When a QR is present, the qrWrap onLayout is the readiness gate
+            // (the QR is the slow/late subtree); the image onLoad must NOT
+            // pre-signal ready before the QR has laid out, or capture omits it.
+            onLoad={hasQr ? undefined : onReady}
           />
           {/* VerdictStamp overlapping the photo bottom edge */}
           <View style={styles.stampOverPhoto}>
@@ -156,7 +166,14 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
                 WeChat's scanner, which silently degrades 可导入 to a 淘口令-only
                 share. The white qrWrap below also gives the code its quiet zone. */}
             {landingUrl ? (
-              <View style={styles.qrWrap}>
+              <View
+                style={styles.qrWrap}
+                // 可导入 readiness gate: the QR subtree has been laid out, so the
+                // caller can capture knowing the QR block occupies the card.
+                // Paired with a couple of rAF ticks in the caller so the SVG has
+                // also painted into the native backing view before captureRef.
+                onLayout={onReady}
+              >
                 {/* quietZone renders the spec-mandated blank margin INSIDE the
                     SVG (≈4 modules) so scanners lock on even when the white
                     qrWrap padding is tight — the wrapper padding alone is too
