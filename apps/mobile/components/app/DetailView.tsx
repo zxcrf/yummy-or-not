@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { colors, radius, space } from '@/theme'
 import { Text } from '@/theme'
-import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, encodeShareToken, ProRequiredError, TAG_CHOICES, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, encodeShareToken, ProRequiredError, publishTasteGeo, TAG_CHOICES, unpublishTaste, updateTaste, type Taste, type Verdict } from '@yon/shared'
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
@@ -66,6 +66,10 @@ export default function DetailView() {
   const [item, setItem] = useState<Taste | null>(() => (id ? getCachedTaste(id) ?? null : null))
   const [loading, setLoading] = useState<boolean>(() => !!id && getCachedTaste(id) == null)
   const [remind, setRemind] = useState(() => item?.warnBeforeBuy ?? false)
+  // S3c: in-flight flag while publishing / unpublishing this record. The
+  // visibility itself is read straight off `item.visibility` (source of truth,
+  // refreshed by the publish/unpublish response), so no separate value state.
+  const [visSaving, setVisSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [buySheetOpen, setBuySheetOpen] = useState(false)
   const [buyPrice, setBuyPrice] = useState('')
@@ -360,6 +364,29 @@ export default function DetailView() {
       if (idRef.current !== toggleId) return
       setRemind(prev)
       setItem((p) => (p ? { ...p, warnBeforeBuy: prev } : p))
+    }
+  }
+
+  // S3c: flip this record between private and "Nearby" (geo-published). 'shared'
+  // drives the EXISTING publish API: public → PATCH .../visibility (geo publish
+  // from the record's own coords), private → DELETE .../visibility (unpublish +
+  // remove shares). Public is gated on the record having coords — a location-less
+  // record can't geo-publish (server 422s), so the UI disables it there.
+  const setVisibilityPublic = async (next: boolean) => {
+    if (!item || visSaving) return
+    const toggleId = item.id
+    setVisSaving(true)
+    try {
+      const updated = next ? await publishTasteGeo(item.id) : await unpublishTaste(item.id)
+      void invalidateTastes()
+      // Don't paint A's result onto B if the route moved mid-request.
+      if (idRef.current !== toggleId) return
+      setItem(updated)
+    } catch {
+      // Leave item.visibility untouched on failure — the switch reflects the
+      // server truth, so a failed publish/unpublish simply stays where it was.
+    } finally {
+      if (idRef.current === toggleId) setVisSaving(false)
     }
   }
 
@@ -818,6 +845,37 @@ export default function DetailView() {
                 <Switch checked={remind} onChange={toggleRemind} />
               </View>
             ) : null}
+
+            {/* S3c per-record visibility — ON = "Nearby" (geo-published). Drives
+                the existing publish/unpublish API. Disabled (with a hint) when
+                the record has no coords, since geo-publish needs a location. */}
+            {(() => {
+              const hasCoords = item.lat != null && item.lng != null
+              const isPublic = item.visibility === 'shared'
+              return (
+                <View testID="detail-visibility-row">
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space[1] }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+                      <Icon name="eye" size={20} color="#5a4f63" />
+                      <Text style={{ color: colors.ink900, fontWeight: '500' }}>
+                        {t('set_visibility')}
+                      </Text>
+                    </View>
+                    <Switch
+                      checked={isPublic}
+                      onChange={setVisibilityPublic}
+                      disabled={visSaving || (!hasCoords && !isPublic)}
+                      testID="detail-visibility-switch"
+                    />
+                  </View>
+                  {!hasCoords && !isPublic ? (
+                    <Text testID="detail-visibility-no-location-hint" style={{ fontSize: 12, color: '#888' }}>
+                      {t('vis_public_no_location')}
+                    </Text>
+                  ) : null}
+                </View>
+              )
+            })()}
 
             {/* warn banner — shown when warnBeforeBuy is on and global warnings enabled (tasted only) */}
             {item.status !== 'todo' && remind && user?.warningsEnabled ? (

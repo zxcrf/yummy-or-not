@@ -39,6 +39,7 @@ import {
   TAG_CHOICES,
   createTaste,
   createTag,
+  publishTasteGeo,
   reverseGeocode,
   searchTastes,
   type PhotoInput,
@@ -191,6 +192,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [customTag, setCustomTag] = useState('')
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
+  // S3c: per-record visibility, seeded from the account default. 'shared' here
+  // means "publish to nearby on save"; the actual publish (geo taste_shares)
+  // happens after createTaste because it needs the saved record's coords.
+  const [visibility, setVisibility] = useState<'private' | 'shared'>(
+    () => (user?.defaultVisibility === 'shared' ? 'shared' : 'private'),
+  )
   const [locationDenied, setLocationDenied] = useState(false)
   const [locating, setLocating] = useState(false)
   const [locRecorded, setLocRecorded] = useState(false)
@@ -573,6 +580,20 @@ export default function AddModal({ onClose, onSaved }: Props) {
         },
         photo,
       )
+      // S3c: if the user chose "Nearby" AND we captured coords, publish the new
+      // record to the geo feed. createTaste can't publish itself (the POST route
+      // writes no shares and geo needs the saved record's lat/lng), so this is a
+      // create-then-publish step. Fire-and-forget: the record is already saved,
+      // so a publish failure must NOT block navigation — the user can still flip
+      // it public from DetailView. Public is gated on coords in the UI, so a
+      // location-less record never reaches the 422 path here.
+      if (visibility === 'shared' && lat != null && lng != null) {
+        void publishTasteGeo(created.id).then(
+          () => invalidateTastes(),
+          () => {},
+        )
+      }
+
       void invalidateTastes()
 
       // The entry is persisted server-side now — drop the local draft so it
@@ -877,6 +898,62 @@ export default function AddModal({ onClose, onSaved }: Props) {
             onChangeText={setPrice}
             keyboardType="decimal-pad"
           />
+
+          {/* S3c visibility selector. "Nearby" publishes the record to the geo
+              heat feed on save; it needs a location, so it's disabled (and a
+              hint shown) until coords are captured. If the seeded default was
+              'shared' but no location is set, force the effective choice back to
+              private so we never try to publish a location-less record. */}
+          {(() => {
+            const hasCoords = lat != null && lng != null
+            const effectiveShared = visibility === 'shared' && hasCoords
+            return (
+              <View style={{ gap: space[2] }} testID="add-visibility-selector">
+                <Text style={KICKER}>{t('set_visibility')}</Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    borderWidth: 2,
+                    borderColor: colors.ink900,
+                    borderRadius: radius.md,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Pressable
+                    style={{ flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: !effectiveShared ? colors.ink900 : colors.paper2 }}
+                    onPress={() => setVisibility('private')}
+                    accessibilityRole="button"
+                    testID="add-visibility-private-btn"
+                  >
+                    <Text style={{ color: !effectiveShared ? '#fff' : colors.ink900, fontWeight: '600', fontSize: 14 }}>
+                      {t('vis_private')}
+                    </Text>
+                  </Pressable>
+                  <View style={{ width: 2, backgroundColor: colors.ink900 }} />
+                  <Pressable
+                    style={{ flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: effectiveShared ? colors.ink900 : colors.paper2, opacity: hasCoords ? 1 : 0.4 }}
+                    onPress={() => {
+                      if (!hasCoords) return
+                      setVisibility('shared')
+                    }}
+                    disabled={!hasCoords}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !hasCoords }}
+                    testID="add-visibility-public-btn"
+                  >
+                    <Text style={{ color: effectiveShared ? '#fff' : colors.ink900, fontWeight: '600', fontSize: 14 }}>
+                      {t('vis_public')}
+                    </Text>
+                  </Pressable>
+                </View>
+                {!hasCoords ? (
+                  <Text testID="add-visibility-no-location-hint" style={{ fontSize: 12, color: '#888' }}>
+                    {t('vis_public_no_location')}
+                  </Text>
+                ) : null}
+              </View>
+            )
+          })()}
         </View>
 
         {/* verdict picker — hidden in todo mode */}

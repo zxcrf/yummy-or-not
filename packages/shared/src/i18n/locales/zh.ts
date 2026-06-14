@@ -18,6 +18,8 @@ export const zh: Record<string, string> = {
   saved_sub: "靠避免重复买“别买”的东西", settings: "设置", set_warnings: "重复购买提醒",
   set_location: "记录位置",
   set_default_visibility: "新记录默认公开到附近",
+  set_visibility: "可见范围", vis_private: "私密", vis_public: "附近",
+  vis_public_no_location: "添加位置后才能公开到附近",
   loc_recorded: "位置已记录",
   loc_failed: "定位失败，可手动填写",
   loc_locating: "定位中…",

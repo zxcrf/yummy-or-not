@@ -17,6 +17,8 @@ export const ja: Record<string, string> = {
   saved_sub: "「イマイチ」のリピート購入を避けて", settings: "設定", set_warnings: "再購入の警告",
   set_location: "位置を記録",
   set_default_visibility: "新規記録は既定で「近く」に公開",
+  set_visibility: "公開範囲", vis_private: "非公開", vis_public: "近く",
+  vis_public_no_location: "近くに公開するには位置を追加してください",
   loc_recorded: "位置を記録しました",
   loc_failed: "位置情報を取得できません",
   loc_locating: "位置情報取得中…",

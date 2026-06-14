@@ -18,6 +18,8 @@ export const en: Record<string, string> = {
   saved_sub: "by skipping repeat “nah” buys", settings: "Settings", set_warnings: "Buy-again warnings",
   set_location: "Record location",
   set_default_visibility: "New records default to nearby",
+  set_visibility: "Visibility", vis_private: "Private", vis_public: "Nearby",
+  vis_public_no_location: "Add a location to share nearby",
   loc_recorded: "Location recorded",
   loc_failed: "Couldn't get location",
   loc_locating: "Locating…",

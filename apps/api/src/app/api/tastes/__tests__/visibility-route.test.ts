@@ -24,6 +24,7 @@
 const mockGetUserFromRequest = jest.fn();
 const mockGetTaste = jest.fn();
 const mockSetTasteVisibility = jest.fn();
+const mockUnpublishTaste = jest.fn();
 const mockFindUnownedShareTargets = jest.fn();
 
 jest.mock('@/lib/auth', () => ({
@@ -39,11 +40,13 @@ jest.mock('@/lib/db', () => ({
   getTaste: (...args: unknown[]) => mockGetTaste(...args),
   // Writes taste_shares rows + flips tastes.visibility; returns the updated taste.
   setTasteVisibility: (...args: unknown[]) => mockSetTasteVisibility(...args),
+  // Removes the owner's shares + flips visibility back to 'private'; returns the taste.
+  unpublishTaste: (...args: unknown[]) => mockUnpublishTaste(...args),
   // Returns the subset of family/member target_ids the caller does NOT own.
   findUnownedShareTargets: (...args: unknown[]) => mockFindUnownedShareTargets(...args),
 }));
 
-import { PATCH } from '../[id]/visibility/route';
+import { PATCH, DELETE } from '../[id]/visibility/route';
 import { NextRequest } from 'next/server';
 
 function patchReq(id: string, body: unknown): NextRequest {
@@ -51,6 +54,12 @@ function patchReq(id: string, body: unknown): NextRequest {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+  });
+}
+
+function delReq(id: string): NextRequest {
+  return new NextRequest(`http://localhost/api/tastes/${id}/visibility`, {
+    method: 'DELETE',
   });
 }
 
@@ -74,6 +83,10 @@ beforeEach(() => {
   mockSetTasteVisibility.mockImplementation(async (_uid, _id, _targets) => ({
     ...ownedTaste,
     visibility: 'shared',
+  }));
+  mockUnpublishTaste.mockImplementation(async (_uid, _id) => ({
+    ...ownedTaste,
+    visibility: 'private',
   }));
 });
 
@@ -206,5 +219,32 @@ describe('PATCH /api/tastes/:id/visibility — target ownership (record-poisonin
     expect(res.status).toBe(200);
     expect(mockFindUnownedShareTargets).toHaveBeenCalledWith('u1', ['ts_mine']);
     expect(mockSetTasteVisibility).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DELETE /api/tastes/:id/visibility — unpublish (make private)', () => {
+  // The inverse of PATCH publish: removes the owner's shares + flips visibility
+  // back to 'private'. Same server-side boundaries as the publish route.
+  it('rejects an unauthenticated caller with 401 and never reaches the DB', async () => {
+    mockGetUserFromRequest.mockResolvedValue(null);
+    const res = await DELETE(delReq('t1'), ctx('t1'));
+    expect(res.status).toBe(401);
+    expect(mockUnpublishTaste).not.toHaveBeenCalled();
+  });
+
+  it('unpublishes the caller\'s own taste → 200 with visibility flipped to private', async () => {
+    const res = await DELETE(delReq('t1'), ctx('t1'));
+    expect(res.status).toBe(200);
+    expect(mockUnpublishTaste).toHaveBeenCalledTimes(1);
+    expect(mockUnpublishTaste).toHaveBeenCalledWith('u1', 't1');
+    expect((await bodyOf(res)).visibility).toBe('private');
+  });
+
+  it('returns 404 (and never publishes) when the caller does not own the taste', async () => {
+    // unpublishTaste is scoped to the caller; a foreign taste returns null.
+    mockUnpublishTaste.mockResolvedValue(null);
+    const res = await DELETE(delReq('t_other'), ctx('t_other'));
+    expect(res.status).toBe(404);
+    expect(mockSetTasteVisibility).not.toHaveBeenCalled();
   });
 });

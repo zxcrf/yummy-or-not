@@ -16,7 +16,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getTaste, setTasteVisibility, findUnownedShareTargets } from '@/lib/db';
+import { getTaste, setTasteVisibility, unpublishTaste, findUnownedShareTargets } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
 import { encodeGeohash } from '@yon/shared';
@@ -113,6 +113,29 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     return withCors(NextResponse.json(updated), origin);
   } catch (err) {
     console.error(`PATCH /api/tastes/${id}/visibility error:`, err);
+    return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);
+  }
+}
+
+// DELETE /api/tastes/[id]/visibility — unpublish (make private again).
+// Removes the owner's taste_shares rows and flips tastes.visibility to
+// 'private', the inverse of the PATCH publish. Same server-side boundaries:
+//   - AUTH: anonymous → 401 before any DB read.
+//   - OWNERSHIP (IDOR): unpublishTaste is scoped to the caller; a foreign taste
+//     is not owned → null → 404 (don't leak existence), nothing written.
+// Idempotent: unpublishing an already-private record is a no-op (0 shares deleted).
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const origin = req.headers.get('origin');
+  const user = await getUserFromRequest(req);
+  if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
+
+  const { id } = await params;
+  try {
+    const updated = await unpublishTaste(user.id, id);
+    if (!updated) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
+    return withCors(NextResponse.json(updated), origin);
+  } catch (err) {
+    console.error(`DELETE /api/tastes/${id}/visibility error:`, err);
     return withCors(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), origin);
   }
 }

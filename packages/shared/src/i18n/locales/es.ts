@@ -17,6 +17,8 @@ export const es: Record<string, string> = {
   saved_sub: "por no recomprar lo que no valió la pena", settings: "Ajustes", set_warnings: "Avisos de recompra",
   set_location: "Registrar ubicación",
   set_default_visibility: "Nuevos registros visibles cerca por defecto",
+  set_visibility: "Visibilidad", vis_private: "Privado", vis_public: "Cerca",
+  vis_public_no_location: "Añade una ubicación para compartir cerca",
   loc_recorded: "Ubicación registrada",
   loc_failed: "No se pudo obtener la ubicación",
   loc_locating: "Localizando…",
