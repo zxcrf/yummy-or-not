@@ -24,7 +24,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useMemo, useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, View } from 'react-native'
 import {
   KeyboardAwareScrollView,
   KeyboardStickyView,
@@ -64,6 +64,7 @@ import { invalidateTastes, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { PhotoPreview } from './PhotoPreview'
+import { type AddDraft, clearDraft, isDraftMeaningful, loadDraft, saveDraft } from './addDraft'
 import { useRouter } from 'expo-router'
 
 interface Props {
@@ -190,6 +191,99 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // --- Draft autosave ------------------------------------------------------
+  // A mis-tapped Cancel (or the header ✕) used to throw away the whole entry.
+  // Closing now asks whether to keep the entry as a draft or discard it, and a
+  // saved draft is restored the next time the Add screen opens. The draft is
+  // namespaced per account and cleared once a taste is actually created.
+  const draftUserId = user?.id ?? null
+
+  // Latest form snapshot, kept in a ref so the close handlers and the unmount
+  // safety-net below always read the current values without re-subscribing.
+  const draftRef = useRef<AddDraft>({
+    mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview,
+  })
+  draftRef.current = { mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview }
+
+  // Hydration gate. A ref (not state) on purpose — when there is no stored draft
+  // this effect completes without any setState, so it adds no work to the common
+  // open and triggers no act() warning for callers that mount synchronously.
+  const hydratedRef = useRef(false)
+  // Set once a taste is created — the entry lives server-side, so no draft.
+  const savedRef = useRef(false)
+  // Set when the user explicitly chooses to discard (or closes an empty form) —
+  // suppresses the unmount safety-net so a discard really drops the entry.
+  const discardedRef = useRef(false)
+
+  // The save-or-exit choice sheet shown when closing with unsaved content.
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
+
+  // Restore any persisted draft once on mount.
+  useEffect(() => {
+    let cancelled = false
+    void loadDraft(draftUserId).then((d) => {
+      if (cancelled) return
+      // Only touch state when there is something to restore — the blank case
+      // stays setState-free (see hydratedRef note above).
+      if (d) {
+        setMode(d.mode)
+        setName(d.name)
+        setPlace(d.place)
+        setPrice(d.price)
+        setNotes(d.notes)
+        setVerdict(d.verdict)
+        setPicked(d.picked)
+        setLat(d.lat)
+        setLng(d.lng)
+        setPhoto(d.photo)
+        setPhotoPreview(d.photoPreview)
+      }
+      hydratedRef.current = true
+    })
+    return () => {
+      cancelled = true
+    }
+    // draftUserId is stable for the lifetime of this screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Safety net for uncontrolled exits (hardware back, swipe-dismiss) that never
+  // reach the close buttons: keep the in-progress entry instead of losing it.
+  // Skipped after an explicit discard or a real save.
+  useEffect(() => {
+    return () => {
+      if (savedRef.current || discardedRef.current || !hydratedRef.current) return
+      void saveDraft(draftUserId, draftRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // --- Close handling ------------------------------------------------------
+  // Cancel / ✕ route through here. With unsaved content we ask the user to
+  // choose; an empty form just closes (and drops any stale draft).
+  const requestClose = () => {
+    if (isDraftMeaningful(draftRef.current)) {
+      setConfirmCloseOpen(true)
+      return
+    }
+    discardedRef.current = true
+    void clearDraft(draftUserId)
+    onClose()
+  }
+
+  const saveDraftAndClose = () => {
+    setConfirmCloseOpen(false)
+    void saveDraft(draftUserId, draftRef.current)
+    onClose()
+  }
+
+  const discardAndClose = () => {
+    setConfirmCloseOpen(false)
+    discardedRef.current = true
+    void clearDraft(draftUserId)
+    onClose()
+  }
 
   // --- Same-name detection -----------------------------------------------
 
@@ -458,6 +552,11 @@ export default function AddModal({ onClose, onSaved }: Props) {
       )
       void invalidateTastes()
 
+      // The entry is persisted server-side now — drop the local draft so it
+      // does not resurface on the next open.
+      savedRef.current = true
+      void clearDraft(draftUserId)
+
       // Upsert any custom tags (tags not in the built-in TAG_CHOICES) into the
       // user's tag candidate set so they appear in LibraryView's filter chips.
       // Fire-and-forget: a failure here must not block navigation.
@@ -501,7 +600,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
         <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 24 }}>
           {t('log_taste')}
         </Text>
-        <IconButton accessibilityLabel={t('cancel')} onPress={onClose}>
+        <IconButton accessibilityLabel={t('cancel')} onPress={requestClose}>
           <Icon name="close" size={18} />
         </IconButton>
       </View>
@@ -816,7 +915,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
             paddingBottom: insets.bottom + 16,
           }}
         >
-          <Button variant="ghost" onPress={onClose}>
+          <Button variant="ghost" onPress={requestClose}>
             {t('cancel')}
           </Button>
           <Button
@@ -829,6 +928,56 @@ export default function AddModal({ onClose, onSaved }: Props) {
           </Button>
         </View>
       </KeyboardStickyView>
+
+      {/* Close confirmation — on Cancel/✕ with unsaved content, let the user
+          choose to keep the entry as a draft or discard it (tapping outside
+          keeps editing). Mirrors the DetailView confirm-sheet pattern. */}
+      <Modal
+        visible={confirmCloseOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setConfirmCloseOpen(false)}
+        testID="add-close-confirm"
+      >
+        <Pressable style={sheetStyles.overlay} onPress={() => setConfirmCloseOpen(false)}>
+          <Pressable style={sheetStyles.content} onPress={() => {}}>
+            <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 18, marginBottom: 8 }}>
+              {t('add_close_title')}
+            </Text>
+            <Text style={{ color: colors.ink500, fontSize: 15, marginBottom: 20 }}>
+              {t('add_close_body')}
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3] }}>
+              <Button variant="ghost" onPress={discardAndClose} testID="add-discard-btn">
+                {t('add_discard')}
+              </Button>
+              <Button
+                variant="primary"
+                iconLeft={<Icon name="check" size={18} color="#fff" />}
+                onPress={saveDraftAndClose}
+                testID="add-save-draft-btn"
+              >
+                {t('add_save_draft')}
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
+
+const sheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  content: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+    paddingBottom: 40,
+  },
+})
