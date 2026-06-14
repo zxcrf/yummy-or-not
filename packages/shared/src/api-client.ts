@@ -469,3 +469,12 @@ export async function getGeoHeat(box: {
 export async function getGeoFeedByCell(cell: string): Promise<GeoFeedCard[]> {
   return apiFetch<GeoFeedCard[]>(`/api/feed/geo?cell=${encodeURIComponent(cell)}`);
 }
+
+/** GET /api/feed/family[?member=<id>] — the shared family / member taste stream.
+ *  Returns the same coarsened GeoFeedCard shape as the geo feeds (server scopes
+ *  visibility to 'shared' rows targeted to the viewer's family / members).
+ *  Requires auth — an anonymous request rejects Error('unauthorized'). */
+export async function getFamilyFeed(member?: string): Promise<GeoFeedCard[]> {
+  const qs = member ? `?member=${encodeURIComponent(member)}` : "";
+  return apiFetch<GeoFeedCard[]>(`/api/feed/family${qs}`);
+}

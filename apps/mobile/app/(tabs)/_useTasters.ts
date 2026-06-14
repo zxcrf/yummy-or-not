@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { getTasters, type Taster } from '@yon/shared'
+import { getActiveTaster, setActiveTaster } from './_useActiveTaster'
 
 // ----------------------------------------------------------------
 // Module state — shared across every hook consumer.
@@ -26,6 +27,23 @@ const listeners = new Set<Listener>()
 
 function emit(items: Taster[]): void {
   for (const l of listeners) l(items)
+  reconcileActiveTaster(items)
+}
+
+/** If the persisted active-taster id no longer appears in the current taster
+ *  list (e.g. deleted from another session or another device), reset to the
+ *  self default so the next new-taste POST does not carry a dangling id that
+ *  the server rejects as `invalid_taster`.
+ *
+ *  _useActiveTaster does not import _useTasters, so the dependency is
+ *  one-directional — no circular module reference. */
+function reconcileActiveTaster(items: Taster[]): void {
+  const currentActive = getActiveTaster()
+  if (currentActive === null) return // already on self — nothing to do
+  const stillPresent = items.some((t) => !t.isSelf && t.id === currentActive)
+  if (!stillPresent) {
+    void setActiveTaster(null)
+  }
 }
 
 function revalidate(): Promise<Taster[]> {
