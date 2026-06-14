@@ -741,18 +741,26 @@ export interface GeoFeedCard {
   imageThumb: string;
   imageDisplay: string;
   gridCell: string;
+  tags: string[];
+  boughtCount: number;
+  warnBeforeBuy: boolean;
 }
 
 /** SELECT list shared by the coarsened geo feeds: the taste's display fields +
  *  the share's grid_cell. Deliberately omits ts.geog, t.lat, t.lng, t.user_id,
- *  t.place — anything that would deanonymize the card. */
-const GEO_FEED_COLUMNS = `t.id, t.name, t.verdict, t.image, ts.grid_cell`;
+ *  t.place, t.notes — anything that would deanonymize the card. tags /
+ *  bought_count / warn_before_buy are safe to surface: a bounded category
+ *  vocabulary, a counter, and a boolean carry no location or identity. */
+const GEO_FEED_COLUMNS = `t.id, t.name, t.verdict, t.image, t.tags, t.bought_count, t.warn_before_buy, ts.grid_cell`;
 
 async function rowToGeoFeedCard(row: {
   id: string;
   name: string;
   verdict: string | null;
   image: string | null;
+  tags: string[] | null;
+  bought_count: number | null;
+  warn_before_buy: boolean | null;
   grid_cell: string | null;
 }): Promise<GeoFeedCard> {
   const urls = await resolvePhotoUrls(row.image);
@@ -764,6 +772,9 @@ async function rowToGeoFeedCard(row: {
     imageThumb: urls.imageThumb,
     imageDisplay: urls.imageDisplay,
     gridCell: row.grid_cell ?? '',
+    tags: row.tags ?? [],
+    boughtCount: row.bought_count ?? 1,
+    warnBeforeBuy: row.warn_before_buy ?? false,
   };
 }
 

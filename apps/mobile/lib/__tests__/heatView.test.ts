@@ -11,7 +11,7 @@
 //                               queryable → {fetch:true,reason:'ok'};
 //                               oversized → {fetch:false,reason:'too_large'}.
 
-import { heatColorForCount, regionToBbox, decideHeatFetch } from '../heatView';
+import { heatColorForCount, regionToBbox, decideHeatFetch, summarizeVerdicts } from '../heatView';
 
 // precision-5 angular cell size, used to build queryable / oversized boxes.
 const LAT_STEP = 180 / 2 ** 12;
@@ -77,5 +77,32 @@ describe('decideHeatFetch', () => {
       maxLng: 121.0 + LNG_STEP * 70,
     };
     expect(decideHeatFetch(box)).toEqual({ fetch: false, reason: 'too_large' });
+  });
+});
+
+describe('summarizeVerdicts', () => {
+  it('counts each known verdict and the total', () => {
+    const s = summarizeVerdicts([
+      { verdict: 'yum' },
+      { verdict: 'yum' },
+      { verdict: 'meh' },
+      { verdict: 'nah' },
+    ]);
+    expect(s).toEqual({ yum: 2, meh: 1, nah: 1, total: 4 });
+  });
+
+  it('an unknown/null verdict adds to total but to NO bucket (buckets never over-count)', () => {
+    const s = summarizeVerdicts([
+      { verdict: 'yum' },
+      { verdict: null },
+      { verdict: 'weird' as unknown as string },
+    ]);
+    expect(s).toEqual({ yum: 1, meh: 0, nah: 0, total: 3 });
+    // The buckets sum to LESS than total — the unknowns are not miscounted.
+    expect(s.yum + s.meh + s.nah).toBeLessThan(s.total);
+  });
+
+  it('empty input → all zero', () => {
+    expect(summarizeVerdicts([])).toEqual({ yum: 0, meh: 0, nah: 0, total: 0 });
   });
 });

@@ -437,7 +437,13 @@ export interface GeoHeatCell {
 }
 
 /** A single anonymous taste card surfaced by the cell feed. Coarsened to
- *  `gridCell` (precision-5 geohash) — never a precise coordinate or identity. */
+ *  `gridCell` (precision-5 geohash) — never a precise coordinate or identity.
+ *
+ *  The extra display fields below (tags / boughtCount / warnBeforeBuy) are
+ *  deliberately safe to surface cross-user: a bounded category vocabulary, a
+ *  repurchase counter, and a "would-warn" flag carry NO location or identity.
+ *  Free-text `notes` and the precise `place` are intentionally NOT here — they
+ *  routinely contain a street/store/person that would deanonymize the card. */
 export interface GeoFeedCard {
   id: string;
   name: string;
@@ -446,6 +452,12 @@ export interface GeoFeedCard {
   imageThumb: string;
   imageDisplay: string;
   gridCell: string;
+  /** Category tags (bounded vocabulary, e.g. Boba/Coffee/Ramen) — no PII. */
+  tags: string[];
+  /** How many times the owner re-bought it (enthusiasm signal). */
+  boughtCount: number;
+  /** Owner flagged it "think before you buy again". */
+  warnBeforeBuy: boolean;
 }
 
 /** GET /api/feed/geo/heat?bbox=minLng,minLat,maxLng,maxLat — the precision-5 heat

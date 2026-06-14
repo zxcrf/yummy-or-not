@@ -65,6 +65,10 @@ describe('getGeoFeedByCell', () => {
       imageThumb: 'https://r2/thumb.jpg',
       imageDisplay: 'https://r2/display.jpg',
       gridCell: 'wtw3s',
+      // Safe enrichment fields (bounded category / counter / flag — no PII).
+      tags: ['Boba', 'Sweet'],
+      boughtCount: 3,
+      warnBeforeBuy: false,
     };
     mockJson(200, [card]);
 

@@ -66,7 +66,7 @@ async function bodyOf(res: Response): Promise<unknown> {
 // Forbidden keys: if ANY of these survive into a feed response, precise location
 // or owner identity has leaked. The COARSENED card is allowed to keep grid_cell,
 // verdict, name, etc.
-const FORBIDDEN_KEYS = ['lat', 'lng', 'latitude', 'longitude', 'userId', 'user_id', 'ownerId', 'owner_id', 'place', 'address'];
+const FORBIDDEN_KEYS = ['lat', 'lng', 'latitude', 'longitude', 'userId', 'user_id', 'ownerId', 'owner_id', 'place', 'address', 'notes'];
 
 function assertNoLeak(obj: Record<string, unknown>) {
   for (const k of FORBIDDEN_KEYS) {
@@ -102,6 +102,29 @@ describe('GET /api/feed/geo?cell= — cell card stream (coarsened, anonymous)', 
     const res = await GET_GEO(get('http://localhost/api/feed/geo'));
     expect(res.status).toBe(400);
     expect(mockListGeoFeedByCell).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the SAFE enrichment fields (tags / boughtCount / warnBeforeBuy) but never place/notes', async () => {
+    // These coarse fields enrich the card without deanonymizing it; the route
+    // must pass them through. place/notes must still never appear (assertNoLeak).
+    mockListGeoFeedByCell.mockResolvedValue([
+      {
+        id: 's1',
+        name: 'Ramen',
+        verdict: 'yum',
+        gridCell: 'xn4z5',
+        tags: ['Ramen', 'Spicy'],
+        boughtCount: 4,
+        warnBeforeBuy: true,
+      },
+    ]);
+    const res = await GET_GEO(get('http://localhost/api/feed/geo?cell=xn4z5'));
+    expect(res.status).toBe(200);
+    const [card] = (await bodyOf(res)) as Array<Record<string, unknown>>;
+    expect(card.tags).toEqual(['Ramen', 'Spicy']);
+    expect(card.boughtCount).toBe(4);
+    expect(card.warnBeforeBuy).toBe(true);
+    assertNoLeak(card);
   });
 });
 

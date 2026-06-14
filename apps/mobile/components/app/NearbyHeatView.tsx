@@ -45,8 +45,14 @@ function asVerdict(v: unknown): KnownVerdict | null {
 
 import { initAmapIfConsented } from '@/lib/amapPrivacy'
 import { useLocateResult } from '@/app/(tabs)/_useUserCoords'
-import { decideHeatFetch, heatColorForCount, regionToBbox, type Bbox } from '@/lib/heatView'
-import { Button, Card, Icon, VerdictStamp } from '@/components/ds'
+import {
+  decideHeatFetch,
+  heatColorForCount,
+  regionToBbox,
+  summarizeVerdicts,
+  type Bbox,
+} from '@/lib/heatView'
+import { Badge, Button, Card, Icon, Tag, VerdictStamp } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
 
 const CONSENT_KEY = 'yon_amap_consent'
@@ -114,6 +120,8 @@ export default function NearbyHeatView() {
   const [sheetCell, setSheetCell] = useState<string | null>(null)
   const [sheetCards, setSheetCards] = useState<GeoFeedCard[] | null>(null)
   const [sheetLoading, setSheetLoading] = useState(false)
+  // Tapped card → coarsened detail sub-sheet (still no precise coord / identity).
+  const [detailCard, setDetailCard] = useState<GeoFeedCard | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqSeq = useRef(0)
@@ -242,7 +250,10 @@ export default function NearbyHeatView() {
   const closeSheet = useCallback(() => {
     setSheetCell(null)
     setSheetCards(null)
+    setDetailCard(null)
   }, [])
+
+  const closeDetail = useCallback(() => setDetailCard(null), [])
 
   // A map tap maps to the cell whose GCJ-02 rect contains the tapped point.
   // Polygon in amap3d@3.2.4 has no onPress, so we hit-test against the
@@ -410,8 +421,21 @@ export default function NearbyHeatView() {
             }}
             onPress={() => {}}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[3] }}>
-              <Text style={{ fontWeight: '700', fontSize: 18 }}>这一带的味道</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: space[3] }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontWeight: '700', fontSize: 18 }}>这一带的味道</Text>
+                {/* Aggregate verdict summary — pure counts, no per-record leak. */}
+                {sheetCards && sheetCards.length > 0
+                  ? (() => {
+                      const s = summarizeVerdicts(sheetCards)
+                      return (
+                        <Text style={{ marginTop: 2, color: colors.ink500, fontSize: 13 }}>
+                          {s.total} 个 · 👍{s.yum} 😐{s.meh} 👎{s.nah}
+                        </Text>
+                      )
+                    })()
+                  : null}
+              </View>
               <Pressable onPress={closeSheet} accessibilityRole="button" style={{ padding: 4 }}>
                 <Icon name="close" size={20} color={colors.ink500} />
               </Pressable>
@@ -424,8 +448,11 @@ export default function NearbyHeatView() {
               <ScrollView style={{ maxHeight: 360 }}>
                 <View style={{ gap: space[3] }}>
                   {sheetCards.map((card) => (
-                    <View
+                    <Pressable
                       key={card.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`查看 ${card.name} 详情`}
+                      onPress={() => setDetailCard(card)}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -458,13 +485,30 @@ export default function NearbyHeatView() {
                           />
                         ) : null}
                       </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
                         <Text style={{ fontWeight: '700', fontSize: 16 }}>{card.name}</Text>
+                        {/* Safe meta row: repurchase counter + warn flag. */}
+                        {card.boughtCount > 1 || card.warnBeforeBuy ? (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
+                            {card.boughtCount > 1 ? (
+                              <Badge tone="dark">回购 {card.boughtCount}</Badge>
+                            ) : null}
+                            {card.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
+                          </View>
+                        ) : null}
+                        {/* Category tags (bounded vocabulary — no PII). */}
+                        {card.tags.length > 0 ? (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
+                            {card.tags.slice(0, 3).map((t) => (
+                              <Tag key={t}>{t}</Tag>
+                            ))}
+                          </View>
+                        ) : null}
                       </View>
                       {asVerdict(card.verdict) ? (
                         <VerdictStamp verdict={asVerdict(card.verdict)!} size="sm" />
                       ) : null}
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               </ScrollView>
@@ -473,6 +517,79 @@ export default function NearbyHeatView() {
                 <Text style={{ color: colors.ink500 }}>这一带还没有公开的味道</Text>
               </View>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Card detail sub-sheet — a richer view of the SAME coarsened fields:
+          big image + verdict + tags + repurchase + warn. NEVER precise coord,
+          place, notes, or identity (those are not even on GeoFeedCard). */}
+      <Modal visible={detailCard != null} transparent animationType="slide" onRequestClose={closeDetail}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={closeDetail}>
+          <Pressable
+            style={{
+              backgroundColor: '#fff',
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: 20,
+              paddingBottom: 36,
+              maxHeight: '80%',
+            }}
+            onPress={() => {}}
+          >
+            {detailCard ? (
+              <ScrollView>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: space[3] }}>
+                  <Text style={{ fontWeight: '700', fontSize: 20, flex: 1, minWidth: 0 }}>{detailCard.name}</Text>
+                  <Pressable onPress={closeDetail} accessibilityRole="button" style={{ padding: 4 }}>
+                    <Icon name="close" size={20} color={colors.ink500} />
+                  </Pressable>
+                </View>
+
+                {detailCard.imageDisplay || detailCard.image || detailCard.imageThumb ? (
+                  <View
+                    style={{
+                      width: '100%',
+                      aspectRatio: 1,
+                      borderRadius: radius.md,
+                      borderWidth: 2,
+                      borderColor: colors.ink900,
+                      backgroundColor: colors.paper2,
+                      overflow: 'hidden',
+                      marginBottom: space[3],
+                    }}
+                  >
+                    <Image
+                      source={{ uri: detailCard.imageDisplay || detailCard.image || detailCard.imageThumb }}
+                      cachePolicy="disk"
+                      transition={150}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                    />
+                  </View>
+                ) : null}
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] }}>
+                  {asVerdict(detailCard.verdict) ? (
+                    <VerdictStamp verdict={asVerdict(detailCard.verdict)!} size="md" />
+                  ) : null}
+                  {detailCard.boughtCount > 1 ? <Badge tone="dark">回购 {detailCard.boughtCount}</Badge> : null}
+                  {detailCard.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
+                </View>
+
+                {detailCard.tags.length > 0 ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] }}>
+                    {detailCard.tags.map((t) => (
+                      <Tag key={t}>{t}</Tag>
+                    ))}
+                  </View>
+                ) : null}
+
+                <Text style={{ color: colors.ink400, fontSize: 12, lineHeight: 18 }}>
+                  仅展示公开分享的概要信息，不含精确位置与身份。
+                </Text>
+              </ScrollView>
+            ) : null}
           </Pressable>
         </Pressable>
       </Modal>
