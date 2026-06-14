@@ -89,6 +89,19 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   }),
 }))
 
+// LibraryView's Nearby-sort plumbing — stubbed so the test never loads
+// expo-location and the grid keeps its (recent) order.
+jest.mock('@/app/(tabs)/_useUserCoords', () => ({
+  useUserCoords: () => null,
+  sortByNearest: (items: Array<unknown>) => items.map((item) => ({ item, distance: null })),
+}))
+
+// LibraryView's recall mode is exercised in RecallResults.test; here it's
+// stubbed so these verdict-jump tests don't depend on its internals.
+jest.mock('@/components/app/RecallResults', () => ({
+  RecallResults: () => null,
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({
     tags: mockTagList,

@@ -7,8 +7,9 @@
      • narrow       → bottom TabBar with a raised center FAB ("Add")
 
    Routing is driven by the navigation state passed in by <Tabs>; tapping
-   a nav item navigates to that route. The five routes map to the shell
-   sections: index→Library, recall, add (FAB), todo, you.
+   a nav item navigates to that route. The routes map to the shell
+   sections: index→Library, add (FAB), todo, you. (Recall is folded into
+   Library — searching inside 口味 surfaces past verdicts.)
 
    The matching screen content is rendered by <Tabs> above this chrome.
    On wide layouts the Sidebar is absolutely docked to the left; the
@@ -52,10 +53,11 @@ interface NavMeta {
   labelKey: string
 }
 
-// Ordered to match the web shell. `add` is handled separately (FAB/CTA).
+// Ordered to match the shell. `add` is handled separately (FAB/CTA).
+// Recall folded into Library (search inside 口味), so the bar is now
+// Library + To-Try on the left of the FAB and You on the right.
 const NAV: NavMeta[] = [
   { route: 'index', icon: 'grid', labelKey: 'my_tastes' },
-  { route: 'recall', icon: 'search', labelKey: 'nav_recall' },
   { route: 'todo', icon: 'bookmark', labelKey: 'nav_todo' },
   { route: 'you', icon: 'user', labelKey: 'nav_you' },
 ]
@@ -381,7 +383,6 @@ function TabBar({ props }: { props: TabBarProps }) {
       </View>
 
       {tab(NAV[2])}
-      {tab(NAV[3])}
     </View>
   )
 }

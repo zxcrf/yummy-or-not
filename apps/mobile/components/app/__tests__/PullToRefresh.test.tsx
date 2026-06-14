@@ -13,7 +13,6 @@ import { RefreshControl, ScrollView } from 'react-native'
 import { getStats, listTastes, type Stats, type Taste } from '@yon/shared'
 
 import LibraryView from '../LibraryView'
-import RecallView from '../RecallView'
 import StatsView from '../StatsView'
 
 function formatMoneyLikeProvider(amount: number | string): string {
@@ -47,6 +46,13 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: [], loading: false }),
   invalidateTagsCache: jest.fn(),
   clearTagsCache: jest.fn(),
+}))
+
+// LibraryView's Nearby-sort plumbing — stubbed so the grid keeps recent order
+// and the test never loads expo-location.
+jest.mock('@/app/(tabs)/_useUserCoords', () => ({
+  useUserCoords: () => null,
+  sortByNearest: (items: Array<unknown>) => items.map((item) => ({ item, distance: null })),
 }))
 
 jest.mock('expo-router', () => ({
@@ -192,13 +198,6 @@ describe('mobile pull-to-refresh', () => {
     return control
   }
 
-  function textContent(renderer: TestRenderer.ReactTestRenderer): string {
-    return renderer.root
-      .findAll((node) => typeof node.children[0] === 'string')
-      .map((node) => node.children.join(''))
-      .join('\n')
-  }
-
   it('refreshes the Your tastes library list from the API', async () => {
     mockedListTastes.mockResolvedValueOnce([taste({ id: 'old', name: 'Old tea' })])
     const renderer = await render(<LibraryView />)
@@ -218,23 +217,6 @@ describe('mobile pull-to-refresh', () => {
     expect(
       cards.some((card) => card.props.name === 'Fresh toast')
     ).toBe(true)
-  })
-
-  it('refreshes Recall search data from the API', async () => {
-    mockedListTastes.mockResolvedValueOnce([taste({ id: 'old', name: 'Old tea' })])
-    const renderer = await render(<RecallView />)
-
-    mockedListTastes.mockResolvedValueOnce([
-      taste({ id: 'old', name: 'Old tea' }),
-      taste({ id: 'new', name: 'Fresh toast' }),
-    ])
-    await act(async () => {
-      await refreshControl(renderer).props.onRefresh()
-    })
-    await drain()
-
-    expect(mockedListTastes).toHaveBeenCalledTimes(2)
-    expect(textContent(renderer)).toContain('Fresh toast')
   })
 
   it('refreshes Stats totals and asks the route to refresh taste data', async () => {

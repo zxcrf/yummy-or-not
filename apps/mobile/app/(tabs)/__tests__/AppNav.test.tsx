@@ -72,7 +72,6 @@ jest.mock('@/components/ds', () => {
 
 const routes = [
   { name: 'index', key: 'index-key' },
-  { name: 'recall', key: 'recall-key' },
   { name: 'todo', key: 'todo-key' },
   { name: 'you', key: 'you-key' },
 ]
@@ -125,7 +124,7 @@ describe('AppNav desktop language switcher', () => {
   })
 })
 
-describe('AppNav nav restructure — 想吃 replaces 统计', () => {
+describe('AppNav nav restructure — 想吃 replaces 统计, Recall folded into Library', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
@@ -149,7 +148,7 @@ describe('AppNav nav restructure — 想吃 replaces 统计', () => {
   it.each([
     ['sidebar (desktop)', true],
     ['bottom bar (mobile)', false],
-  ])('renders a To-Try entry and no Stats entry in the %s', (_label, gtMd) => {
+  ])('renders a To-Try entry and no Stats/Recall entry in the %s', (_label, gtMd) => {
     const renderer = renderTree(gtMd as boolean)
     const labels = renderer.root
       .findAll((n) => typeof n.props.children === 'string')
@@ -157,5 +156,7 @@ describe('AppNav nav restructure — 想吃 replaces 统计', () => {
 
     expect(labels).toContain('To-Try')
     expect(labels).not.toContain('Stats')
+    // Recall is no longer a destination — its search lives inside Library.
+    expect(labels).not.toContain('Recall')
   })
 })

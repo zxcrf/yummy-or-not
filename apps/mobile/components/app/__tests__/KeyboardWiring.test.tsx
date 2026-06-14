@@ -1,6 +1,6 @@
 /* ============================================================
    Regression tests — keyboard wiring across AuthScreen, AddModal,
-   and RecallView.
+   and LibraryView.
 
    These pin three specific regressions introduced by the
    react-native-keyboard-controller migration:
@@ -19,18 +19,18 @@
       KeyboardAwareScrollView, has no `behavior` prop — it uses
       bottomOffset instead). Test fails if the old KAV is re-added.
 
-   3. RecallView: The outer ScrollView must have both
+   3. LibraryView: The outer ScrollView must have both
       keyboardDismissMode="on-drag" and keyboardShouldPersistTaps=
       "handled" so the keyboard dismisses naturally when the user
-      scrolls past results. Test fails if either prop is absent or
-      wrong.
+      scrolls past results (recall search now lives inside Library).
+      Test fails if either prop is absent or wrong.
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
 import { Platform } from 'react-native'
 import AuthScreen from '../AuthScreen'
 import AddModal from '../AddModal'
-import RecallView from '../RecallView'
+import LibraryView from '../LibraryView'
 
 // ── shared mocks ──────────────────────────────────────────────────────────────
 
@@ -274,35 +274,29 @@ describe('AddModal keyboard wiring', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 3. RecallView — keyboard props on results ScrollView
+// 3. LibraryView — keyboard props on the (recall + browse) results ScrollView
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe('RecallView keyboard dismissal', () => {
-  // Track renderers so afterEach can unmount and flush the 250 ms debounce
-  // timer that RecallView arms on every mount. Without fake timers the real
-  // timer fires after environment teardown on Linux and flips jest exit to 1.
+describe('LibraryView keyboard dismissal', () => {
   const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
 
   beforeEach(() => {
-    jest.useFakeTimers()
     jest.clearAllMocks()
   })
 
   afterEach(() => {
-    act(() => { jest.runAllTimers() })
     act(() => { mountedRenderers.forEach((r) => r.unmount()) })
     mountedRenderers.length = 0
-    jest.useRealTimers()
   })
 
-  // The regression: RecallView's results scroll lacked keyboard interaction
+  // The regression: the search results scroll lacked keyboard interaction
   // props, so the keyboard would stay up while scrolling (bad UX) and taps
-  // on results would be swallowed by the keyboard dismiss gesture.
-  // Both props must be present on the same element.
+  // on results would be swallowed by the keyboard dismiss gesture. Recall
+  // search now lives inside Library, so its outer ScrollView must carry both.
   it('has keyboardDismissMode="on-drag" on the results ScrollView', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
-      renderer = TestRenderer.create(<RecallView />)
+      renderer = TestRenderer.create(<LibraryView />)
     })
     mountedRenderers.push(renderer)
 
@@ -313,7 +307,7 @@ describe('RecallView keyboard dismissal', () => {
   it('has keyboardShouldPersistTaps="handled" on the results ScrollView', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
-      renderer = TestRenderer.create(<RecallView />)
+      renderer = TestRenderer.create(<LibraryView />)
     })
     mountedRenderers.push(renderer)
 
@@ -324,7 +318,7 @@ describe('RecallView keyboard dismissal', () => {
   it('both keyboard props live on the same ScrollView node', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
-      renderer = TestRenderer.create(<RecallView />)
+      renderer = TestRenderer.create(<LibraryView />)
     })
     mountedRenderers.push(renderer)
 
