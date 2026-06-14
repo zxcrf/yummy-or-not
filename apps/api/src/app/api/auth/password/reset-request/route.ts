@@ -7,10 +7,17 @@
 // `devToken` and logged so the flow is testable with no mailer.
 //
 // Enumeration-safe: ALWAYS returns 200 regardless of whether the email exists.
-// The token-creating work happens only when a user is actually found.
 //
-// Timing-safe: deliver() is fire-and-forget (void, not awaited) so the webhook
-// RTT is never on the hot path and cannot distinguish a hit from a miss.
+// Timing-safe (MED-A): both branches pay the same minimum wall-clock cost:
+//   • token generation + hashCode run UNCONDITIONALLY before the lookup;
+//   • the response is held behind a fixed deadline (MIN_RESPONSE_MS) so
+//     found vs. not-found are indistinguishable by latency.
+//   • deliver() is fire-and-forget (not awaited) so webhook RTT is never
+//     on the hot path.
+//
+// Delivery observability (MED-B): non-2xx webhook responses are console.error'd
+// so they surface in logs/alerting. An unset EMAIL_WEBHOOK_URL in production
+// is also warned so it isn't silently swallowed.
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,15 +33,31 @@ import { withCors, corsPreflight } from '@/lib/cors';
 import { clientIp, enforceRateLimits, rateLimitedResponse } from '@/lib/rate-limit';
 import type { PasswordResetRequestInput } from '@yon/shared';
 
+/** Minimum wall-clock time (ms) before the handler responds. Applied to BOTH
+ *  the found and not-found paths so latency cannot distinguish them (MED-A). */
+const MIN_RESPONSE_MS = 150;
+
+/** Fire-and-forget background delivery task (MED-B).
+ *  Awaits the webhook response and logs on non-2xx so failures surface in
+ *  ops logs. Warns when EMAIL_WEBHOOK_URL is unset in production. */
 async function deliver(email: string, token: string): Promise<void> {
   const link = `${process.env.APP_PUBLIC_URL ?? ''}/reset-password?token=${token}`;
   const url = process.env.EMAIL_WEBHOOK_URL;
   if (url) {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, token, link }),
-    }).catch((e) => console.error('Email webhook failed:', e));
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token, link }),
+      });
+      if (!res.ok) {
+        console.error(`[pw-reset] email webhook returned ${res.status} for ${email}`);
+      }
+    } catch (e) {
+      console.error('[pw-reset] email webhook network error:', e);
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    console.error('[pw-reset] EMAIL_WEBHOOK_URL is not set — reset email cannot be delivered');
   }
   if (process.env.NODE_ENV !== 'production') {
     console.log(`[pw-reset] token for ${email}: ${token}`);
@@ -59,23 +82,33 @@ export async function POST(req: NextRequest) {
     ]);
     if (limited.limited) return rateLimitedResponse(origin, limited.retryAfterSeconds);
 
-    // Only create + send a token when the account exists. Whether or not it does,
-    // we return the SAME 200 body (sans devToken) so the caller can't enumerate.
+    // Generate token + hash UNCONDITIONALLY so both branches pay the same
+    // CPU cost regardless of whether the email is registered (MED-A).
+    const rawToken = generateResetToken();
+    const tokenHash = hashCode(rawToken);
+
+    // Start the minimum-latency clock before the DB lookup (MED-A).
+    const deadline = new Promise<void>((resolve) => setTimeout(resolve, MIN_RESPONSE_MS));
+
     const found = await findUserByEmailWithHash(email);
-    let token: string | null = null;
+    let savedToken: string | null = null;
     if (found) {
-      token = generateResetToken();
       await savePasswordResetToken(
         found.user.id,
         email,
-        hashCode(token),
+        tokenHash,
         new Date(Date.now() + PW_RESET_TTL_MS)
       );
-      void deliver(email, token); // fire-and-forget: webhook RTT must not be observable
+      savedToken = rawToken;
+      void deliver(email, rawToken); // fire-and-forget: webhook RTT must not be observable
     }
 
+    // Hold the response until the deadline has elapsed. Both branches wait
+    // the same floor so latency cannot reveal whether the email was found.
+    await deadline;
+
     const body: { ok: true; devToken?: string } = { ok: true };
-    if (process.env.NODE_ENV !== 'production' && token) body.devToken = token;
+    if (process.env.NODE_ENV !== 'production' && savedToken) body.devToken = savedToken;
     return withCors(NextResponse.json(body), origin);
   } catch (err) {
     console.error('POST /api/auth/password/reset-request error:', err);

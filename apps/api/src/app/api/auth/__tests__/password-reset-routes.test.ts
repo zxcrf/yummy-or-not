@@ -3,9 +3,15 @@
    Pins:
      • reset-request is enumeration-safe: 200 for BOTH a registered and an
        unknown email, but a token row is saved ONLY for the registered one;
-     • reset-request is timing-safe: deliver() is fire-and-forget — a slow
-       webhook does not delay the response and cannot be used to distinguish
-       a registered from an unregistered email (HIGH 1);
+     • reset-request timing oracle (MED-A):
+         – token generation + hashCode run UNCONDITIONALLY before the lookup
+           so both branches pay the same CPU cost;
+         – both branches wait the same MIN_RESPONSE_MS deadline so latency
+           cannot distinguish found from not-found;
+         – a slow webhook does NOT delay the response (fire-and-forget);
+     • delivery observability (MED-B):
+         – a non-2xx webhook response is logged via console.error;
+         – EMAIL_WEBHOOK_URL unset in production is warned via console.error;
      • reset-verify calls applyPasswordReset with the hashed token AND the
        normalized email so the SQL binds both (MED 3);
      • reset-verify returns a generic 401 bad_token on a null result;
@@ -120,17 +126,17 @@ describe('reset-request (enumeration-safe)', () => {
   });
 });
 
-describe('reset-request timing oracle (HIGH 1)', () => {
-  // The fix: deliver() is called with `void` (fire-and-forget), so the webhook
-  // RTT is never on the hot path and cannot be used to distinguish a registered
-  // from an unregistered email by response latency.
-  //
-  // This test uses a slow (100 ms) webhook and asserts the route returns in
-  // < 50 ms even for a registered email — proving the webhook is NOT awaited.
+describe('reset-request timing oracle (MED-A)', () => {
+  // Fix: token generation + hashCode run UNCONDITIONALLY before the user
+  // lookup, and both branches wait the same MIN_RESPONSE_MS deadline before
+  // responding. This closes the latency side-channel that previously let an
+  // attacker distinguish registered from unregistered email addresses.
+
   let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
     originalFetch = global.fetch;
+    (savePasswordResetToken as jest.Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -138,16 +144,69 @@ describe('reset-request timing oracle (HIGH 1)', () => {
     delete process.env.EMAIL_WEBHOOK_URL;
   });
 
-  it('does not await the email webhook — slow webhook does not delay response', async () => {
-    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({
-      user: { id: 'u1' },
-      passwordHash: 'phash',
-    });
-    (savePasswordResetToken as jest.Mock).mockResolvedValue(undefined);
+  it('generateResetToken is called on BOTH the found and not-found paths', async () => {
+    const { generateResetToken } = require('@/lib/auth');
 
-    // Intercept global fetch to simulate a slow webhook (100 ms).
+    // Not-found path.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue(null);
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'ghost@x.com' }));
+    expect(generateResetToken).toHaveBeenCalledTimes(1);
+
+    jest.clearAllMocks();
+    (enforceRateLimits as jest.Mock).mockResolvedValue({ limited: false });
+
+    // Found path.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    expect(generateResetToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('hashCode is called on BOTH the found and not-found paths', async () => {
+    const { hashCode } = require('@/lib/auth');
+
+    // Not-found path.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue(null);
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'ghost@x.com' }));
+    expect(hashCode).toHaveBeenCalled();
+
+    const callsOnMiss = (hashCode as jest.Mock).mock.calls.length;
+    jest.clearAllMocks();
+    (enforceRateLimits as jest.Mock).mockResolvedValue({ limited: false });
+
+    // Found path.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    // hashCode must be called at least as many times on the found path.
+    expect((hashCode as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(callsOnMiss);
+  });
+
+  it('both found and not-found paths wait at least MIN_RESPONSE_MS before responding', async () => {
+    jest.useRealTimers(); // need real timers for wall-clock measurement
+
+    // Not-found: must wait the deadline.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue(null);
+    const startMiss = Date.now();
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'ghost@x.com' }));
+    const elapsedMiss = Date.now() - startMiss;
+    expect(elapsedMiss).toBeGreaterThanOrEqual(140); // MIN_RESPONSE_MS=150, allow 10ms jitter
+
+    jest.clearAllMocks();
+    (enforceRateLimits as jest.Mock).mockResolvedValue({ limited: false });
+
+    // Found: must also wait the deadline.
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+    const startHit = Date.now();
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    const elapsedHit = Date.now() - startHit;
+    expect(elapsedHit).toBeGreaterThanOrEqual(140);
+  }, 2000); // allow generous wall-clock budget for CI
+
+  it('a slow webhook (500 ms) does NOT block the response past MIN_RESPONSE_MS + small buffer', async () => {
+    jest.useRealTimers();
+
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
     global.fetch = jest.fn(
-      () => new Promise<Response>((resolve) => setTimeout(() => resolve(new Response()), 100))
+      () => new Promise<Response>((resolve) => setTimeout(() => resolve(new Response()), 500))
     ) as unknown as typeof fetch;
     process.env.EMAIL_WEBHOOK_URL = 'http://fake-webhook.test/send';
 
@@ -155,10 +214,65 @@ describe('reset-request timing oracle (HIGH 1)', () => {
     await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
     const elapsed = Date.now() - start;
 
-    // If deliver() were awaited the elapsed time would be ≥ 100 ms.
-    // Fire-and-forget means the route returns well before the webhook settles.
-    expect(elapsed).toBeLessThan(50);
+    // Webhook takes 500 ms; if awaited the route would block ≥ 500 ms.
+    // Fire-and-forget + 150 ms floor means it completes well under 400 ms.
+    expect(elapsed).toBeLessThan(400);
+  }, 2000);
+});
+
+describe('reset-request delivery observability (MED-B)', () => {
+  let originalFetch: typeof global.fetch;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    (savePasswordResetToken as jest.Mock).mockResolvedValue(undefined);
   });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    delete process.env.EMAIL_WEBHOOK_URL;
+    const savedEnv = process.env.NODE_ENV;
+    // Restore NODE_ENV if it was changed.
+    Object.defineProperty(process.env, 'NODE_ENV', { value: savedEnv, writable: true });
+    errorSpy.mockRestore();
+  });
+
+  it('logs console.error when the webhook returns a non-2xx status', async () => {
+    jest.useRealTimers();
+
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+    global.fetch = jest.fn(() =>
+      Promise.resolve(new Response(null, { status: 500 }))
+    ) as unknown as typeof fetch;
+    process.env.EMAIL_WEBHOOK_URL = 'http://fake-webhook.test/send';
+
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+
+    // Allow the fire-and-forget microtask to settle.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const errorCalls = errorSpy.mock.calls.map((args) => String(args[0]));
+    expect(errorCalls.some((msg) => msg.includes('500'))).toBe(true);
+  }, 2000);
+
+  it('logs console.error when EMAIL_WEBHOOK_URL is unset in production', async () => {
+    jest.useRealTimers();
+
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+    delete process.env.EMAIL_WEBHOOK_URL;
+    // Simulate production environment.
+    Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', writable: true });
+
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+
+    // Allow the fire-and-forget microtask to settle.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const errorCalls = errorSpy.mock.calls.map((args) => String(args[0]));
+    expect(errorCalls.some((msg) => msg.includes('EMAIL_WEBHOOK_URL'))).toBe(true);
+  }, 2000);
 });
 
 // ── reset-verify ──────────────────────────────────────────────────────────────
