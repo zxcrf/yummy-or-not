@@ -1,17 +1,21 @@
 /* ============================================================
-   Regression test — AddModal draft autosave.
+   Regression test — AddModal draft autosave + close choice.
 
-   User feedback (2026-06): "早上用 yummy 不小心按到取消的时候没有自动保存草稿，
-   直接没有了" — a mis-tapped Cancel on the Add screen threw away everything
-   typed, with no autosaved draft.
+   User feedback (2026-06):
+   1. "早上用 yummy 不小心按到取消的时候没有自动保存草稿，直接没有了" — a mis-tapped
+      Cancel on the Add screen threw away everything typed.
+   2. "关闭时给用户选择，是保存draft还是退出" — closing should let the user choose
+      between keeping a draft and exiting.
 
-   These tests pin the fix:
-   1. Closing the Add screen without saving (the route tears down on
-      Cancel / ✕ / back) persists the in-progress entry, and the next open
-      restores it. Against the pre-fix code this fails — the second open
-      starts blank.
-   2. A successful save clears the draft, so a saved entry does NOT resurface
-      as a draft on the next open.
+   These tests pin the behavior:
+   - Closing with unsaved content opens a save-or-exit choice instead of
+     silently discarding (and onClose is NOT called yet).
+   - Choosing "Save draft" persists the entry; the next open restores it.
+   - Choosing "Discard" drops the entry; the next open is blank.
+   - An empty form closes immediately, no choice sheet.
+   - An uncontrolled exit (hardware back / swipe — the component unmounts
+     without a choice) still autosaves, so nothing is lost (fixes feedback 1).
+   - A successful save clears the draft so a saved entry never resurfaces.
 
    AsyncStorage uses the official jest mock (jest.setup), an in-memory store
    that persists across remounts within a test — exactly the cross-open
@@ -71,6 +75,7 @@ jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'u1', warningsEnabled: false } }),
 }))
 
+// t() returns the key, so we match on i18n keys directly.
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
@@ -79,14 +84,20 @@ const NAME_PLACEHOLDER = 'Brown sugar boba'
 
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
 
+interface OpenOpts {
+  onSaved?: (id: string) => void
+  onClose?: () => void
+}
+
 /** Mount AddModal and let the initial draft-load (hydration) settle. */
-async function openAddModal(
-  onSaved: (id: string) => void = () => {},
-): Promise<TestRenderer.ReactTestRenderer> {
+async function openAddModal(opts: OpenOpts = {}): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer
   await act(async () => {
     renderer = TestRenderer.create(
-      <AddModal onClose={() => {}} onSaved={onSaved} />,
+      <AddModal
+        onClose={opts.onClose ?? (() => {})}
+        onSaved={opts.onSaved ?? (() => {})}
+      />,
     )
   })
   mountedRenderers.push(renderer)
@@ -103,6 +114,10 @@ const flush = () =>
 
 function nameField(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findByProps({ placeholder: NAME_PLACEHOLDER })
+}
+
+function confirmSheet(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.findByProps({ testID: 'add-close-confirm' })
 }
 
 /** Find the nearest pressable ancestor of a Text node with the given content. */
@@ -123,7 +138,14 @@ function pressableByText(
   throw new Error(`No pressable ancestor found for ${text}`)
 }
 
-describe('AddModal draft autosave', () => {
+/** Tap the footer Cancel button (routes through the close handler). */
+function tapCancel(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => {
+    pressableByText(renderer, 'cancel').props.onPress()
+  })
+}
+
+describe('AddModal draft autosave + close choice', () => {
   let realOS: typeof Platform.OS
 
   beforeEach(async () => {
@@ -147,21 +169,90 @@ describe('AddModal draft autosave', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: realOS })
   })
 
-  it('restores the in-progress entry after the screen is closed without saving', async () => {
-    // First open: type a name, then close WITHOUT saving (Cancel / ✕ / back all
-    // tear the route — and the component — down).
+  it('opens a save-or-exit choice instead of discarding when closing with unsaved content', async () => {
+    const onClose = jest.fn()
+    const r = await openAddModal({ onClose })
+    act(() => {
+      nameField(r).props.onChangeText(NAME_PLACEHOLDER)
+    })
+
+    expect(confirmSheet(r).props.visible).toBe(false)
+
+    tapCancel(r)
+
+    // The choice sheet is shown and the screen has NOT closed yet.
+    expect(confirmSheet(r).props.visible).toBe(true)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('keeps the entry as a draft when the user chooses Save draft, restoring it on the next open', async () => {
+    const onClose = jest.fn()
+    const r1 = await openAddModal({ onClose })
+    act(() => {
+      nameField(r1).props.onChangeText(NAME_PLACEHOLDER)
+    })
+
+    tapCancel(r1)
+    act(() => {
+      pressableByText(r1, 'add_save_draft').props.onPress()
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    // The route tears down after onClose.
+    await act(async () => {
+      r1.unmount()
+    })
+    await flush()
+
+    const r2 = await openAddModal()
+    expect(nameField(r2).props.value).toBe(NAME_PLACEHOLDER)
+  })
+
+  it('drops the entry when the user chooses Discard — next open is blank', async () => {
+    const onClose = jest.fn()
+    const r1 = await openAddModal({ onClose })
+    act(() => {
+      nameField(r1).props.onChangeText(NAME_PLACEHOLDER)
+    })
+
+    tapCancel(r1)
+    act(() => {
+      pressableByText(r1, 'add_discard').props.onPress()
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      r1.unmount()
+    })
+    await flush()
+
+    const r2 = await openAddModal()
+    expect(nameField(r2).props.value).toBe('')
+  })
+
+  it('closes immediately without a choice when the form is empty', async () => {
+    const onClose = jest.fn()
+    const r = await openAddModal({ onClose })
+
+    tapCancel(r)
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(confirmSheet(r).props.visible).toBe(false)
+  })
+
+  it('autosaves on an uncontrolled exit (back/swipe) so nothing is lost', async () => {
     const r1 = await openAddModal()
     act(() => {
       nameField(r1).props.onChangeText(NAME_PLACEHOLDER)
     })
 
+    // No close button pressed — the component just unmounts (hardware back /
+    // swipe-dismiss). The safety net must persist the in-progress entry.
     await act(async () => {
       r1.unmount()
     })
-    // Let the unmount flush's saveDraft write complete.
     await flush()
 
-    // Second open: the draft must be restored, not blank.
     const r2 = await openAddModal()
     expect(nameField(r2).props.value).toBe(NAME_PLACEHOLDER)
   })
@@ -169,10 +260,8 @@ describe('AddModal draft autosave', () => {
   it('does not resurface a saved entry as a draft on the next open', async () => {
     mockCreateTaste.mockResolvedValue({ id: 'taste-1' })
 
-    // Open, fill, and save (todo mode needs no verdict — keeps the test focused
-    // on draft lifecycle).
     const onSaved = jest.fn()
-    const r1 = await openAddModal(onSaved)
+    const r1 = await openAddModal({ onSaved })
     act(() => {
       r1.root.findByProps({ testID: 'add-mode-todo-btn' }).props.onPress()
     })
@@ -187,10 +276,8 @@ describe('AddModal draft autosave', () => {
     await flush()
 
     expect(onSaved).toHaveBeenCalledWith('taste-1')
-    // The draft for this account must have been cleared.
     expect(await AsyncStorage.getItem('yon_add_draft:u1')).toBeNull()
 
-    // A fresh open starts blank — the saved entry does not linger as a draft.
     const r2 = await openAddModal()
     expect(nameField(r2).props.value).toBe('')
   })
