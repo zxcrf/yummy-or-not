@@ -100,11 +100,17 @@ async function seed(): Promise<void> {
     ('owner_b','Owner B','free'),
     ('viewer','Viewer','free');`);
   // Three of owner_a/b's tastes WITH coords; one is left private (not published).
+  // t_near carries the de-anonymizing fields (place + notes) AND the safe
+  // enrichment fields (tags / bought_count / warn_before_buy) so the coarsening
+  // test can prove the safe ones surface while place/notes never do.
+  // t_near's tags mix bounded-vocabulary chips (Ramen/Spicy) with a FREE-TEXT
+  // tag that names a place ('我家楼下的店') — the feed must strip the free-text
+  // one and surface only the known-vocabulary chips.
   await raw(
-    `INSERT INTO tastes (id, user_id, name, verdict, lat, lng) VALUES
-       ('t_near','owner_a','Near Ramen','yum',$1,$2),
-       ('t_far','owner_b','Far Sushi','meh',$3,$4),
-       ('t_private','owner_a','Secret Spot','yum',$1,$2);`,
+    `INSERT INTO tastes (id, user_id, name, verdict, lat, lng, place, notes, tags, bought_count, warn_before_buy) VALUES
+       ('t_near','owner_a','Near Ramen','yum',$1,$2,'123 Secret St, Apt 4','my place downtown',ARRAY['Ramen','我家楼下的店','Spicy'],4,true),
+       ('t_far','owner_b','Far Sushi','meh',$3,$4,'','',ARRAY[]::text[],1,false),
+       ('t_private','owner_a','Secret Spot','yum',$1,$2,'','',ARRAY[]::text[],1,false);`,
     [NEAR.lat, NEAR.lng, FAR.lat, FAR.lng],
   );
 }
@@ -214,12 +220,28 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
     const rows = await listGeoFeedNear({ lat: ME.lat, lng: ME.lng, radiusM: 10_000 });
     expect(rows.length).toBeGreaterThan(0);
     for (const card of rows) {
-      // Coarsened cell is allowed; precise coords + identity are not.
+      // Coarsened cell is allowed; precise coords + identity + free text are not.
       expect(card).toHaveProperty('gridCell');
-      for (const k of ['lat', 'lng', 'latitude', 'longitude', 'userId', 'user_id', 'ownerId', 'owner_id', 'place', 'address']) {
+      for (const k of ['lat', 'lng', 'latitude', 'longitude', 'userId', 'user_id', 'ownerId', 'owner_id', 'place', 'address', 'notes']) {
         expect(card).not.toHaveProperty(k);
       }
     }
+  });
+
+  it('surfaces SAFE enrichment fields (tags / boughtCount / warnBeforeBuy) — never place/notes', async () => {
+    // t_near was seeded with place + notes (de-anonymizing) AND tags/bought/warn
+    // (safe). Prove the SELECT lets the safe ones through and drops place/notes,
+    // so adding columns to GEO_FEED_COLUMNS never re-opens a leak.
+    const rows = await listGeoFeedByCell(NEAR_CELL);
+    const near = rows.find((c) => c.name === 'Near Ramen');
+    expect(near).toBeDefined();
+    // Free-text '我家楼下的店' is STRIPPED — only bounded-vocabulary chips survive.
+    expect(near!.tags).toEqual(['Ramen', 'Spicy']);
+    expect(near!.tags).not.toContain('我家楼下的店');
+    expect(near!.boughtCount).toBe(4);
+    expect(near!.warnBeforeBuy).toBe(true);
+    expect(near).not.toHaveProperty('place');
+    expect(near).not.toHaveProperty('notes');
   });
 
   // ── PRIVACY: precise-coord leak via filter inference is CLOSED ─────────────

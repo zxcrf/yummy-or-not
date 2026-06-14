@@ -12,7 +12,7 @@
      fetch and signal the "放大查看" hint instead.
    ============================================================ */
 
-import { isBboxHeatQueryable, type GeohashBounds } from '@yon/shared'
+import { isBboxHeatQueryable, type GeohashBounds, type GeoFeedCard } from '@yon/shared'
 
 /** Count at/above which the color stops changing (single hottest color).
  *  The server floor is count>=3 (k-anon); this caps the warm end so a
@@ -87,4 +87,29 @@ export function decideHeatFetch(box: Bbox): {
   return isBboxHeatQueryable(box as GeohashBounds)
     ? { fetch: true, reason: 'ok' }
     : { fetch: false, reason: 'too_large' }
+}
+
+export interface VerdictSummary {
+  yum: number
+  meh: number
+  nah: number
+  /** Cards counted (total length, including any with an unknown/null verdict). */
+  total: number
+}
+
+/**
+ * Aggregate a cell's coarsened cards into verdict counts for the sheet header
+ * ("这一带 N 个 · 👍X 😐Y 👎Z"). Pure — counts only the three known verdicts;
+ * a null/unknown verdict still adds to `total` but to no bucket, so the buckets
+ * never over-count. No location/identity touched (operates on the already-safe
+ * GeoFeedCard shape).
+ */
+export function summarizeVerdicts(cards: Pick<GeoFeedCard, 'verdict'>[]): VerdictSummary {
+  const s: VerdictSummary = { yum: 0, meh: 0, nah: 0, total: cards.length }
+  for (const c of cards) {
+    if (c.verdict === 'yum') s.yum++
+    else if (c.verdict === 'meh') s.meh++
+    else if (c.verdict === 'nah') s.nah++
+  }
+  return s
 }
