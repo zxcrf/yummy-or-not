@@ -1214,6 +1214,90 @@ export async function consumeOtp(phone: string, codeHash: string): Promise<boole
   return true;
 }
 
+// ── Password reset tokens (email) ────────────────────────────────────────────
+
+/** Persist a single-use password-reset token. We store only its sha256 hash —
+ *  the raw token is mailed to the user and never written to the database. */
+export async function savePasswordResetToken(
+  userId: string,
+  email: string,
+  tokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO password_reset_tokens (token_hash, user_id, email, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [tokenHash, userId, email, expiresAt]
+  );
+}
+
+/**
+ * Apply a password reset atomically inside a single transaction:
+ *   1. Consume the token (must match BOTH hash AND the normalized email; rejects
+ *      if already used, expired, or issued for a different address — MED 3).
+ *   2. Burn ALL other unexpired/unused tokens for the same user so an older link
+ *      cannot be replayed after a successful reset (MED 4).
+ *   3. Set the new password hash on the user row.
+ *   4. Revoke every session for the user.
+ * All four steps commit together or roll back together (HIGH 2). Returns the
+ * user id on success, null when the token is invalid/mismatched.
+ */
+export async function applyPasswordReset(
+  tokenHash: string,
+  email: string,
+  newPasswordHash: string
+): Promise<{ userId: string } | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Step 1 — consume this specific token (bound to email to prevent
+    // rate-limit bypass via email rotation, MED 3).
+    const { rows } = await client.query(
+      `UPDATE password_reset_tokens
+          SET used_at = now()
+        WHERE token_hash = $1
+          AND email      = $2
+          AND used_at IS NULL
+          AND expires_at > now()
+        RETURNING user_id`,
+      [tokenHash, email]
+    );
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const userId: string = rows[0].user_id;
+
+    // Step 2 — burn every OTHER outstanding token for this user (MED 4).
+    await client.query(
+      `UPDATE password_reset_tokens
+          SET used_at = now()
+        WHERE user_id   = $1
+          AND token_hash <> $2
+          AND used_at IS NULL`,
+      [userId, tokenHash]
+    );
+
+    // Step 3 — set the new password.
+    await client.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [newPasswordHash, userId]
+    );
+
+    // Step 4 — revoke all sessions so no pre-reset bearer token survives.
+    await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+
+    await client.query('COMMIT');
+    return { userId };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── User tag candidate set ────────────────────────────────────────────────────
 
 /** Map a user_tags row to the client-facing UserTag shape. */

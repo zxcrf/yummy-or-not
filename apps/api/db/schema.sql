@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS promo_codes;
 DROP TABLE IF EXISTS taste_imports;
 DROP TABLE IF EXISTS share_tokens;
 DROP TABLE IF EXISTS taste_purchases;
+DROP TABLE IF EXISTS password_reset_tokens;
 DROP TABLE IF EXISTS otp_codes;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS auth_identities;
@@ -92,6 +93,20 @@ CREATE TABLE otp_codes (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX otp_codes_phone_idx ON otp_codes (phone, created_at DESC);
+
+-- ── Email password-reset tokens ───────────────────────────────────────────────
+-- Only the sha256 hash is stored; the raw token is emailed and never persisted.
+-- email is stored alongside user_id so the consume step can verify the token was
+-- issued for the exact address the client supplies (prevents rate-limit bypass).
+CREATE TABLE password_reset_tokens (
+  token_hash text        PRIMARY KEY,
+  user_id    text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email      text,
+  expires_at timestamptz NOT NULL,
+  used_at    timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX password_reset_tokens_expires_idx ON password_reset_tokens (expires_at);
 
 -- ── Tastes (now owned by a user) ─────────────────────────────────────────────
 CREATE TABLE tastes (

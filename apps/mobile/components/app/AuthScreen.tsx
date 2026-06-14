@@ -21,8 +21,10 @@ import {
   oauthStartUrl,
   registerEmail,
   requestOtp,
+  requestPasswordReset,
   setAuthToken,
   verifyOtp,
+  verifyPasswordReset,
   type AuthResponse,
   type ProviderStatus,
   type RedeemError,
@@ -50,6 +52,7 @@ function errKey(code: string): string {
     code_expired: 'auth_err_code_expired',
     code_exhausted: 'auth_err_code_exhausted',
     already_redeemed: 'auth_err_already_redeemed',
+    bad_token: 'auth_err_bad_token',
   }
   return map[code] ?? 'auth_err_generic'
 }
@@ -324,10 +327,26 @@ function EmailForm({
 }) {
   const { t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [view, setView] = useState<'auth' | 'reset'>('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [promo, setPromo] = useState('')
+
+  if (view === 'reset') {
+    return (
+      <ForgotPasswordForm
+        busy={busy}
+        setBusy={setBusy}
+        setError={setError}
+        initialEmail={email}
+        onBack={() => {
+          setView('auth')
+          setError(null)
+        }}
+      />
+    )
+  }
 
   const submit = async () => {
     setError(null)
@@ -402,6 +421,158 @@ function EmailForm({
         <Text style={styles.ghostBtnText}>
           {mode === 'login' ? t('auth_to_register') : t('auth_to_login')}
         </Text>
+      </Button>
+      {mode === 'login' ? (
+        <Button
+          variant="ghost"
+          block
+          onPress={() => {
+            setView('reset')
+            setError(null)
+          }}
+        >
+          <Text style={styles.ghostBtnText}>{t('auth_forgot_password')}</Text>
+        </Button>
+      ) : null}
+    </View>
+  )
+}
+
+/* ── forgot password (email) ────────────────────────────────────────────────
+   Two steps in one card:
+     1) enter email → reset-request (always shows the same enumeration-safe
+        "若该邮箱已注册，已发送重置邮件" notice, regardless of result).
+     2) enter the emailed token + a new password → reset-verify → on success
+        route back to sign in.
+   submitReset is split out (like notifyPromo) so the network+decision logic is
+   unit-testable without mounting the whole screen. */
+
+/** Step 2 submit: verifies the token + new password, then signals success. The
+ *  payload it sends is exactly { email, token, newPassword } — pinned by tests
+ *  so a regression in the wired-up fields is caught. */
+export async function submitReset(
+  args: { email: string; token: string; newPassword: string },
+  onSuccess: () => void,
+): Promise<void> {
+  await verifyPasswordReset({
+    email: args.email,
+    token: args.token,
+    newPassword: args.newPassword,
+  })
+  onSuccess()
+}
+
+function ForgotPasswordForm({
+  busy,
+  setBusy,
+  setError,
+  initialEmail,
+  onBack,
+}: {
+  busy: boolean
+  setBusy: (b: boolean) => void
+  setError: (e: string | null) => void
+  initialEmail: string
+  onBack: () => void
+}) {
+  const { t } = useI18n()
+  const [step, setStep] = useState<'email' | 'token'>('email')
+  const [email, setEmail] = useState(initialEmail)
+  const [token, setToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  const sendEmail = async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      await requestPasswordReset(email)
+    } catch (e) {
+      // Stay enumeration-safe in the UI too: surface the generic notice even on
+      // a (rare) error, and advance so the user can paste a token.
+      void e
+    } finally {
+      setBusy(false)
+      setNotice(t('auth_reset_sent'))
+      setStep('token')
+    }
+  }
+
+  const submit = async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      await submitReset({ email, token, newPassword }, () => setDone(true))
+    } catch (e) {
+      setError(t(errKey((e as Error).message)))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <View style={styles.formGap}>
+        <Text style={styles.resetTitle}>{t('auth_reset_done')}</Text>
+        <Button block onPress={onBack}>
+          {t('auth_reset_back')}
+        </Button>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.formGap}>
+      <Text style={styles.resetTitle}>{t('auth_reset_title')}</Text>
+      <Input
+        label={t('auth_email_label')}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+        placeholder={t('auth_email_ph')}
+        hint={step === 'email' ? t('auth_reset_email_hint') : undefined}
+        value={email}
+        onChangeText={setEmail}
+      />
+      {step === 'email' ? (
+        <Button block onPress={sendEmail} disabled={busy || !email}>
+          {t('auth_reset_send')}
+        </Button>
+      ) : (
+        <>
+          {notice ? (
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
+          <Input
+            label={t('auth_reset_token_label')}
+            autoCapitalize="none"
+            autoComplete="off"
+            placeholder={t('auth_reset_token_ph')}
+            value={token}
+            onChangeText={setToken}
+          />
+          <Input
+            label={t('auth_reset_new_password_label')}
+            secureTextEntry
+            autoComplete="new-password"
+            placeholder={t('auth_reset_new_password_ph')}
+            value={newPassword}
+            onChangeText={setNewPassword}
+          />
+          <Button
+            block
+            onPress={submit}
+            disabled={busy || !token || newPassword.length < 8}
+          >
+            {t('auth_reset_submit')}
+          </Button>
+        </>
+      )}
+      <Button variant="ghost" block onPress={onBack}>
+        <Text style={styles.ghostBtnText}>{t('auth_reset_back')}</Text>
       </Button>
     </View>
   )
@@ -585,6 +756,24 @@ const styles = StyleSheet.create({
   // form
   formGap: {
     gap: 12,
+  },
+  resetTitle: {
+    fontWeight: '700',
+    fontSize: 16,
+    color: colors.ink900,
+  },
+  noticeBox: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.paper,
+    borderWidth: 3,
+    borderColor: colors.ink900,
+  },
+  noticeText: {
+    color: colors.ink900,
+    fontSize: 13,
+    fontWeight: '600',
   },
   ghostBtnText: {
     color: colors.candyPink,

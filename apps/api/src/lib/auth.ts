@@ -19,6 +19,8 @@ export const SESSION_COOKIE = 'yon_session';
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** OTP codes are valid for 5 minutes. */
 export const OTP_TTL_MS = 5 * 60 * 1000;
+/** Email password-reset tokens are valid for 30 minutes. */
+export const PW_RESET_TTL_MS = 30 * 60 * 1000;
 
 // ── Password hashing (scrypt) ────────────────────────────────────────────────
 
@@ -53,6 +55,12 @@ export function hashCode(code: string): string {
 
 /** A long opaque session token (256 bits). */
 export function generateSessionToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+/** A high-entropy raw password-reset token (256 bits). Only its hashCode() is
+ *  ever stored; the raw value is mailed to the user. */
+export function generateResetToken(): string {
   return randomBytes(32).toString('hex');
 }
 

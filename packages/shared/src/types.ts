@@ -222,6 +222,18 @@ export interface OtpVerifyInput {
   phone: string;
   code: string;
 }
+/** POST /api/auth/password/reset-request — start an email password reset.
+ *  Always answered with 200 (enumeration-safe), so the response never reveals
+ *  whether the email is registered. `devToken` is returned outside production. */
+export interface PasswordResetRequestInput {
+  email: string;
+}
+/** POST /api/auth/password/reset-verify — finish a reset with the emailed token. */
+export interface PasswordResetVerifyInput {
+  email: string;
+  token: string;
+  newPassword: string;
+}
 /** POST /api/auth/register — email sign-up (international habit).
  *  `promoCode` is optional: when present and valid, the new account is
  *  upgraded to the plan the code grants (e.g. pro) on sign-up. */
