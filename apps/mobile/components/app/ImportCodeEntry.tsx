@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
-import { resolveImportCode } from '@yon/shared'
+import { parseShareToken, resolveImportCode } from '@yon/shared'
 import { Button, Input } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { colors, space, Text } from '@/theme'
@@ -29,7 +29,8 @@ export default function ImportCodeEntry() {
     setLoading(true)
     setError(null)
     try {
-      const { token } = await resolveImportCode(trimmed)
+      const resolvedCode = parseShareToken(trimmed) ?? trimmed
+      const { token } = await resolveImportCode(resolvedCode)
       router.replace(`/import/${token}`)
     } catch {
       // 404 / any failure → the code does not map to a live share.
