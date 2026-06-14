@@ -21,6 +21,7 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
+import { ScrollView } from 'react-native'
 
 const mockUseAuth = jest.fn()
 const mockUseActiveTaster = jest.fn<string | null, []>()
@@ -115,5 +116,64 @@ describe('TasterSwitcher — pro plan switches the active taster', () => {
     act(() => { selfChip.props.onPress() })
     // Switching back to self clears the explicit selection.
     expect(mockSetActiveTaster).toHaveBeenCalledWith(null)
+  })
+})
+
+// ── Regression: #96 giant black capsule (chip stretched vertically) ───────────
+// Root cause: horizontal ScrollView's cross-axis defaults to "stretch" when
+// alignItems is absent from contentContainerStyle, and the component row grabbed
+// flex height inside its Screen column → single active chip (pill radius +
+// ink900 bg) stretched to full screen height → giant black blob.
+// Fix: styles.row must have alignItems:'center'; ScrollView must have
+// flexGrow:0 so it doesn't grab vertical space from the parent flex column.
+//
+// Pattern follows jest-async-leaks.md: await act(async) mount + afterEach unmount.
+describe('TasterSwitcher — #96 regression: chip must not stretch vertically', () => {
+  const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
+    mockUseActiveTaster.mockReturnValue(null)
+    mockUseTasters.mockReturnValue({ tasters: [SELF, PARTNER], loading: false })
+  })
+
+  afterEach(async () => {
+    await act(async () => {
+      mountedRenderers.forEach((r) => r.unmount())
+    })
+    mountedRenderers.length = 0
+  })
+
+  it('contentContainerStyle (styles.row) has alignItems:"center" to prevent cross-axis stretch', async () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    await act(async () => {
+      renderer = TestRenderer.create(<TasterSwitcher />)
+    })
+    mountedRenderers.push(renderer)
+
+    // Find the horizontal ScrollView by its accessibilityLabel.
+    const scrollView = renderer.root.find(
+      (node) => node.props.accessibilityLabel === 'taster-switcher',
+    )
+
+    // contentContainerStyle pins the cross-axis: must be 'center', not undefined/stretch.
+    const contentStyle = scrollView.props.contentContainerStyle as Record<string, unknown>
+    expect(contentStyle.alignItems).toBe('center')
+  })
+
+  it('ScrollView outer style has flexGrow:0 to prevent grabbing vertical flex space', async () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    await act(async () => {
+      renderer = TestRenderer.create(<TasterSwitcher />)
+    })
+    mountedRenderers.push(renderer)
+
+    const scrollView = renderer.root.find(
+      (node) => node.props.accessibilityLabel === 'taster-switcher',
+    )
+
+    // The outer style must opt out of flex growth in the parent column.
+    const outerStyle = scrollView.props.style as Record<string, unknown>
+    expect(outerStyle.flexGrow).toBe(0)
   })
 })
