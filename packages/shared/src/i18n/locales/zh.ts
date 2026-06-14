@@ -135,5 +135,7 @@ export const zh: Record<string, string> = {
   taster_invalid_name: "昵称需为 1–50 个字符",
   family_feed: "家人的口味",
   family_feed_empty: "家人还没有公开的口味",
+  family_feed_error: "加载失败，请重试",
   upgrade_to_pro: "升级 Pro",
+  retry: "重试",
 };

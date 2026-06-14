@@ -10,6 +10,10 @@
    a mounted TasterSwitcher-shaped subscriber observes the post-mutation
    personas without a second source of truth.
 
+   Also pins MED-2 reconciliation: if the active taster id is absent from
+   the refetched list (deleted from another session), setActiveTaster(null)
+   is called to reset to the self default.
+
    getTasters is mocked; module-level cache is reset between tests via
    setTastersUser so each case starts cold.
    ============================================================ */
@@ -22,6 +26,20 @@ import { invalidateTasters, setTastersUser, useTasters } from '../_useTasters'
 const mockGetTasters = jest.fn<Promise<Taster[]>, []>()
 jest.mock('@yon/shared', () => ({
   getTasters: (...args: []) => mockGetTasters(...args),
+}))
+
+// _useTasters now imports getActiveTaster + setActiveTaster for reconciliation.
+// Mock the module so tests can control the perceived active id and assert
+// setActiveTaster calls without AsyncStorage side effects.
+const mockGetActiveTaster = jest.fn<string | null, []>()
+const mockSetActiveTaster = jest.fn<Promise<void>, [string | null]>()
+jest.mock('../_useActiveTaster', () => ({
+  getActiveTaster: () => mockGetActiveTaster(),
+  setActiveTaster: (id: string | null) => mockSetActiveTaster(id),
+  // Hook + other exports used by other consumers — stub so they don't break.
+  useActiveTaster: () => null,
+  setActiveTasterUser: jest.fn(),
+  clearActiveTaster: jest.fn(),
 }))
 
 function taster(id: string, displayName = id, isSelf = false): Taster {
@@ -69,6 +87,11 @@ const flush = () =>
 
 beforeEach(async () => {
   mockGetTasters.mockReset()
+  mockGetActiveTaster.mockReset()
+  mockSetActiveTaster.mockReset()
+  // Default: no active taster (self). Individual tests override as needed.
+  mockGetActiveTaster.mockReturnValue(null)
+  mockSetActiveTaster.mockResolvedValue(undefined)
   // Reset module-level cache so each test starts cold.
   await act(async () => {
     setTastersUser('__reset__')
@@ -103,5 +126,67 @@ describe('useTasters — invalidateTasters refetches and emits to subscribers', 
     // persona — proving TasterSwitcher updates from the same source.
     expect(mockGetTasters).toHaveBeenCalledTimes(2)
     expect(seen[seen.length - 1].map((t) => t.id)).toEqual(['t-self', 't-partner'])
+  })
+})
+
+describe('useTasters — active-taster reconciliation (MED-2)', () => {
+  it('resets active taster to null when its id is absent from the refetched list', async () => {
+    // Active taster is 't-partner', which exists in the first fetch.
+    mockGetActiveTaster.mockReturnValue('t-partner')
+    mockGetTasters.mockResolvedValueOnce([
+      taster('t-self', 'Me', true),
+      taster('t-partner', 'Partner'),
+    ])
+    await mountSubscriber()
+    await flush()
+
+    // Another session deleted 't-partner'; invalidate brings back only self.
+    mockGetTasters.mockResolvedValueOnce([taster('t-self', 'Me', true)])
+    await act(async () => {
+      invalidateTasters()
+    })
+    await flush()
+
+    // The active id is no longer in the list → must reset to self default.
+    expect(mockSetActiveTaster).toHaveBeenCalledWith(null)
+  })
+
+  it('does NOT reset active taster when the id is still present after refetch', async () => {
+    // Active taster is 't-partner', which remains after refetch.
+    mockGetActiveTaster.mockReturnValue('t-partner')
+    mockGetTasters.mockResolvedValueOnce([
+      taster('t-self', 'Me', true),
+      taster('t-partner', 'Partner'),
+    ])
+    await mountSubscriber()
+    await flush()
+
+    // Invalidate: list unchanged (e.g. a rename, not a delete).
+    mockGetTasters.mockResolvedValueOnce([
+      taster('t-self', 'Me', true),
+      taster('t-partner', 'Partner renamed'),
+    ])
+    await act(async () => {
+      invalidateTasters()
+    })
+    await flush()
+
+    // Active id still present — must NOT reset.
+    expect(mockSetActiveTaster).not.toHaveBeenCalled()
+  })
+
+  it('does NOT reset when active is already null (self default)', async () => {
+    mockGetActiveTaster.mockReturnValue(null)
+    mockGetTasters.mockResolvedValueOnce([taster('t-self', 'Me', true)])
+    await mountSubscriber()
+    await flush()
+
+    mockGetTasters.mockResolvedValueOnce([taster('t-self', 'Me', true)])
+    await act(async () => {
+      invalidateTasters()
+    })
+    await flush()
+
+    expect(mockSetActiveTaster).not.toHaveBeenCalled()
   })
 })

@@ -78,6 +78,15 @@ export function setActiveTasterUser(id: string | null): void {
 }
 
 /**
+ * Non-reactive read of the current active taster id. Intended for
+ * reconciliation logic that runs outside React (e.g. _useTasters emit).
+ * Use `useActiveTaster()` for reactive UI reads.
+ */
+export function getActiveTaster(): string | null {
+  return active
+}
+
+/**
  * Select the active taster (null = back to the self default). Persists the
  * choice under the current account's key and notifies every mounted view.
  */

@@ -135,5 +135,7 @@ export const en: Record<string, string> = {
   taster_invalid_name: "Name must be 1–50 characters",
   family_feed: "Family tastes",
   family_feed_empty: "No shared family tastes yet",
+  family_feed_error: "Couldn't load family tastes. Please try again.",
   upgrade_to_pro: "Upgrade to Pro",
+  retry: "Retry",
 };

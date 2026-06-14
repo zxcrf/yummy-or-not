@@ -7,10 +7,16 @@
    returns the coarsened GeoFeedCard shape (name / verdict / thumb) —
    no precise coordinate or identity. Card layout mirrors the cell
    bottom-sheet in NearbyHeatView for visual parity.
+
+   Error handling: a failed fetch (401 / 500 / network) renders a
+   distinct error state with a retry affordance. The empty state
+   ("family_feed_empty") is reserved exclusively for a successful
+   response that returns an empty array — so users never see a false
+   "no shared tastes" when the call actually failed.
    ============================================================ */
 
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { Image } from 'expo-image'
 import { getFamilyFeed, type GeoFeedCard } from '@yon/shared'
 
@@ -29,16 +35,21 @@ function asVerdict(v: unknown): KnownVerdict | null {
 
 export default function FamilyFeedView() {
   const { t } = useI18n()
+  // null = still loading; GeoFeedCard[] = successful response (may be empty)
   const [cards, setCards] = useState<GeoFeedCard[] | null>(null)
+  // true = fetch rejected (401 / 500 / network); distinct from an empty list
+  const [loadError, setLoadError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
+    setLoadError(false)
     try {
       const data = await getFamilyFeed()
       setCards(data)
     } catch {
-      // Surface an empty state rather than crashing on a transient error.
-      setCards([])
+      // Keep any previously loaded cards visible during a pull-to-refresh
+      // failure; on initial load cards stays null so we show the error state.
+      setLoadError(true)
     }
   }, [])
 
@@ -52,7 +63,7 @@ export default function FamilyFeedView() {
     setRefreshing(false)
   }, [load])
 
-  const loading = cards === null
+  const loading = cards === null && !loadError
 
   return (
     <ScrollView
@@ -68,13 +79,27 @@ export default function FamilyFeedView() {
         <View style={styles.centered} testID="family-feed-loading">
           <ActivityIndicator color={colors.ink900} />
         </View>
-      ) : cards.length === 0 ? (
+      ) : loadError ? (
+        // A real failure (401/500/network) — show error copy + retry so users
+        // can distinguish "nothing shared yet" from "the request broke".
+        <View style={styles.centered} testID="family-feed-error">
+          <Text style={styles.errorText}>{t('family_feed_error')}</Text>
+          <Pressable
+            onPress={() => { void load() }}
+            accessibilityRole="button"
+            testID="family-feed-retry"
+            style={styles.retryBtn}
+          >
+            <Text style={styles.retryText}>{t('retry')}</Text>
+          </Pressable>
+        </View>
+      ) : cards !== null && cards.length === 0 ? (
         <Text style={styles.emptyText} testID="family-feed-empty">
           {t('family_feed_empty')}
         </Text>
       ) : (
         <View style={{ gap: space[3], marginTop: space[3] }}>
-          {cards.map((card) => (
+          {(cards ?? []).map((card) => (
             <View key={card.id} style={styles.card} testID={`family-card-${card.id}`}>
               <View style={styles.thumb}>
                 {card.imageThumb || card.imageDisplay || card.image ? (
@@ -124,6 +149,24 @@ const styles = StyleSheet.create({
     color: colors.ink500,
     fontSize: 14,
     marginTop: 8,
+  },
+  errorText: {
+    color: colors.ink500,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: colors.ink900,
+    borderRadius: radius.pill,
+  },
+  retryText: {
+    color: colors.ink900,
+    fontWeight: '600',
+    fontSize: 14,
   },
   card: {
     flexDirection: 'row',
