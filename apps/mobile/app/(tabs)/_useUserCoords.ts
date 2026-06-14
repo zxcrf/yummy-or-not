@@ -84,6 +84,54 @@ export interface LocateResult {
   status: LocateStatus
 }
 
+const LAST_KNOWN_MAX_AGE_MS = 5 * 60 * 1000
+const CURRENT_POSITION_TIMEOUT_MS = 15_000
+
+async function getAvailablePositionCoords(): Promise<Coords | null> {
+  let coords: Location.LocationObject['coords'] | null = null
+
+  try {
+    const lastKnown = await Location.getLastKnownPositionAsync({
+      maxAge: LAST_KNOWN_MAX_AGE_MS,
+    })
+    if (lastKnown) coords = lastKnown.coords
+  } catch {
+    // Last-known lookup failed — fall through to a fresh fix below.
+  }
+
+  try {
+    const posPromise = Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timeout')), CURRENT_POSITION_TIMEOUT_MS)
+    })
+    try {
+      const pos = await Promise.race([posPromise, timeout])
+      coords = pos.coords
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  } catch {
+    // Fresh fix failed/timed out — keep last-known coords if we have them.
+  }
+
+  return coords ? { lat: coords.latitude, lng: coords.longitude } : null
+}
+
+export async function requestLocateResult(): Promise<LocateResult> {
+  try {
+    const perm = await Location.requestForegroundPermissionsAsync()
+    if (!perm.granted) return { coords: null, status: 'denied' }
+
+    const coords = await getAvailablePositionCoords()
+    return coords ? { coords, status: 'ready' } : { coords: null, status: 'failed' }
+  } catch {
+    return { coords: null, status: 'failed' }
+  }
+}
+
 /**
  * Like {@link useUserCoords} but also surfaces the resolution *status*, so a
  * caller can wait for a real fix before centering and switch to a sensible
@@ -102,34 +150,8 @@ export function useLocateResult(enabled: boolean): LocateResult {
     let cancelled = false
     setResult({ coords: null, status: 'locating' })
     ;(async () => {
-      try {
-        const perm = await Location.requestForegroundPermissionsAsync()
-        if (cancelled) return
-        if (!perm.granted) {
-          setResult({ coords: null, status: 'denied' })
-          return
-        }
-        const posPromise = Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        })
-        let timer: ReturnType<typeof setTimeout> | undefined
-        const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('timeout')), 10_000)
-        })
-        try {
-          const pos = await Promise.race([posPromise, timeout])
-          if (!cancelled) {
-            setResult({
-              coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-              status: 'ready',
-            })
-          }
-        } finally {
-          if (timer) clearTimeout(timer)
-        }
-      } catch {
-        if (!cancelled) setResult({ coords: null, status: 'failed' })
-      }
+      const next = await requestLocateResult()
+      if (!cancelled) setResult(next)
     })()
     return () => {
       cancelled = true
