@@ -33,6 +33,7 @@ import {
 
 import { Avatar, Button, Card, Icon, Input } from '@/components/ds'
 import { invalidateTasters, useTasters } from '@/app/(tabs)/_useTasters'
+import { useActiveTaster, setActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 import { colors, space, radius, Text } from '@/theme'
@@ -46,6 +47,7 @@ export default function TasterManageView() {
   const { t } = useI18n()
   const { user } = useAuth()
   const { tasters, loading } = useTasters()
+  const activeTaster = useActiveTaster()
 
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [nameValue, setNameValue] = useState('')
@@ -58,9 +60,12 @@ export default function TasterManageView() {
 
   const isPro = user?.plan === 'pro'
 
-  // Free accounts cannot own multiple personas — show the upgrade affordance
-  // instead of the management UI (consistent with TasterSwitcher hiding).
-  if (!isPro) {
+  // Show the upgrade affordance instead of the management UI when the account is
+  // free OR the server rejected a mutation as non-pro (proBlocked). In both
+  // cases the management actions (add / edit / delete) must be hidden — a stale
+  // client "pro" state must not keep offering controls the server refuses
+  // (consistent with TasterSwitcher hiding for free accounts).
+  if (!isPro || proBlocked) {
     return (
       <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
         <Text style={styles.kicker}>{t('taster_manage')}</Text>
@@ -136,9 +141,19 @@ export default function TasterManageView() {
         onPress: async () => {
           try {
             await deleteTaster(taster.id)
+            // If the deleted persona was the active selection, reset to the
+            // self default — otherwise the persisted active id is dangling and
+            // the next new-taste POST would carry a stale (now-invalid) taster.
+            if (activeTaster === taster.id) {
+              void setActiveTaster(null)
+            }
             invalidateTasters()
-          } catch {
-            // silent — list re-renders from cache
+          } catch (err: unknown) {
+            // A downgraded/stale account can still hit a 403 here — surface the
+            // same upgrade gate as create/edit rather than failing silently.
+            const msg = err instanceof Error ? err.message : String(err)
+            if (msg.includes('pro_required')) setProBlocked(true)
+            // Otherwise silent — the list re-renders from cache.
           }
         },
       },
@@ -150,12 +165,6 @@ export default function TasterManageView() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.kicker}>{t('taster_manage')}</Text>
-
-      {proBlocked ? (
-        <Card padded style={{ marginTop: space[3] }} testID="taster-pro-gate">
-          <Text style={styles.gateText}>{t('taster_pro_required')}</Text>
-        </Card>
-      ) : null}
 
       {!loading && tasters.length === 0 ? (
         <Text style={styles.emptyText}>{t('taster_empty')}</Text>

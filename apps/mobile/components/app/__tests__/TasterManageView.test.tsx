@@ -34,6 +34,8 @@ const mockUpdateTaster = jest.fn()
 const mockDeleteTaster = jest.fn()
 const mockInvalidateTasters = jest.fn()
 const mockUseAuth = jest.fn()
+const mockUseActiveTaster = jest.fn<string | null, []>()
+const mockSetActiveTaster = jest.fn()
 
 const SELF = { id: 't-self', displayName: 'Me', avatar: '', isSelf: true }
 const PARTNER = { id: 't-partner', displayName: 'Partner', avatar: '', isSelf: false }
@@ -47,6 +49,11 @@ jest.mock('@yon/shared', () => ({
 jest.mock('@/app/(tabs)/_useTasters', () => ({
   useTasters: () => ({ tasters: [SELF, PARTNER], loading: false }),
   invalidateTasters: (...args: unknown[]) => mockInvalidateTasters(...args),
+}))
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => mockUseActiveTaster(),
+  setActiveTaster: (...args: unknown[]) => mockSetActiveTaster(...args),
 }))
 
 jest.mock('@/providers/AuthProvider', () => ({
@@ -101,6 +108,7 @@ afterEach(() => {
 describe('TasterManageView — pro CRUD', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
+    mockUseActiveTaster.mockReturnValue(null) // self default
   })
 
   it('create calls createTaster with the entered payload then invalidateTasters', async () => {
@@ -164,6 +172,52 @@ describe('TasterManageView — pro CRUD', () => {
     jest.restoreAllMocks()
   })
 
+  it('deleting the active taster resets the active selection to self (null)', async () => {
+    // Partner is the currently active persona.
+    mockUseActiveTaster.mockReturnValue('t-partner')
+    mockDeleteTaster.mockResolvedValueOnce(undefined)
+    let destructiveOnPress: (() => Promise<void>) | undefined
+    jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      destructiveOnPress = (buttons ?? []).find((b) => b.style === 'destructive')
+        ?.onPress as (() => Promise<void>) | undefined
+    })
+
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'delete-taster-t-partner' }).props.onPress()
+    })
+    await act(async () => {
+      await destructiveOnPress?.()
+    })
+
+    // Active selection was the deleted persona → reset to self default so the
+    // next new-taste POST doesn't carry a dangling taster id.
+    expect(mockSetActiveTaster).toHaveBeenCalledWith(null)
+    jest.restoreAllMocks()
+  })
+
+  it('does NOT reset the active selection when a non-active taster is deleted', async () => {
+    // Self is active (null); deleting the partner must leave it untouched.
+    mockUseActiveTaster.mockReturnValue(null)
+    mockDeleteTaster.mockResolvedValueOnce(undefined)
+    let destructiveOnPress: (() => Promise<void>) | undefined
+    jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      destructiveOnPress = (buttons ?? []).find((b) => b.style === 'destructive')
+        ?.onPress as (() => Promise<void>) | undefined
+    })
+
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'delete-taster-t-partner' }).props.onPress()
+    })
+    await act(async () => {
+      await destructiveOnPress?.()
+    })
+
+    expect(mockSetActiveTaster).not.toHaveBeenCalled()
+    jest.restoreAllMocks()
+  })
+
   it('self-taster is marked and exposes no delete control', () => {
     const renderer = render()
     // self row is labelled
@@ -199,12 +253,17 @@ describe('TasterManageView — pro CRUD', () => {
     // Upgrade gate is shown; the create was NOT treated as success.
     expect(renderer.root.findByProps({ testID: 'taster-pro-gate' })).toBeTruthy()
     expect(mockInvalidateTasters).not.toHaveBeenCalled()
+    // And the management controls are now hidden — a stale client "pro" state
+    // must not keep offering controls the server refuses.
+    expect(renderer.root.findAllByProps({ testID: 'add-taster-btn' })).toHaveLength(0)
+    expect(renderer.root.findAllByProps({ testID: 'edit-taster-t-partner' })).toHaveLength(0)
   })
 })
 
 describe('TasterManageView — free plan gating', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'free' } })
+    mockUseActiveTaster.mockReturnValue(null)
   })
 
   it('renders the upgrade gate and no management actions', () => {
