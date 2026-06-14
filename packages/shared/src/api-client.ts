@@ -26,6 +26,7 @@ import type {
   AuthResponse,
   RegisterInput,
   LoginInput,
+  PasswordResetVerifyInput,
   RedeemResponse,
   OriginalPhotoResponse,
   UserTag,
@@ -219,6 +220,22 @@ export async function verifyOtp(phone: string, code: string): Promise<AuthRespon
 
 export async function registerEmail(input: RegisterInput): Promise<AuthResponse> {
   return authPost<AuthResponse>("/api/auth/register", input);
+}
+
+/** Password reset step 1 — request a reset email. Always resolves ok (the server
+ *  is enumeration-safe and never reveals whether the email is registered).
+ *  devToken is set outside production. */
+export async function requestPasswordReset(
+  email: string
+): Promise<{ ok: true; devToken?: string }> {
+  return authPost("/api/auth/password/reset-request", { email });
+}
+
+/** Password reset step 2 — submit the emailed token + a new password. Throws an
+ *  Error whose message is the server's code (e.g. "bad_token", "weak_password")
+ *  for the UI to localize. */
+export async function verifyPasswordReset(input: PasswordResetVerifyInput): Promise<{ ok: true }> {
+  return authPost("/api/auth/password/reset-verify", input);
 }
 
 export async function loginEmail(input: LoginInput): Promise<AuthResponse> {

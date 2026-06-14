@@ -1214,6 +1214,61 @@ export async function consumeOtp(phone: string, codeHash: string): Promise<boole
   return true;
 }
 
+// ── Password reset tokens (email) ────────────────────────────────────────────
+
+/** Persist a single-use password-reset token. We store only its sha256 hash —
+ *  the raw token is mailed to the user and never written to the database. */
+export async function savePasswordResetToken(
+  userId: string,
+  email: string,
+  tokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO password_reset_tokens (token_hash, user_id, email, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [tokenHash, userId, email, expiresAt]
+  );
+}
+
+/**
+ * Atomically consume a password-reset token: succeeds only when the token
+ * exists, is unexpired, and has NOT been used. On success it stamps used_at in
+ * the same statement (single-use, race-safe) and returns the owning user id;
+ * returns null for any expired / already-used / unknown token.
+ */
+export async function consumePasswordResetToken(
+  tokenHash: string
+): Promise<{ userId: string } | null> {
+  const { rows } = await pool.query(
+    `UPDATE password_reset_tokens
+        SET used_at = now()
+      WHERE token_hash = $1
+        AND used_at IS NULL
+        AND expires_at > now()
+      RETURNING user_id`,
+    [tokenHash]
+  );
+  return rows.length ? { userId: rows[0].user_id } : null;
+}
+
+/** Set a user's password hash (used by the password-reset flow). */
+export async function setUserPasswordHash(
+  userId: string,
+  passwordHash: string
+): Promise<void> {
+  await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+    passwordHash,
+    userId,
+  ]);
+}
+
+/** Revoke every session for a user — called after a password reset so a stolen
+ *  old session can't persist past the reset. */
+export async function deleteUserSessions(userId: string): Promise<void> {
+  await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+}
+
 // ── User tag candidate set ────────────────────────────────────────────────────
 
 /** Map a user_tags row to the client-facing UserTag shape. */
