@@ -47,8 +47,22 @@ export type ShareCardProps = {
    * link-free (no scannable link embedded), so no QR is rendered.
    */
   landingUrl?: string
-  /** Called once the card is ready to capture: image loaded (or no photo). */
+  /**
+   * Called once the card is ready to capture via the photo/no-photo path:
+   * - With photo and no QR: fires on expo-image onLoad.
+   * - No photo and no QR: fires after first paint via useEffect.
+   * NOT called in 可导入 mode — use onQrReady for that path so a photo
+   * onLoad or no-photo effect can never satisfy the QR readiness wait.
+   */
   onReady?: () => void
+  /**
+   * 可导入 mode only — called when the qrWrap has laid out (onLayout), meaning
+   * the QR subtree exists and has a layout box. Completely separate from
+   * onReady so the photo/no-photo signal physically cannot resolve the QR
+   * readiness wait, even during the transitional window before the hasQr=true
+   * render commits.
+   */
+  onQrReady?: () => void
 }
 
 /**
@@ -56,22 +70,31 @@ export type ShareCardProps = {
  * Must be wrapped in a ref-bearing View with collapsable={false} by
  * the caller so captureRef can read the native backing view.
  *
- * Calls onReady when the card is ready to capture:
- * - With photo: fires on expo-image onLoad (image pixels in backing view).
- * - No photo: fires synchronously via useEffect after first paint.
+ * Two separate readiness signals — callers register against only one:
+ * - onReady   : pure-PNG path. Fires on expo-image onLoad (photo present),
+ *               or via useEffect after first paint (no photo). Never fires
+ *               in 可导入 mode so it cannot accidentally satisfy a QR wait.
+ * - onQrReady : 可导入 path only. Fires from the qrWrap onLayout once the
+ *               QR subtree has a layout box. Physically separate from onReady
+ *               so no photo/no-photo signal can resolve the QR readiness wait,
+ *               even during the transitional window before the QR render commits.
  */
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
-  { taste, verdictLabel, brandText, priceText, importCode, importCodeHint, landingUrl, onReady },
+  { taste, verdictLabel, brandText, priceText, importCode, importCodeHint, landingUrl, onReady, onQrReady },
   ref,
 ) {
   const hasPhoto = !!(taste.imageThumb || taste.image)
   const photoUri = taste.imageThumb || taste.image || ''
+  const hasQr = !!landingUrl
 
-  // No-photo path: signal ready after first paint so the caller's race
-  // timer does not have to wait the full 600 ms fallback.
+  // No-photo, no-QR (pure-PNG) path: signal ready after first paint via the
+  // passive effect. The effect runs after React commits and paints the frame,
+  // so the native backing view exists when onReady fires. In 可导入 mode
+  // (hasQr=true) this branch is skipped — readiness is driven by the qrWrap
+  // onLayout (onQrReady) below, keeping the two signals fully separate.
   useEffect(() => {
-    if (!hasPhoto) onReady?.()
-  }, [hasPhoto, onReady])
+    if (!hasPhoto && !hasQr) onReady?.()
+  }, [hasPhoto, hasQr, onReady])
 
   return (
     <View ref={ref} style={styles.card} collapsable={false}>
@@ -86,7 +109,12 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             cachePolicy="disk"
             style={styles.photo}
             contentFit="cover"
-            onLoad={onReady}
+            // pure-PNG path only: signal ready when the image pixels land in
+            // the native backing view. In 可导入 mode (hasQr=true) onLoad is
+            // suppressed entirely — the QR readiness is driven by onQrReady
+            // (qrWrap onLayout) so the photo signal cannot accidentally satisfy
+            // the QR wait even during the transitional pre-commit frame.
+            onLoad={hasQr ? undefined : onReady}
           />
           {/* VerdictStamp overlapping the photo bottom edge */}
           <View style={styles.stampOverPhoto}>
@@ -156,7 +184,16 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
                 WeChat's scanner, which silently degrades 可导入 to a 淘口令-only
                 share. The white qrWrap below also gives the code its quiet zone. */}
             {landingUrl ? (
-              <View style={styles.qrWrap}>
+              <View
+                style={styles.qrWrap}
+                // 可导入 readiness gate: fires onQrReady (NOT onReady) once the
+                // QR subtree has a layout box. Using the dedicated onQrReady
+                // callback ensures that no photo onLoad or no-photo effect can
+                // satisfy the QR wait — the two readiness channels are completely
+                // separate. Paired with rAF ticks in captureAndShare so the SVG
+                // paints into the native backing view before captureRef fires.
+                onLayout={onQrReady}
+              >
                 {/* quietZone renders the spec-mandated blank margin INSIDE the
                     SVG (≈4 modules) so scanners lock on even when the white
                     qrWrap padding is tight — the wrapper padding alone is too

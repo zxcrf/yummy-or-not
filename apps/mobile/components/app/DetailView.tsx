@@ -121,8 +121,15 @@ export default function DetailView() {
   // button; the user explicitly picks which kind of share to produce.
   const [shareMenuOpen, setShareMenuOpen] = useState(false)
   const shareCardRef = useRef<RNView>(null)
-  // Resolves the onReady race: set by handleShare, called by ShareCard.
+  // Pure-PNG path resolver: set by waitForShareCardReady, called by
+  // onShareCardReady (ShareCard.onReady — photo onLoad or no-photo effect).
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
+  // 可导入 path resolver: set by waitForQrReady, called by onShareQrReady
+  // (ShareCard.onQrReady — qrWrap onLayout only). Kept entirely separate
+  // from shareReadyResolveRef so no photo/no-photo signal can satisfy the
+  // QR readiness wait, even during the transitional window before the
+  // hasQr=true render commits.
+  const shareQrReadyResolveRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -364,10 +371,12 @@ export default function DetailView() {
     setBuySheetOpen(true)
   }
 
-  // Start the ShareCard readiness race: wait for the image onLoad callback
-  // (onReady) against a 600 ms timeout fallback (no-photo / disk-cached thumb).
-  // Returned synchronously so the timer is scheduled in the SAME tick as the
-  // button press, even when the caller awaits other work (mintShare) first.
+  // ── Pure-PNG readiness wait ───────────────────────────────────────────────
+  // Wait for the ShareCard's onReady callback (image onLoad on the photo path,
+  // or the no-photo useEffect after first paint) against a 600ms fallback so a
+  // disk-cached thumb that fires onLoad after the capture window does not hang
+  // the share indefinitely. Used ONLY by handleSharePng — the importable path
+  // uses waitForQrReady below, which has a much longer crash-safety ceiling.
   const waitForShareCardReady = (): Promise<void> =>
     Promise.race([
       new Promise<void>((resolve) => {
@@ -376,16 +385,73 @@ export default function DetailView() {
       new Promise<void>((resolve) => setTimeout(resolve, 600)),
     ])
 
+  // ── 可导入 (importable) QR readiness wait ────────────────────────────────
+  // For importable mode the readiness signal is the qrWrap onLayout in
+  // ShareCard, delivered via the DEDICATED onQrReady prop. It fires only AFTER
+  // React has committed the re-render that sets importCode/landingUrl AND the
+  // native layout engine has measured the QR subtree. The flow is:
+  //   1. setShareImportCode / setShareLandingUrl — schedules a React commit
+  //      (NOT synchronous; the commit happens asynchronously after this returns)
+  //   2. waitForQrReady() — registers the resolver in shareQrReadyResolveRef
+  //      synchronously, so it is in place before React flushes the commit
+  //   3. React commits → ShareCard re-renders with landingUrl → qrWrap
+  //      onLayout fires → onShareQrReady() → shareQrReadyResolveRef resolves
+  //
+  // shareQrReadyResolveRef is COMPLETELY SEPARATE from shareReadyResolveRef
+  // (the PNG-path resolver). A photo onLoad or no-photo useEffect calling
+  // onShareCardReady() touches only shareReadyResolveRef and therefore cannot
+  // satisfy this QR wait — not even during the transitional window before the
+  // hasQr=true render commits (when the card is still link-free).
+  //
+  // The 2500ms ceiling is a crash-safety net: if the card is unmounted
+  // mid-share the layout never fires and this prevents hanging forever. Under
+  // normal operation onLayout fires in <200ms and the timeout never triggers.
+  const waitForQrReady = (): Promise<void> =>
+    Promise.race([
+      new Promise<void>((resolve) => {
+        shareQrReadyResolveRef.current = resolve
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+    ])
+
+  // Wait a couple of animation frames so a freshly-committed subtree (the QR
+  // SVG in 可导入 mode) has actually painted into the native backing view before
+  // captureRef snapshots it. onReady (qrWrap onLayout) tells us the QR has a
+  // layout box; these frames give react-native-svg time to draw into it.
+  const waitFrames = (count = 2): Promise<void> =>
+    new Promise<void>((resolve) => {
+      let remaining = count
+      const tick = () => {
+        remaining -= 1
+        if (remaining <= 0) resolve()
+        else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+
   // Capture the off-screen ShareCard to a PNG and hand it to the system share
   // sheet. When `extraText` is set (importable share) it rides in the share
   // sheet alongside the PNG so the recipient gets the deep link + import code
   // (S3a). The owner's presigned photo URL is never in the payload — only the
   // rendered PNG file URI travels. `ready` lets the caller pre-start the race.
-  const captureAndShare = async (ready: Promise<void>, extraText?: string) => {
+  // `paintFrames` (可导入 mode) adds a couple of rAF ticks after readiness so the
+  // QR SVG has painted into the native backing view before captureRef.
+  const captureAndShare = async (
+    ready: Promise<void>,
+    extraText?: string,
+    paintFrames = false,
+  ) => {
     if (!item) return
     const captureId = item.id
     await ready
+    // Clear both resolver refs — only one was set per call, the other is already
+    // null. Clearing both avoids a stale reference if the component re-renders
+    // between the await and the captureRef call.
     shareReadyResolveRef.current = null
+    shareQrReadyResolveRef.current = null
+    // After the QR onLayout (可导入 path) give react-native-svg a couple of
+    // frames to paint into the native backing view before captureRef snapshots.
+    if (paintFrames) await waitFrames()
 
     // Guard: nav moved to a different taste while we waited — abort silently.
     if (idRef.current !== captureId) return
@@ -444,19 +510,27 @@ export default function DetailView() {
     const shareId = item.id
     setShareMenuOpen(false)
     setSharing(true)
-    // Start the readiness race synchronously (same tick as the press) so its
-    // 600ms fallback timer is scheduled before we await mintShare — matching
-    // handleSharePng's timing.
-    const ready = waitForShareCardReady()
     try {
       const { deepLink, importCode } = await mintShare(item.id)
       if (idRef.current !== shareId) return
       // Print the code + render the QR on the card BEFORE capture so the
       // captured PNG carries both (the channels that survive image-only
-      // forwarding). React commits this re-render synchronously, so they are on
-      // the card by capture time.
+      // forwarding). mintShare is a network call, so we must NOT start the
+      // readiness race before it — otherwise its latency eats the 600ms budget
+      // and the timer can resolve `ready` before the QR even exists, snapshotting
+      // a stale link-free card. Instead we commit the code/url first, THEN start
+      // the readiness wait (whose onReady fires from the QR's onLayout), THEN
+      // wait a couple of frames so the SVG has painted into the native backing
+      // view — and only then capture.
       setShareImportCode(importCode)
       setShareLandingUrl(landingUrlForCode(importCode))
+      // Register the resolver ref NOW — before React flushes the commit — so
+      // the qrWrap onLayout (which fires post-commit on the native thread) can
+      // resolve it. setState above schedules the commit; it has NOT happened
+      // yet at this point. waitForQrReady uses a 2500ms crash-safety ceiling
+      // (not a 600ms race) so the 600ms timeout cannot pre-empt the layout on
+      // a slow device or under GC pressure.
+      const ready = waitForQrReady()
       // The collision-resistant 口令 wraps the EXISTING importCode (no new code
       // space) and is what the recipient's foreground auto-detect parses back
       // out. We compute it now so it can ride the share text, but we DON'T write
@@ -465,7 +539,7 @@ export default function DetailView() {
       const passphrase = encodeShareToken(importCode)
       // Plain text (not via t() interpolation) so the link/口令 survive verbatim.
       const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}\n${passphrase}`
-      await captureAndShare(ready, text)
+      await captureAndShare(ready, text, /* paintFrames (await QR paint) */ true)
       // The share completed. Record the self-import guard BEFORE the 口令 ever
       // enters this device's clipboard, so the marker is persisted by the time
       // any foreground transition can read that clipboard. Marking first (then
@@ -491,6 +565,13 @@ export default function DetailView() {
 
   const onShareCardReady = () => {
     shareReadyResolveRef.current?.()
+  }
+
+  // 可导入 path only — called by ShareCard.onQrReady (qrWrap onLayout).
+  // Completely separate from onShareCardReady so no photo/no-photo signal
+  // can satisfy the QR readiness wait.
+  const onShareQrReady = () => {
+    shareQrReadyResolveRef.current?.()
   }
 
   const submitBuy = async () => {
@@ -857,6 +938,7 @@ export default function DetailView() {
                   importCodeHint={shareImportCode ? t('share_card_import_hint') : undefined}
                   landingUrl={shareLandingUrl ?? undefined}
                   onReady={onShareCardReady}
+                  onQrReady={onShareQrReady}
                 />
               </RNView>
             ) : null}
