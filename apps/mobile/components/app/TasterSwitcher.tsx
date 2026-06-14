@@ -32,6 +32,7 @@ export default function TasterSwitcher() {
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
+      style={styles.scrollView}
       accessibilityLabel="taster-switcher"
     >
       {tasters.map((taster) => {
@@ -57,8 +58,13 @@ export default function TasterSwitcher() {
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: space[2],
     paddingHorizontal: space[4],
     paddingVertical: space[2],
