@@ -44,6 +44,7 @@ jest.mock('@/providers/I18nProvider', () => ({
       log_taste: 'Log a taste',
       nav_recall: 'Recall',
       nav_todo: 'To-Try',
+      nav_nearby: 'Nearby',
       nav_you: 'You',
       my_tastes: 'My Tastes',
     }[key] ?? key),
@@ -73,6 +74,7 @@ jest.mock('@/components/ds', () => {
 const routes = [
   { name: 'index', key: 'index-key' },
   { name: 'todo', key: 'todo-key' },
+  { name: 'nearby', key: 'nearby-key' },
   { name: 'you', key: 'you-key' },
 ]
 
@@ -158,5 +160,76 @@ describe('AppNav nav restructure — 想吃 replaces 统计, Recall folded into 
     expect(labels).not.toContain('Stats')
     // Recall is no longer a destination — its search lives inside Library.
     expect(labels).not.toContain('Recall')
+  })
+})
+
+describe('AppNav — 附近 (nearby) is the 3rd bottom tab', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  function renderTree(activeRoute: string, gtMd: boolean) {
+    mockUseWindowDimensions.mockReturnValue(
+      gtMd ? { width: 1024, height: 768 } : { width: 390, height: 844 },
+    )
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(
+        React.createElement(
+          AppNav,
+          makeProps(activeRoute) as unknown as React.ComponentProps<typeof AppNav>,
+        ),
+      )
+    })
+    return renderer
+  }
+
+  it.each([
+    ['sidebar (desktop)', true],
+    ['bottom bar (mobile)', false],
+  ])('renders a Nearby entry in the %s', (_label, gtMd) => {
+    const renderer = renderTree('index', gtMd as boolean)
+    const labels = renderer.root
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => n.props.children as string)
+
+    expect(labels).toContain('Nearby')
+  })
+
+  it('Nearby sits AFTER To-Try and BEFORE You (3rd position) in the bottom bar', () => {
+    const renderer = renderTree('index', false)
+    const labels = renderer.root
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => n.props.children as string)
+
+    const todo = labels.indexOf('To-Try')
+    const nearby = labels.indexOf('Nearby')
+    const you = labels.indexOf('You')
+    expect(todo).toBeGreaterThanOrEqual(0)
+    expect(nearby).toBeGreaterThan(todo)
+    expect(you).toBeGreaterThan(nearby)
+  })
+
+  it('tapping the Nearby tab navigates to the nearby route (no exit)', () => {
+    const props = makeProps('index') as unknown as React.ComponentProps<typeof AppNav> & {
+      navigation: { emit: jest.Mock; navigate: jest.Mock }
+    }
+    mockUseWindowDimensions.mockReturnValue({ width: 390, height: 844 })
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(AppNav, props))
+    })
+    // Find the pressable whose subtree renders the 'Nearby' label and press it.
+    const pressables = renderer.root.findAll(
+      (n) =>
+        n.props.accessibilityRole === 'button' &&
+        typeof n.props.onPress === 'function' &&
+        n.findAll((c) => c.props.children === 'Nearby').length > 0,
+    )
+    expect(pressables.length).toBeGreaterThan(0)
+    act(() => {
+      pressables[0].props.onPress()
+    })
+    expect(props.navigation.navigate).toHaveBeenCalledWith('nearby')
   })
 })
