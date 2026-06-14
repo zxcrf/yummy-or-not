@@ -64,6 +64,7 @@ import { invalidateTastes, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { PhotoPreview } from './PhotoPreview'
+import { type AddDraft, clearDraft, loadDraft, saveDraft } from './addDraft'
 import { useRouter } from 'expo-router'
 
 interface Props {
@@ -190,6 +191,88 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // --- Draft autosave ------------------------------------------------------
+  // A mis-tapped Cancel (or the header ✕, hardware back, swipe-dismiss) used to
+  // throw away the whole entry. We autosave the in-progress form to local
+  // storage and restore it the next time the Add screen opens, so closing
+  // without saving no longer loses work. The draft is namespaced per account
+  // and cleared once a taste is actually created.
+  const draftUserId = user?.id ?? null
+
+  // Latest form snapshot, kept in a ref so the unmount flush below always sees
+  // the current values (a debounce timer alone would drop a fast cancel).
+  const draftRef = useRef<AddDraft>({
+    mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview,
+  })
+  draftRef.current = { mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview }
+
+  // Hydration gates autosave: never persist the blank initial state before the
+  // stored draft has loaded, or it would clobber the draft we are restoring.
+  // A ref (not state) on purpose — when there is no stored draft this effect
+  // must complete without any setState, so it adds no work to the common open
+  // and triggers no act() warning for callers that mount synchronously.
+  const hydratedRef = useRef(false)
+  // Set once a taste is created — suppresses autosave/flush so a saved entry
+  // does not linger as a draft.
+  const savedRef = useRef(false)
+  const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Restore any persisted draft once on mount.
+  useEffect(() => {
+    let cancelled = false
+    void loadDraft(draftUserId).then((d) => {
+      if (cancelled) return
+      // Only touch state when there is something to restore — the blank case
+      // stays setState-free (see hydratedRef note above).
+      if (d) {
+        setMode(d.mode)
+        setName(d.name)
+        setPlace(d.place)
+        setPrice(d.price)
+        setNotes(d.notes)
+        setVerdict(d.verdict)
+        setPicked(d.picked)
+        setLat(d.lat)
+        setLng(d.lng)
+        setPhoto(d.photo)
+        setPhotoPreview(d.photoPreview)
+      }
+      hydratedRef.current = true
+    })
+    return () => {
+      cancelled = true
+    }
+    // draftUserId is stable for the lifetime of this screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Debounced autosave on every meaningful change (covers an app kill/crash,
+  // not just an explicit close). No-op until hydration finishes so it never
+  // clobbers a draft still being restored.
+  useEffect(() => {
+    if (!hydratedRef.current || savedRef.current) return
+    if (autosaveRef.current) clearTimeout(autosaveRef.current)
+    autosaveRef.current = setTimeout(() => {
+      void saveDraft(draftUserId, draftRef.current)
+    }, 400)
+    return () => {
+      if (autosaveRef.current) clearTimeout(autosaveRef.current)
+    }
+  }, [draftUserId, mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview])
+
+  // Flush the latest draft on unmount. This is the path that fixes the reported
+  // bug: a Cancel/✕/back tears down the screen before any pending debounce
+  // fires, so we write the current snapshot synchronously here. Skipped when the
+  // entry was saved (cleared) or before hydration (would clobber a real draft).
+  useEffect(() => {
+    return () => {
+      if (autosaveRef.current) clearTimeout(autosaveRef.current)
+      if (savedRef.current || !hydratedRef.current) return
+      void saveDraft(draftUserId, draftRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // --- Same-name detection -----------------------------------------------
 
@@ -457,6 +540,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
         photo,
       )
       void invalidateTastes()
+
+      // The entry is persisted server-side now — drop the local draft so it
+      // does not resurface on the next open.
+      savedRef.current = true
+      if (autosaveRef.current) clearTimeout(autosaveRef.current)
+      void clearDraft(draftUserId)
 
       // Upsert any custom tags (tags not in the built-in TAG_CHOICES) into the
       // user's tag candidate set so they appear in LibraryView's filter chips.

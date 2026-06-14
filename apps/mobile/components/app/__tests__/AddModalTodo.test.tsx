@@ -8,6 +8,7 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import AddModal from '../AddModal'
 
 // ---- mock react-native ----------------------------------------------------
@@ -202,16 +203,22 @@ function findTodoBtnNode(renderer: TestRenderer.ReactTestRenderer) {
 // ---- tests ----------------------------------------------------------------
 
 describe('AddModal A2 — to-taste mode', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks()
     mockCreateTaste.mockResolvedValue({ id: 'new-id' })
+    // Isolate the AddModal draft store: AddModal autosaves an in-progress entry
+    // to AsyncStorage and flushes it on unmount, so without clearing, a draft
+    // left by one test would be restored into the next test's mount (firing
+    // state updates outside act). Clear before and after each test.
+    await AsyncStorage.clear()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     act(() => {
       currentRenderer?.unmount()
     })
     currentRenderer = null
+    await AsyncStorage.clear()
   })
 
   it('defaults to tasted mode — Save button disabled without verdict', () => {
