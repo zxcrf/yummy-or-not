@@ -48,6 +48,15 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
   clearTagsCache: jest.fn(),
 }))
 
+// LibraryView now scopes the list to the active persona; stub the persona hooks
+// so the test stays on the self default and never fires the getTasters network.
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
+}))
+
 // LibraryView's Nearby-sort plumbing — stubbed so the grid keeps recent order
 // and the test never loads expo-location.
 jest.mock('@/app/(tabs)/_useUserCoords', () => ({

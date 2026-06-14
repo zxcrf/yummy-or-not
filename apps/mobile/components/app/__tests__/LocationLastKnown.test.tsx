@@ -69,6 +69,10 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   useRefreshableTastes: () => ({ items: [], refresh: jest.fn() }),
 }))
 
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: [], loading: false }),
   invalidateTagsCache: jest.fn(),

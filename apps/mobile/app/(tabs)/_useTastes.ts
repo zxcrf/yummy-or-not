@@ -198,6 +198,31 @@ export function getCachedTaste(id: string): Taste | undefined {
 }
 
 /**
+ * Narrow the full taste list to a single persona's records (S3b).
+ *
+ * The shared cache holds EVERY persona's records (the list fetch carries no
+ * taster filter), so each surface filters client-side by the active taster.
+ *
+ * @param active        the client active-taster id, or null for the self default.
+ * @param selfTasterId  the account's self-taster id (from useTasters), so records
+ *                      attributed to the self-taster show under the self default.
+ *
+ * Self default (active === null) matches records with no taster (legacy rows that
+ * pre-date S3b have a null tasterId) OR records attributed to the self-taster.
+ * A family persona matches only records carrying exactly that taster id.
+ */
+export function filterTastesByTaster(
+  items: Taste[],
+  active: string | null,
+  selfTasterId: string | null,
+): Taste[] {
+  if (active === null) {
+    return items.filter((t) => t.tasterId == null || t.tasterId === selfTasterId)
+  }
+  return items.filter((t) => t.tasterId === active)
+}
+
+/**
  * Point the cache at a (new) user and clear any prior in-memory state.
  * Called by AuthProvider on sign-in / sign-out so the namespaced storage
  * key and cache never leak across accounts.

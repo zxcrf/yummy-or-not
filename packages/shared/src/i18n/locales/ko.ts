@@ -90,6 +90,7 @@ export const ko: Record<string, string> = {
   // S3b — taster / family management
   taster_manage: "테이스터",
   taster_self: "나",
+  add_for: "기록 대상",
   taster_add: "테이스터 추가",
   taster_create: "새 테이스터",
   taster_name_label: "이름",

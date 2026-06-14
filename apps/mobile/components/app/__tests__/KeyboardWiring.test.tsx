@@ -97,9 +97,20 @@ jest.mock('@yon/shared', () => ({
   verifyOtp: jest.fn(),
 }))
 
-jest.mock('@/app/(tabs)/_useTastes', () => ({
-  invalidateTastes: jest.fn(async () => []),
-  useRefreshableTastes: () => ({ items: [], refresh: jest.fn() }),
+jest.mock('@/app/(tabs)/_useTastes', () => {
+  const actual = jest.requireActual('@/app/(tabs)/_useTastes')
+  return {
+    ...actual,
+    invalidateTastes: jest.fn(async () => []),
+    useRefreshableTastes: () => ({ items: [], refresh: jest.fn() }),
+  }
+})
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
 }))
 
 jest.mock('@/app/(tabs)/_useTags', () => ({
