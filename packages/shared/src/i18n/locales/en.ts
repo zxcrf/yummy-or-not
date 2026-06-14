@@ -125,6 +125,7 @@ export const en: Record<string, string> = {
   nearby_todo: "Want to try nearby",
   // S3b — taster / family management
   taster_manage: "Tasters",
+  family_entry: "Family",
   taster_self: "You",
   add_for: "Log for",
   taster_add: "Add taster",

@@ -24,6 +24,7 @@
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardStickyView } from 'react-native-keyboard-controller'
+import { useRouter } from 'expo-router'
 import {
   createTaster,
   updateTaster,
@@ -48,6 +49,17 @@ export default function TasterManageView() {
   const { user } = useAuth()
   const { tasters, loading } = useTasters()
   const activeTaster = useActiveTaster()
+  const router = useRouter()
+
+  // Tapping a family member ENTERS their 口味: make them the active taster
+  // (the client selection PR #107's filterTastesByTaster reads) and jump to
+  // the library tab, which then shows only that member's tastes.
+  async function enterMemberTastes(taster: Taster) {
+    // The self-taster is the owner's own default — selecting it means "back to
+    // me" (null = self default in _useActiveTaster).
+    await setActiveTaster(taster.isSelf ? null : taster.id)
+    router.push('/(tabs)')
+  }
 
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [nameValue, setNameValue] = useState('')
@@ -178,15 +190,25 @@ export default function TasterManageView() {
             idx === tasters.length - 1 ? styles.rowLast : styles.rowBorder,
           ]}
         >
-          <Avatar name={taster.displayName} src={taster.avatar || undefined} size="sm" />
-          <View style={styles.rowText}>
-            <Text style={styles.rowName}>{taster.displayName}</Text>
-            {taster.isSelf ? (
-              <Text style={styles.selfTag} testID={`taster-self-${taster.id}`}>
-                {t('taster_self')}
-              </Text>
-            ) : null}
-          </View>
+          {/* Tapping the avatar / name ENTERS this member's 口味 (active-taster
+              switch + jump to the library). Edit / delete are separate sibling
+              Pressables so they never trigger the enter-tastes navigation. */}
+          <Pressable
+            onPress={() => { void enterMemberTastes(taster) }}
+            accessibilityRole="button"
+            testID={`taster-row-${taster.id}`}
+            style={styles.rowMain}
+          >
+            <Avatar name={taster.displayName} src={taster.avatar || undefined} size="sm" />
+            <View style={styles.rowText}>
+              <Text style={styles.rowName}>{taster.displayName}</Text>
+              {taster.isSelf ? (
+                <Text style={styles.selfTag} testID={`taster-self-${taster.id}`}>
+                  {t('taster_self')}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
           <Pressable
             onPress={() => openEdit(taster)}
             accessibilityRole="button"
@@ -312,6 +334,12 @@ const styles = StyleSheet.create({
   },
   rowLast: {
     borderBottomWidth: 0,
+  },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
   },
   rowText: {
     flex: 1,

@@ -125,6 +125,8 @@ export const zh: Record<string, string> = {
   nearby_todo: "附近你想吃的",
   // S3b — taster / family management
   taster_manage: "口味家人",
+  // Merged 我的 entry — one "家人" row replacing the old taster-manage + family-feed pair.
+  family_entry: "家人",
   taster_self: "我自己",
   add_for: "记录给",
   taster_add: "添加家人",

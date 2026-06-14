@@ -1,11 +1,16 @@
 /* ============================================================
    YUMMY OR NOT — /family route (stack screen)
-   Shared family / member taste stream (S3c). Renders the coarsened
-   GeoFeedCard list from GET /api/feed/family.
+
+   "家人" — the single merged family screen (S3b). Replaces the former
+   separate /tasters (口味家人) + /family (家人的口味) pair: it lists family
+   members (personas) with add / edit / delete, and tapping a member enters
+   that member's 口味 (sets them as the active taster and jumps to the
+   library, which then filters to their tastes). Pro-gated inside
+   TasterManageView.
    ============================================================ */
 
 import { Stack } from 'expo-router'
-import FamilyFeedView from '@/components/app/FamilyFeedView'
+import TasterManageView from '@/components/app/TasterManageView'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function FamilyScreen() {
@@ -14,12 +19,12 @@ export default function FamilyScreen() {
     <>
       <Stack.Screen
         options={{
-          title: t('family_feed'),
+          title: t('family_entry'),
           headerShown: true,
           presentation: 'card',
         }}
       />
-      <FamilyFeedView />
+      <TasterManageView />
     </>
   )
 }

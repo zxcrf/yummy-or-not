@@ -1,12 +1,14 @@
 /* ============================================================
-   Regression tests — YouView taster / family entry rows (S3b).
+   Regression tests — YouView merged "家人" entry (S3b).
 
-   Pins the pro-gating of the new management entries added to 我的:
-   - PRO account: the "口味家人" (Tasters) and "家人的口味" (Family feed)
-     rows render and push /tasters and /family respectively.
-   - FREE account: both rows self-hide (consistent with TasterSwitcher
-     hiding for free accounts) — free users never see management entries
-     for personas they cannot own.
+   The two former rows — taster-manage (口味家人 → /tasters) and family-feed
+   (家人的口味 → /family) — were merged into a SINGLE "家人" entry that pushes
+   /family (the merged member-list + per-member tastes screen). Pins:
+   - PRO account: exactly ONE "家人" row (family-entry-row) renders and
+     pushes /family; the two OLD rows (taster-manage-row, family-feed-row)
+     are GONE.
+   - FREE account: the merged entry self-hides (consistent with
+     TasterSwitcher hiding for free accounts).
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
@@ -30,8 +32,7 @@ jest.mock('@/providers/I18nProvider', () => ({
     formatMoney: (n: number) => `¥${n}`,
     t: (key: string, vars?: Record<string, string | number>) => {
       const map: Record<string, string> = {
-        taster_manage: 'Tasters',
-        family_feed: 'Family tastes',
+        family_entry: '家人',
         tag_manage: 'Tag library',
       }
       if (key === 'tastes_logged') return `${vars?.n} logged`
@@ -69,6 +70,11 @@ function rowWithTestID(renderer: TestRenderer.ReactTestRenderer, testID: string)
   )
 }
 
+/** Collapse host/composite duplicates of the same testID to one logical row. */
+function uniqueRowCount(renderer: TestRenderer.ReactTestRenderer, testID: string): number {
+  return rowWithTestID(renderer, testID).length > 0 ? 1 : 0
+}
+
 afterEach(() => {
   act(() => {
     mountedRenderers.forEach((r) => r.unmount())
@@ -77,8 +83,8 @@ afterEach(() => {
   jest.clearAllMocks()
 })
 
-describe('YouView — taster / family entries pro gating', () => {
-  it('pro account shows taster + family rows that navigate to /tasters and /family', () => {
+describe('YouView — merged 家人 entry pro gating', () => {
+  it('pro account shows ONE merged 家人 row that navigates to /family; the two old rows are gone', () => {
     mockUseAuth.mockReturnValue({
       user: { plan: 'pro', displayName: 'Pat', email: 'p@x.com' },
       signOut: jest.fn(),
@@ -86,19 +92,22 @@ describe('YouView — taster / family entries pro gating', () => {
     })
     const renderer = render()
 
-    const tasterRows = rowWithTestID(renderer, 'taster-manage-row')
-    const familyRows = rowWithTestID(renderer, 'family-feed-row')
-    expect(tasterRows.length).toBeGreaterThan(0)
+    // Exactly ONE merged entry exists…
+    const familyRows = rowWithTestID(renderer, 'family-entry-row')
     expect(familyRows.length).toBeGreaterThan(0)
+    expect(uniqueRowCount(renderer, 'family-entry-row')).toBe(1)
 
-    act(() => tasterRows[0].props.onPress())
-    expect(mockPush).toHaveBeenCalledWith('/tasters')
+    // …and the two OLD separate rows are gone.
+    expect(rowWithTestID(renderer, 'taster-manage-row')).toHaveLength(0)
+    expect(rowWithTestID(renderer, 'family-feed-row')).toHaveLength(0)
 
     act(() => familyRows[0].props.onPress())
     expect(mockPush).toHaveBeenCalledWith('/family')
+    // The merged screen is the only family destination — never the dropped /tasters.
+    expect(mockPush).not.toHaveBeenCalledWith('/tasters')
   })
 
-  it('free account hides both management entries', () => {
+  it('free account hides the merged entry', () => {
     mockUseAuth.mockReturnValue({
       user: { plan: 'free', displayName: 'Pat', email: 'p@x.com' },
       signOut: jest.fn(),
@@ -106,9 +115,9 @@ describe('YouView — taster / family entries pro gating', () => {
     })
     const renderer = render()
 
+    expect(rowWithTestID(renderer, 'family-entry-row')).toHaveLength(0)
     expect(rowWithTestID(renderer, 'taster-manage-row')).toHaveLength(0)
     expect(rowWithTestID(renderer, 'family-feed-row')).toHaveLength(0)
-    expect(mockPush).not.toHaveBeenCalledWith('/tasters')
     expect(mockPush).not.toHaveBeenCalledWith('/family')
   })
 })

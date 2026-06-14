@@ -90,6 +90,7 @@ export const ja: Record<string, string> = {
   nearby_todo: "近くで食べたい",
   // S3b — taster / family management
   taster_manage: "テイスター",
+  family_entry: "家族",
   taster_self: "自分",
   add_for: "記録する人",
   taster_add: "テイスターを追加",

@@ -319,24 +319,18 @@ export default function YouView({ items }: Props) {
           label={t('tag_manage')}
           onPress={() => router.push('/tags')}
         />
-        {/* S3b — taster / family management. Pro-gated: free accounts cannot own
-            multiple personas, so these entries self-hide (consistent with
+        {/* S3b — "家人": single merged entry (口味家人 + 家人的口味). The /family
+            screen lists family members (personas) with add/edit/delete, and
+            tapping a member enters their 口味. Pro-gated: free accounts cannot
+            own multiple personas, so the entry self-hides (consistent with
             TasterSwitcher hiding for free accounts). */}
         {user?.plan === 'pro' ? (
-          <>
-            <SettingRow
-              icon="users"
-              label={t('taster_manage')}
-              onPress={() => router.push('/tasters')}
-              testID="taster-manage-row"
-            />
-            <SettingRow
-              icon="heart"
-              label={t('family_feed')}
-              onPress={() => router.push('/family')}
-              testID="family-feed-row"
-            />
-          </>
+          <SettingRow
+            icon="users"
+            label={t('family_entry')}
+            onPress={() => router.push('/family')}
+            testID="family-entry-row"
+          />
         ) : null}
         {/* S3a — "enter import code" fallback (WeChat strips the deep link). */}
         <SettingRow
