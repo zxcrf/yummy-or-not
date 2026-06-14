@@ -44,7 +44,7 @@ function asVerdict(v: unknown): KnownVerdict | null {
 }
 
 import { initAmapIfConsented } from '@/lib/amapPrivacy'
-import { useLocateResult } from '@/app/(tabs)/_useUserCoords'
+import { requestLocateResult, useLocateResult, type LocateResult } from '@/app/(tabs)/_useUserCoords'
 import {
   decideHeatFetch,
   heatColorForCount,
@@ -114,7 +114,9 @@ export default function NearbyHeatView() {
   // location prompt never precedes the AMap privacy gate). We hold the map
   // mount until the locate is settled (got a fix, or failed/denied) so the
   // INITIAL camera reflects the user's position instead of snapping later.
-  const locate = useLocateResult(consent === true)
+  const hookLocate = useLocateResult(consent === true)
+  const [locateOverride, setLocateOverride] = useState<LocateResult | null>(null)
+  const locate = locateOverride ?? hookLocate
 
   // Selected-cell bottom sheet.
   const [sheetCell, setSheetCell] = useState<string | null>(null)
@@ -283,9 +285,17 @@ export default function NearbyHeatView() {
   )
 
 
-  const handleLocate = useCallback(() => {
-    if (!locate.coords) return
-    const g = wgs84ToGcj02(locate.coords.lat, locate.coords.lng)
+  const handleLocate = useCallback(async () => {
+    if (locate.coords) {
+      const g = wgs84ToGcj02(locate.coords.lat, locate.coords.lng)
+      mapRef.current?.moveCamera({ target: { latitude: g.lat, longitude: g.lng }, zoom: ENTRY_ZOOM }, 400)
+      return
+    }
+
+    const res = await requestLocateResult()
+    if (!res.coords) return
+    setLocateOverride(res)
+    const g = wgs84ToGcj02(res.coords.lat, res.coords.lng)
     mapRef.current?.moveCamera({ target: { latitude: g.lat, longitude: g.lng }, zoom: ENTRY_ZOOM }, 400)
   }, [locate.coords])
 
@@ -420,7 +430,7 @@ export default function NearbyHeatView() {
           onPress={handleRefresh}
           style={styles.mapControlBtn}
         >
-          <Icon name="arrow-up" size={20} color={colors.ink900} />
+          <Icon name="refresh" size={20} color={colors.ink900} />
         </Pressable>
       </View>
       {/* Locate fell back to the default city — say so explicitly (don't show a
