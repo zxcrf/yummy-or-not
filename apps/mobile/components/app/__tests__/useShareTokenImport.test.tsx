@@ -18,6 +18,7 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { encodeShareToken } from '@yon/shared'
 
 import { useShareTokenImport } from '../useShareTokenImport'
+import { markShareCodeHandled } from '../shareImportDedupe'
 
 // ── AppState: spy on the REAL listener registration so the test can drive the
 //    foreground transition (do NOT replace react-native — jest-expo needs it). ─
@@ -152,6 +153,29 @@ describe('useShareTokenImport (S3a foreground auto-detect)', () => {
     await foreground()
     expect(mockResolveImportCode).toHaveBeenCalledTimes(1)
     expect(mockPush.mock.calls.length).toBe(pushesAfterFirst)
+  })
+
+  it('self-import guard: a code marked handled AFTER mount (sender shared their own taste) does NOT resolve / prompt', async () => {
+    // The sender's device mounts this hook (in AppGate) BEFORE sharing, so the
+    // in-memory dedupe ref is hydrated empty. handleShareImportable then marks
+    // the freshly-minted code handled (persisted). On the sender's next
+    // foreground the hook must consult the PERSISTED marker — not just the
+    // mount-time in-memory ref — and skip, so the sender is never prompted to
+    // import their OWN share (which would copy-on-import a duplicate taste).
+    clipboardText = encodeShareToken('AB12CD')
+    mockResolveImportCode.mockResolvedValue({ token: 'tok_live_1' })
+
+    await mountHarness() // hydrate: marker empty at mount
+
+    // Sender shares their own taste AFTER the hook mounted.
+    await markShareCodeHandled('AB12CD')
+
+    await foreground()
+
+    // The persisted marker suppresses the self-import: no resolve, no navigation.
+    expect(mockResolveImportCode).not.toHaveBeenCalled()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 
   it('is INERT when there is no signed-in user: no AppState subscription, no clipboard read', async () => {

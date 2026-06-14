@@ -36,6 +36,7 @@ import {
   VerdictStamp,
 } from '@/components/ds'
 import { ShareCard } from '@/components/app/ShareCard'
+import { markShareCodeHandled } from '@/components/app/shareImportDedupe'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -471,6 +472,13 @@ export default function DetailView() {
       // otherwise auto-import on their next foreground even though nothing was
       // actually shared.
       await Clipboard.setStringAsync(passphrase)
+      // Self-import guard: this device now holds its OWN 口令 in the clipboard.
+      // Mark the importCode handled so the foreground auto-detect
+      // (useShareTokenImport) never prompts the SENDER to import their own
+      // share — copy-on-import would otherwise duplicate their own taste (the
+      // import API has no server-side self guard). Same marker the recipient
+      // dedupe uses, keyed on the importCode the 口令 parses back to.
+      await markShareCodeHandled(importCode)
     } catch {
       Alert.alert(t('share_failed'))
     } finally {

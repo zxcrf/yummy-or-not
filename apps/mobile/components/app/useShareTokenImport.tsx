@@ -24,17 +24,7 @@ import { useRouter } from 'expo-router'
 import { parseShareToken, resolveImportCode } from '@yon/shared'
 
 import { useAuth } from '@/providers/AuthProvider'
-
-// AsyncStorage key holding the last importCode we already handled (dedupe).
-const LAST_HANDLED_KEY = '@yon/share-import:last-handled-code'
-
-function getAsyncStorage(): typeof import('@react-native-async-storage/async-storage').default {
-  // The real package exposes the API on `.default`; the jest mock exports it at
-  // the module top level. Normalize so both production and tests resolve the
-  // same getItem/setItem surface.
-  const mod = require('@react-native-async-storage/async-storage')
-  return mod.default ?? mod
-}
+import { markShareCodeHandled, readHandledShareCode } from './shareImportDedupe'
 
 /**
  * useShareTokenImport — mounted in AppGate (which renders for loading /
@@ -72,14 +62,11 @@ export function useShareTokenImport(): void {
 
     // Hydrate the dedupe marker so a code handled in a PREVIOUS app session is
     // not re-prompted after a cold start.
-    void getAsyncStorage()
-      .getItem(LAST_HANDLED_KEY)
-      .then((stored) => {
-        if (alive && stored && lastHandledRef.current == null) {
-          lastHandledRef.current = stored
-        }
-      })
-      .catch(() => {})
+    void readHandledShareCode().then((stored) => {
+      if (alive && stored && lastHandledRef.current == null) {
+        lastHandledRef.current = stored
+      }
+    })
 
     const handleForeground = async () => {
       if (handlingRef.current) return
@@ -92,6 +79,19 @@ export function useShareTokenImport(): void {
         if (!code) return
         // DEDUPE: same code already handled → never re-prompt.
         if (lastHandledRef.current === code) return
+
+        // SELF-IMPORT GUARD: also consult the PERSISTED marker. The sender's own
+        // share (DetailView.handleShareImportable) marks the freshly-minted code
+        // handled AFTER this hook already mounted, so lastHandledRef (hydrated
+        // once at mount) can't see it. Without this read the sender would be
+        // auto-prompted to import their OWN share — copy-on-import would then
+        // duplicate their own taste (the import API has no self guard).
+        const persisted = await readHandledShareCode()
+        if (!alive) return
+        if (persisted === code) {
+          lastHandledRef.current = code
+          return
+        }
 
         // Resolve FIRST. The in-flight `handlingRef` guard (set above, cleared
         // in finally) already prevents a concurrent 'active' from double-firing
@@ -109,9 +109,7 @@ export function useShareTokenImport(): void {
         // to catch and leave lastHandledRef unset, so the user can retry once
         // the sender reshares a fresh token.)
         lastHandledRef.current = code
-        void getAsyncStorage()
-          .setItem(LAST_HANDLED_KEY, code)
-          .catch(() => {})
+        void markShareCodeHandled(code)
 
         router.push(`/import/${token}`)
       } catch {

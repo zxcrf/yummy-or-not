@@ -50,6 +50,14 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
   invalidateTagsCache: jest.fn(),
 }))
 
+// Self-import guard: handleShareImportable marks its freshly-minted code handled
+// so the foreground auto-detect never prompts the sender to import their own
+// share. Spy on the marker to pin the wiring.
+const mockMarkShareCodeHandled = jest.fn()
+jest.mock('@/components/app/shareImportDedupe', () => ({
+  markShareCodeHandled: (...a: unknown[]) => mockMarkShareCodeHandled(...a),
+}))
+
 const routeParams = { id: 'taste-1' }
 
 jest.mock('expo-router', () => ({
@@ -186,6 +194,10 @@ describe('DetailView importable share (S3a)', () => {
     expect(mockedMintShare).toHaveBeenCalledWith('taste-1')
     expect(shareAsync).toHaveBeenCalledTimes(1)
 
+    // Self-import guard: the minted code is marked handled so the sender's own
+    // foreground auto-detect won't prompt them to import their own share.
+    expect(mockMarkShareCodeHandled).toHaveBeenCalledWith('AB12CD')
+
     // DELIVERY CHANNEL: the import code must be PRINTED on the captured PNG so it
     // survives image-only forwarding (WeChat strips the deep link + any
     // shareAsync text option). Assert the code reached the ShareCard at capture
@@ -229,5 +241,7 @@ describe('DetailView importable share (S3a)', () => {
     expect(mockedMintShare).not.toHaveBeenCalled()
     // Every render of the card during the plain share had no importCode.
     expect(shareCardProps.every((p) => !p.importCode)).toBe(true)
+    // Pure-PNG mints no code, so nothing is marked handled.
+    expect(mockMarkShareCodeHandled).not.toHaveBeenCalled()
   })
 })
