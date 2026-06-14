@@ -95,7 +95,15 @@ jest.mock('@yon/shared', () => ({
   oauthStartUrl: jest.fn(),
   requestOtp: jest.fn(),
   verifyOtp: jest.fn(),
+  requestPasswordReset: jest.fn(),
+  verifyPasswordReset: jest.fn(),
+  setAuthToken: jest.fn(),
+  extractResetToken: () => null,
 }))
+
+// AuthScreen mounts the reset deep-link capture hook; stub it to "no deep link"
+// so this keyboard-focused test needn't wire expo-linking.
+jest.mock('../useResetTokenCapture', () => ({ useResetTokenCapture: () => null }))
 
 jest.mock('@/app/(tabs)/_useTastes', () => {
   const actual = jest.requireActual('@/app/(tabs)/_useTastes')

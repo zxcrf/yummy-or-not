@@ -275,6 +275,96 @@ describe('reset-request delivery observability (MED-B)', () => {
   }, 2000);
 });
 
+describe('reset-request Resend transport', () => {
+  // When RESEND_API_KEY is set the route sends via Resend's REST API (plain
+  // fetch, no SDK). These pin: the correct endpoint + bearer auth, the raw
+  // token actually reaching the email body (the user-level payload that must
+  // not silently break), fire-and-forget timing safety preserved, and non-2xx
+  // surfacing in ops logs. The webhook is bypassed when Resend is configured.
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.EMAIL_FROM = 'Yummy or Not <noreply@baobao.click>';
+    (savePasswordResetToken as jest.Mock).mockResolvedValue(undefined);
+    (findUserByEmailWithHash as jest.Mock).mockResolvedValue({ user: { id: 'u1' }, passwordHash: 'ph' });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.EMAIL_FROM;
+  });
+
+  it('POSTs to the Resend API with bearer auth, the from-address, and the raw token in the body', async () => {
+    jest.useRealTimers();
+    const fetchMock = jest.fn((_url: string, _opts: RequestInit) =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    await new Promise((r) => setTimeout(r, 50)); // let the fire-and-forget send settle
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.resend.com/emails');
+    expect((opts.headers as Record<string, string>).Authorization).toBe('Bearer re_test_key');
+    const body = JSON.parse(opts.body as string);
+    expect(body.to).toBe('a@x.com');
+    expect(body.from).toBe('Yummy or Not <noreply@baobao.click>');
+    // generateResetToken is mocked → 'raw-token'; it must appear in the email text
+    // and inside the deep link so the user can actually complete the reset.
+    expect(body.text).toContain('raw-token');
+    expect(body.text).toContain('yummyornot://reset-password?token=raw-token');
+  });
+
+  it('does NOT call the webhook when Resend is configured (Resend wins)', async () => {
+    jest.useRealTimers();
+    process.env.EMAIL_WEBHOOK_URL = 'http://fake-webhook.test/send';
+    const fetchMock = jest.fn((_url: string, _opts: RequestInit) =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    delete process.env.EMAIL_WEBHOOK_URL;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.resend.com/emails');
+  });
+
+  it('a slow Resend send (500 ms) does NOT block the response past MIN_RESPONSE_MS + buffer', async () => {
+    jest.useRealTimers();
+    global.fetch = jest.fn(
+      () => new Promise<Response>((resolve) => setTimeout(() => resolve(new Response()), 500))
+    ) as unknown as typeof fetch;
+
+    const start = Date.now();
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    const elapsed = Date.now() - start;
+
+    expect(elapsed).toBeLessThan(400); // fire-and-forget: provider RTT off the hot path
+  }, 2000);
+
+  it('logs console.error when Resend returns a non-2xx status', async () => {
+    jest.useRealTimers();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = jest.fn(() =>
+      Promise.resolve(new Response(null, { status: 422 }))
+    ) as unknown as typeof fetch;
+
+    await resetRequest(reqOf('/api/auth/password/reset-request', { email: 'a@x.com' }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const errorCalls = errorSpy.mock.calls.map((args) => String(args[0]));
+    expect(errorCalls.some((msg) => msg.includes('Resend') && msg.includes('422'))).toBe(true);
+    errorSpy.mockRestore();
+  }, 2000);
+});
+
 // ── reset-verify ──────────────────────────────────────────────────────────────
 
 describe('reset-verify', () => {

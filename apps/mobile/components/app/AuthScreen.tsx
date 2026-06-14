@@ -9,14 +9,16 @@
    the app.
    ============================================================ */
 
-import React, { useState, useRef } from 'react'
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import React, { useState, useRef, useEffect } from 'react'
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
 import * as WebBrowser from 'expo-web-browser'
+import * as Clipboard from 'expo-clipboard'
 import {
   LANGS,
+  extractResetToken,
   loginEmail,
   oauthStartUrl,
   registerEmail,
@@ -30,6 +32,7 @@ import {
   type RedeemError,
 } from '@yon/shared'
 
+import { useResetTokenCapture } from './useResetTokenCapture'
 import { Button, Icon, Input, LangSwitcher } from '@/components/ds'
 import { colors, radius, space, Text, usePressScale } from '@/theme'
 import { useAuth } from '@/providers/AuthProvider'
@@ -112,6 +115,20 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Reset deep link (yummyornot://reset-password?token=…) arrives while signed
+  // out. Capturing it forces the email habit and hands the token to EmailForm,
+  // which jumps straight to the new-password step with it prefilled. We latch
+  // it into state once so finishing/leaving the reset doesn't get re-forced.
+  const capturedResetToken = useResetTokenCapture()
+  const [resetToken, setResetToken] = useState<string | null>(null)
+  useEffect(() => {
+    if (capturedResetToken) {
+      setResetToken(capturedResetToken)
+      setMethod('email')
+      setError(null)
+    }
+  }, [capturedResetToken])
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#fff6e6' }}
@@ -170,7 +187,13 @@ export default function AuthScreen() {
             {method === 'phone' ? (
               <PhoneForm busy={busy} setBusy={setBusy} setError={setError} onDone={refresh} />
             ) : (
-              <EmailForm busy={busy} setBusy={setBusy} setError={setError} onDone={refresh} />
+              <EmailForm
+                busy={busy}
+                setBusy={setBusy}
+                setError={setError}
+                onDone={refresh}
+                initialResetToken={resetToken}
+              />
             )}
 
             {error ? (
@@ -319,11 +342,15 @@ function EmailForm({
   setBusy,
   setError,
   onDone,
+  initialResetToken,
 }: {
   busy: boolean
   setBusy: (b: boolean) => void
   setError: (e: string | null) => void
   onDone: () => Promise<void>
+  /** Token captured from a reset deep link — when set, open the reset view
+   *  directly at the new-password step with the token prefilled. */
+  initialResetToken?: string | null
 }) {
   const { t } = useI18n()
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -333,6 +360,15 @@ function EmailForm({
   const [name, setName] = useState('')
   const [promo, setPromo] = useState('')
 
+  // A reset deep link opens the reset flow straight away (skipping the email +
+  // check-inbox steps — the user already has the token).
+  useEffect(() => {
+    if (initialResetToken) {
+      setView('reset')
+      setError(null)
+    }
+  }, [initialResetToken, setError])
+
   if (view === 'reset') {
     return (
       <ForgotPasswordForm
@@ -340,6 +376,7 @@ function EmailForm({
         setBusy={setBusy}
         setError={setError}
         initialEmail={email}
+        initialToken={initialResetToken ?? null}
         onBack={() => {
           setView('auth')
           setError(null)
@@ -462,26 +499,59 @@ export async function submitReset(
   onSuccess()
 }
 
+/** Mask an email for the "we sent to a•••@x.com" echo on the check-inbox step.
+ *  The user typed this address, so showing a masked form leaks nothing new and
+ *  reassures them the email went to the right place. Exported for unit test. */
+export function maskEmail(email: string): string {
+  const at = email.indexOf('@')
+  if (at <= 0) return email
+  const user = email.slice(0, at)
+  const domain = email.slice(at + 1)
+  const head = user.slice(0, 1)
+  return `${head}${'•'.repeat(Math.max(user.length - 1, 1))}@${domain}`
+}
+
+/** Seconds the resend button stays disabled — comfortably under the server's
+ *  per-email limit (3 / 10 min) so the user isn't silently rate-limited. */
+const RESEND_COOLDOWN_S = 60
+
 function ForgotPasswordForm({
   busy,
   setBusy,
   setError,
   initialEmail,
+  initialToken,
   onBack,
 }: {
   busy: boolean
   setBusy: (b: boolean) => void
   setError: (e: string | null) => void
   initialEmail: string
+  /** Token from a reset deep link — when set, start at the new-password step
+   *  with the token already filled (the user tapped the email link). */
+  initialToken: string | null
   onBack: () => void
 }) {
   const { t } = useI18n()
-  const [step, setStep] = useState<'email' | 'token'>('email')
+  // Deep link jumps straight to the new-password step; otherwise start at email.
+  const [phase, setPhase] = useState<'email' | 'sent' | 'reset' | 'done'>(
+    initialToken ? 'reset' : 'email',
+  )
   const [email, setEmail] = useState(initialEmail)
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(initialToken ?? '')
+  // True only when the token arrived via deep link — we then hide the manual
+  // token field and show a "code detected" chip instead of asking for a paste.
+  const tokenAutoFilled = !!initialToken
   const [newPassword, setNewPassword] = useState('')
-  const [notice, setNotice] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
+  const [reveal, setReveal] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
+
+  // Resend cooldown countdown. Cleared on unmount so no timer leaks (jest CI).
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setInterval(() => setCooldown((s) => (s <= 1 ? 0 : s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [cooldown])
 
   const sendEmail = async () => {
     setError(null)
@@ -489,21 +559,40 @@ function ForgotPasswordForm({
     try {
       await requestPasswordReset(email)
     } catch (e) {
-      // Stay enumeration-safe in the UI too: surface the generic notice even on
-      // a (rare) error, and advance so the user can paste a token.
+      // Stay enumeration-safe in the UI too: advance regardless of the result
+      // (a rare error must not reveal whether the email exists).
       void e
     } finally {
       setBusy(false)
-      setNotice(t('auth_reset_sent'))
-      setStep('token')
+      setPhase('sent')
+      setCooldown(RESEND_COOLDOWN_S)
     }
+  }
+
+  // Read the clipboard ON EXPLICIT TAP only (no foreground sniff → no iOS paste
+  // toast). Accepts a full reset deep link OR a bare token via the same shared
+  // parser; ignores unrelated clipboard text.
+  const pasteToken = async () => {
+    try {
+      const found = extractResetToken(await Clipboard.getStringAsync())
+      if (found) setToken(found)
+    } catch {
+      // clipboard read can reject (permissions) — ignore, the user can type.
+    }
+  }
+
+  // Best-effort jump to a mail app. iOS `message:` opens Mail's inbox; Android
+  // has no standard inbox intent, so fall back to `mailto:` which resolves a
+  // mail-app chooser. Silently ignored if nothing handles it.
+  const openMail = () => {
+    void Linking.openURL(Platform.OS === 'ios' ? 'message:' : 'mailto:').catch(() => {})
   }
 
   const submit = async () => {
     setError(null)
     setBusy(true)
     try {
-      await submitReset({ email, token, newPassword }, () => setDone(true))
+      await submitReset({ email, token, newPassword }, () => setPhase('done'))
     } catch (e) {
       setError(t(errKey((e as Error).message)))
     } finally {
@@ -511,7 +600,7 @@ function ForgotPasswordForm({
     }
   }
 
-  if (done) {
+  if (phase === 'done') {
     return (
       <View style={styles.formGap}>
         <Text style={styles.resetTitle}>{t('auth_reset_done')}</Text>
@@ -524,56 +613,115 @@ function ForgotPasswordForm({
 
   return (
     <View style={styles.formGap}>
+      <Button variant="ghost" block onPress={onBack}>
+        <Text style={styles.ghostBtnText}>{t('auth_reset_back')}</Text>
+      </Button>
       <Text style={styles.resetTitle}>{t('auth_reset_title')}</Text>
-      <Input
-        label={t('auth_email_label')}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-        placeholder={t('auth_email_ph')}
-        hint={step === 'email' ? t('auth_reset_email_hint') : undefined}
-        value={email}
-        onChangeText={setEmail}
-      />
-      {step === 'email' ? (
-        <Button block onPress={sendEmail} disabled={busy || !email}>
-          {t('auth_reset_send')}
-        </Button>
-      ) : (
+
+      {phase === 'email' ? (
         <>
-          {notice ? (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeText}>{notice}</Text>
-            </View>
-          ) : null}
+          <Text style={styles.resetSubtitle}>{t('auth_reset_email_hint')}</Text>
           <Input
-            label={t('auth_reset_token_label')}
+            label={t('auth_email_label')}
+            keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="off"
-            placeholder={t('auth_reset_token_ph')}
-            value={token}
-            onChangeText={setToken}
+            autoComplete="email"
+            placeholder={t('auth_email_ph')}
+            value={email}
+            onChangeText={setEmail}
           />
+          <Button block onPress={sendEmail} disabled={busy || !email}>
+            {t('auth_reset_send')}
+          </Button>
+        </>
+      ) : null}
+
+      {phase === 'sent' ? (
+        <>
+          <Text style={styles.resetSubtitle}>{t('auth_reset_check_title')}</Text>
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              {t('auth_reset_sent_masked', { email: maskEmail(email) })}
+            </Text>
+          </View>
+          <Text style={styles.resetSubtitle}>{t('auth_reset_check_hint')}</Text>
+          <Button variant="secondary" block onPress={openMail}>
+            {t('auth_reset_open_mail')}
+          </Button>
+          <Button block onPress={() => { setPhase('reset'); setError(null) }}>
+            {t('auth_reset_have_code')}
+          </Button>
+          <Button
+            variant="ghost"
+            block
+            onPress={sendEmail}
+            disabled={busy || cooldown > 0}
+          >
+            <Text style={styles.ghostBtnText}>
+              {cooldown > 0
+                ? t('auth_reset_resend_in', { sec: cooldown })
+                : t('auth_reset_resend')}
+            </Text>
+          </Button>
+        </>
+      ) : null}
+
+      {phase === 'reset' ? (
+        <>
+          {/* reset-verify binds the token to the email, so the email is REQUIRED
+              here. In the normal flow it's prefilled from the email step; on a
+              deep-link entry it's empty and the user must supply the account
+              email the reset was requested for. */}
+          <Input
+            label={t('auth_email_label')}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholder={t('auth_email_ph')}
+            value={email}
+            onChangeText={setEmail}
+          />
+          {tokenAutoFilled ? (
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>{t('auth_reset_token_detected')}</Text>
+            </View>
+          ) : (
+            <>
+              <Input
+                label={t('auth_reset_token_label')}
+                autoCapitalize="none"
+                autoComplete="off"
+                placeholder={t('auth_reset_token_ph')}
+                value={token}
+                onChangeText={setToken}
+              />
+              <Button variant="ghost" block onPress={pasteToken}>
+                <Text style={styles.ghostBtnText}>{t('auth_reset_paste')}</Text>
+              </Button>
+            </>
+          )}
           <Input
             label={t('auth_reset_new_password_label')}
-            secureTextEntry
+            secureTextEntry={!reveal}
             autoComplete="new-password"
             placeholder={t('auth_reset_new_password_ph')}
             value={newPassword}
             onChangeText={setNewPassword}
           />
+          <Button variant="ghost" block onPress={() => setReveal((r) => !r)}>
+            <Text style={styles.ghostBtnText}>
+              {reveal ? t('auth_reset_hide') : t('auth_reset_reveal')}
+            </Text>
+          </Button>
           <Button
             block
             onPress={submit}
-            disabled={busy || !token || newPassword.length < 8}
+            disabled={busy || !email || !token || newPassword.length < 8}
           >
             {t('auth_reset_submit')}
           </Button>
         </>
-      )}
-      <Button variant="ghost" block onPress={onBack}>
-        <Text style={styles.ghostBtnText}>{t('auth_reset_back')}</Text>
-      </Button>
+      ) : null}
     </View>
   )
 }
@@ -761,6 +909,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     color: colors.ink900,
+  },
+  resetSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.ink500,
   },
   noticeBox: {
     paddingVertical: 10,

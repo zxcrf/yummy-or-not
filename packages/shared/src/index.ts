@@ -7,3 +7,4 @@ export * from "./api-client";
 export * from "./search";
 export * from "./geo";
 export * from "./share-token";
+export * from "./reset-token";
