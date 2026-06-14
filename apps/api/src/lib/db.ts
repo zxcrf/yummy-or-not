@@ -232,6 +232,7 @@ async function rowToTaste(row: any): Promise<Taste> {
     notes:         row.notes ?? '',
     lat:           row.lat ?? null,
     lng:           row.lng ?? null,
+    visibility:    row.visibility === 'shared' ? 'shared' : 'private',
     tasterId:      row.taster_id ?? null,
     image:         urls.image,
     imageThumb:    urls.imageThumb,
@@ -878,6 +879,38 @@ export async function setTasteVisibility(
     }
 
     await client.query(`UPDATE tastes SET visibility = 'shared' WHERE id = $1 AND user_id = $2`, [id, userId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getTaste(userId, id);
+}
+
+/** Unpublish: remove this owner's taste_shares rows and flip the taste back to
+ *  visibility='private'. The inverse of setTasteVisibility — once private the
+ *  record drops out of every cross-user feed ('shared' is the bypass-proof
+ *  filter). Ownership-checked (the taste must belong to userId). Returns the
+ *  updated Taste, or null if the taste is not owned by the caller.
+ *
+ *  Idempotent: unpublishing an already-private record deletes zero shares and
+ *  leaves visibility='private' — a safe no-op. The DELETE + flip run in one
+ *  transaction so a crash can't leave shares without the 'shared' flag (or vice
+ *  versa), the same consistency guarantee setTasteVisibility makes. */
+export async function unpublishTaste(userId: string, id: string): Promise<Taste | null> {
+  const { rows: owned } = await pool.query(
+    'SELECT id FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  );
+  if (!owned.length) return null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM taste_shares WHERE taste_id = $1 AND owner_id = $2', [id, userId]);
+    await client.query(`UPDATE tastes SET visibility = 'private' WHERE id = $1 AND user_id = $2`, [id, userId]);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');

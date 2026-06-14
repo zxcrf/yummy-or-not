@@ -403,6 +403,33 @@ export async function revokeShare(tasteId: string): Promise<void> {
   });
 }
 
+/* ── S3c per-record visibility (publish / unpublish) ──────────────────────────── */
+
+/** PATCH /api/tastes/:id/visibility — publish this record to "nearby" (geo).
+ *  Writes a geo taste_shares row (geog + coarsened grid_cell from the record's
+ *  own lat/lng) and flips tastes.visibility to 'shared'. The server computes the
+ *  grid_cell from the stored coords; the client only names the target. A record
+ *  with no coordinates is rejected server-side (422 'no_coordinates') — the UI
+ *  must gate the "public" option on the record having a location. Returns the
+ *  updated Taste (visibility:'shared'). */
+export async function publishTasteGeo(tasteId: string): Promise<Taste> {
+  return apiFetch<Taste>(`/api/tastes/${tasteId}/visibility`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targets: [{ type: "geo" }] }),
+  });
+}
+
+/** DELETE /api/tastes/:id/visibility — unpublish this record. Removes the owner's
+ *  taste_shares rows and flips tastes.visibility back to 'private', so it drops
+ *  out of every cross-user feed. Idempotent: unpublishing an already-private
+ *  record is a no-op. Returns the updated Taste (visibility:'private'). */
+export async function unpublishTaste(tasteId: string): Promise<Taste> {
+  return apiFetch<Taste>(`/api/tastes/${tasteId}/visibility`, {
+    method: "DELETE",
+  });
+}
+
 /** GET /api/share/:token — live preview of a shared taste + short presign.
  *  A revoked/expired/source-deleted share answers 410, which apiFetch surfaces
  *  as an Error whose message is "share_gone" for the UI to localize. No auth

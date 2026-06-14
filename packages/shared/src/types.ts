@@ -61,6 +61,13 @@ export interface Taste {
   notes: string;
   lat?: number | null;
   lng?: number | null;
+  /** S3c: publish state of this record. 'private' (default) is owner-only;
+   *  'shared' means it has been published (taste_shares rows written) and can
+   *  surface in the nearby-heat / family feeds. Drives the per-record
+   *  private/public selector. Optional for back-compat with old-APK payloads /
+   *  pre-S3c callers; absent ≡ 'private' (the DB default), so consumers may
+   *  treat `undefined` as private. rowToTaste always populates it. */
+  visibility?: 'private' | 'shared';
   /** S3b: the taster persona this record is attributed to. null on legacy rows
    *  that predate the backfill (treated as the owner's self-taster). */
   tasterId?: string | null;
