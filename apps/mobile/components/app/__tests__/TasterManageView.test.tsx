@@ -36,6 +36,7 @@ const mockInvalidateTasters = jest.fn()
 const mockUseAuth = jest.fn()
 const mockUseActiveTaster = jest.fn<string | null, []>()
 const mockSetActiveTaster = jest.fn()
+const mockPush = jest.fn()
 
 const SELF = { id: 't-self', displayName: 'Me', avatar: '', isSelf: true }
 const PARTNER = { id: 't-partner', displayName: 'Partner', avatar: '', isSelf: false }
@@ -54,6 +55,10 @@ jest.mock('@/app/(tabs)/_useTasters', () => ({
 jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
   useActiveTaster: () => mockUseActiveTaster(),
   setActiveTaster: (...args: unknown[]) => mockSetActiveTaster(...args),
+}))
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
 }))
 
 jest.mock('@/providers/AuthProvider', () => ({
@@ -271,6 +276,37 @@ describe('TasterManageView — pro CRUD', () => {
     // must not keep offering controls the server refuses.
     expect(renderer.root.findAllByProps({ testID: 'add-taster-btn' })).toHaveLength(0)
     expect(renderer.root.findAllByProps({ testID: 'edit-taster-t-partner' })).toHaveLength(0)
+  })
+})
+
+describe('TasterManageView — enter a member\'s 口味 (merged 家人 screen)', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
+    mockUseActiveTaster.mockReturnValue(null)
+  })
+
+  // Tapping a (non-self) member row selects them as the active taster and jumps
+  // to the library tab, which filterTastesByTaster (PR #107) then narrows to
+  // that member's tastes. Pins the exact call + args.
+  it('tapping a member row sets that taster active then pushes /(tabs)', async () => {
+    const renderer = render()
+    await act(async () => {
+      await renderer.root.findByProps({ testID: 'taster-row-t-partner' }).props.onPress()
+    })
+    expect(mockSetActiveTaster).toHaveBeenCalledWith('t-partner')
+    expect(mockPush).toHaveBeenCalledWith('/(tabs)')
+  })
+
+  // Tapping the self row means "back to me" — the self default is null in
+  // _useActiveTaster, so it must clear the selection rather than pass the
+  // self-taster id.
+  it('tapping the self row clears the active selection (null) then pushes /(tabs)', async () => {
+    const renderer = render()
+    await act(async () => {
+      await renderer.root.findByProps({ testID: 'taster-row-t-self' }).props.onPress()
+    })
+    expect(mockSetActiveTaster).toHaveBeenCalledWith(null)
+    expect(mockPush).toHaveBeenCalledWith('/(tabs)')
   })
 })
 

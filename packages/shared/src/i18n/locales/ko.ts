@@ -90,6 +90,7 @@ export const ko: Record<string, string> = {
   nearby_todo: "근처에서 먹고 싶은",
   // S3b — taster / family management
   taster_manage: "테이스터",
+  family_entry: "가족",
   taster_self: "나",
   add_for: "기록 대상",
   taster_add: "테이스터 추가",

@@ -90,6 +90,7 @@ export const es: Record<string, string> = {
   nearby_todo: "Quiero probar cerca",
   // S3b — taster / family management
   taster_manage: "Catadores",
+  family_entry: "Familia",
   taster_self: "Yo",
   add_for: "Registrar para",
   taster_add: "Añadir catador",
