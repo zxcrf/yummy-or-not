@@ -73,6 +73,30 @@ describe('ShareCard QR (S3a 可导入 mode)', () => {
     expect(values).toContain(LANDING)
   })
 
+  it('renders the QR as STANDARD dark-on-light (not inverted) so cameras / WeChat can scan it', () => {
+    // Regression for issue #102: the QR was rendered inverted (color #fff on
+    // backgroundColor #191017). Most phone cameras and WeChat "识别图中二维码"
+    // fail on inverted QR, silently degrading 可导入 to a 淘口令-only share.
+    // A scannable QR MUST be dark modules on a light/white background.
+    const LANDING = 'https://yon.baobao.click/i/AB12CD'
+    const renderer = render(
+      <ShareCard
+        taste={BASE_TASTE}
+        verdictLabel="YUM"
+        brandText="Logged with Yummy or Not"
+        priceText="$5.80"
+        importCode="AB12CD"
+        importCodeHint="Import in Yummy or Not with code"
+        landingUrl={LANDING}
+      />,
+    )
+
+    const qr = qrNodes(renderer)[0]
+    expect(qr).toBeTruthy()
+    expect(qr.props.color).toBe('#191017') // dark modules
+    expect(qr.props.backgroundColor).toBe('#fff') // light background
+  })
+
   it('renders NO QR in pure-PNG mode (no landingUrl) — link-free privacy guard', () => {
     const renderer = render(
       <ShareCard

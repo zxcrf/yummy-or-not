@@ -428,9 +428,6 @@ export default function DetailView() {
     }
   }
 
-  // The original top-row "Share" button now uses the pure-PNG mode.
-  const handleShare = handleSharePng
-
   // ── 可导入 (淘口令) share mode ────────────────────────────────────────────
   // Mint a thin token, then deliver the importCode through THREE channels so it
   // reaches the recipient no matter how the share is forwarded:
@@ -792,19 +789,9 @@ export default function DetailView() {
                   {t('detail_buy_again')}
                 </Button>
               ) : null}
-              {/* share only available for tasted items (verdict present for share card) */}
-              {item.status !== 'todo' && sharingAvailable ? (
-                <Button
-                  variant="secondary"
-                  iconLeft={<Icon name="arrow-right" size={18} />}
-                  disabled={sharing}
-                  onPress={handleShare}
-                  testID="share-btn"
-                >
-                  {t('share')}
-                </Button>
-              ) : null}
-              {/* S3a — share to a friend: opens a picker for the TWO modes. */}
+              {/* S3a — share to a friend: opens a picker for the TWO modes
+                  (仅图片 / 可导入). The old top-level "分享" button was removed —
+                  it was a duplicate of 仅图片（无链接）(both call handleSharePng). */}
               {item.status !== 'todo' && sharingAvailable ? (
                 <Button
                   variant="secondary"

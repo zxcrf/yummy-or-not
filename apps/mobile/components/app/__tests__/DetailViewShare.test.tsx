@@ -150,9 +150,19 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   return renderer
 }
 
+// The old top-level 分享 button (share-btn) was removed. The pure-PNG share is
+// now reached via 分享给朋友 (share-import-btn) → 仅图片（无链接）(share-mode-png),
+// which calls the SAME handleSharePng. Open the picker, then return the png mode.
+function openShareMenu(renderer: TestRenderer.ReactTestRenderer) {
+  const entry = renderer.root.findAll(
+    (node) => (node.type as unknown) === 'Button' && node.props.testID === 'share-import-btn',
+  )[0]
+  act(() => { entry.props.onPress() })
+}
+
 function findShareButton(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll(
-    (node) => (node.type as unknown) === 'Button' && node.props.testID === 'share-btn',
+    (node) => (node.type as unknown) === 'Button' && node.props.testID === 'share-mode-png',
   )[0]
 }
 
@@ -176,10 +186,11 @@ describe('DetailView share (A1)', () => {
     const { captureRef } = require('react-native-view-shot')
     const { shareAsync } = require('expo-sharing')
 
+    openShareMenu(renderer)
     const shareBtn = findShareButton(renderer)
     expect(shareBtn).toBeTruthy()
 
-    // Press share — starts async flow (600ms timer fires inside handleShare)
+    // Press share — starts async flow (600ms timer fires inside handleSharePng)
     await act(async () => {
       shareBtn.props.onPress()
       jest.runAllTimers()
@@ -207,6 +218,7 @@ describe('DetailView share (A1)', () => {
 
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {})
 
+    openShareMenu(renderer)
     const shareBtn = findShareButton(renderer)
 
     await act(async () => {
@@ -217,7 +229,9 @@ describe('DetailView share (A1)', () => {
     // Alert must have been shown with share_failed key
     expect(alertSpy).toHaveBeenCalledWith('share_failed')
 
-    // Button should be re-enabled (disabled=false or disabled not set)
+    // Button should be re-enabled (disabled=false or disabled not set). The
+    // share closes the picker, so reopen it to inspect the png mode button.
+    openShareMenu(renderer)
     const shareBtnAfter = findShareButton(renderer)
     expect(shareBtnAfter?.props.disabled).toBeFalsy()
 
@@ -239,6 +253,7 @@ describe('DetailView share (A1)', () => {
       () => new Promise<string>((resolve) => { resolveCaptureRef = resolve }),
     )
 
+    openShareMenu(renderer)
     const shareBtn = findShareButton(renderer)
     expect(shareBtn).toBeTruthy()
 
@@ -274,12 +289,12 @@ describe('DetailView share (A1)', () => {
     expect(captureRef).toHaveBeenCalledTimes(1)
     expect(shareAsync).not.toHaveBeenCalled()
 
-    // sharing state must be reset unconditionally — no disabled share button.
-    const disabledShareBtns = renderer.root.findAll(
-      (node) => (node.type as unknown) === 'Button' &&
-        node.props.testID === 'share-btn' &&
-        node.props.disabled === true,
-    )
-    expect(disabledShareBtns).toHaveLength(0)
+    // sharing state must be reset unconditionally — the share mode button is
+    // re-enabled. Reopen the picker (the share closed it) and confirm png mode
+    // is present and not disabled.
+    openShareMenu(renderer)
+    const shareBtnAfter = findShareButton(renderer)
+    expect(shareBtnAfter).toBeTruthy()
+    expect(shareBtnAfter?.props.disabled).toBeFalsy()
   })
 })

@@ -203,15 +203,19 @@ describe('DetailView importable share (S3a)', () => {
     expect(callArgs).not.toContain('presignedtoken')
   })
 
-  it('does NOT print an import code on the plain (S1) PNG share', async () => {
-    // The plain share path (handleShare) must never set an import code on the
-    // card, so a non-importable share can't accidentally print a stray code.
+  it('does NOT print an import code on the plain (仅图片) PNG share', async () => {
+    // The pure-PNG path (handleSharePng, reached via 仅图片（无链接）) must never
+    // set an import code on the card, so a non-importable share can't
+    // accidentally print a stray code. (The old top-level 分享 button was
+    // removed — 仅图片 is now the only plain-PNG entry.)
     mockedGetTaste.mockResolvedValueOnce(makeTaste())
 
     const r = await renderDetail()
     const { shareAsync } = require('expo-sharing')
 
-    const plainBtn = r.root.findAll((n) => n.props?.testID === 'share-btn')[0]
+    const entry = findImportableShareBtn(r)
+    act(() => { entry.props.onPress() })
+    const plainBtn = r.root.findAll((n) => n.props?.testID === 'share-mode-png')[0]
     expect(plainBtn).toBeTruthy()
 
     await act(async () => {
