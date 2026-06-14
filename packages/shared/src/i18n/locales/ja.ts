@@ -3,6 +3,7 @@
 export const ja: Record<string, string> = {
   nav_tastes: "記録", nav_recall: "検索", nav_saved: "保存", nav_you: "マイ", nav_stats: "統計", nav_todo: "食べたい", nav_nearby: "近く",
   my_tastes: "私の味", count_logged: "{n}件", search_log: "記録を検索…",
+  count_todo: "{n}件の食べたい", search_todo: "食べたいリストを検索…",
   log_taste: "味を記録", recall_title: "前に食べた？",
   recall_sub: "買う前に検索。過去の自分の感想をお知らせします。",
   recall_placeholder: "「抒茶」や「タピオカ」で検索…", recently_recalled: "最近の検索", nearby_eaten: "近くで食べた",

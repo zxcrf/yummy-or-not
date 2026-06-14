@@ -84,7 +84,7 @@ export default function TodoView() {
             {t('nav_todo')}
           </Text>
           <Text style={{ color: colors.colorMuted, fontSize: 13 }}>
-            {t('count_logged', { n: items.filter((it) => (it.status ?? 'tasted') === 'todo').length })}
+            {t('count_todo', { n: items.filter((it) => (it.status ?? 'tasted') === 'todo').length })}
           </Text>
         </View>
 
@@ -96,8 +96,8 @@ export default function TodoView() {
           <Input
             value={query}
             onChangeText={setQuery}
-            placeholder={t('search_log')}
-            accessibilityLabel={t('search_log')}
+            placeholder={t('search_todo')}
+            accessibilityLabel={t('search_todo')}
             style={{ paddingLeft: 38 }}
           />
         </View>

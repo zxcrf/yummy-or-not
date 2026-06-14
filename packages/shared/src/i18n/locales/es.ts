@@ -3,6 +3,7 @@
 export const es: Record<string, string> = {
   nav_tastes: "Sabores", nav_recall: "Recordar", nav_saved: "Guardado", nav_you: "Tú", nav_stats: "Datos", nav_todo: "Probar", nav_nearby: "Cerca",
   my_tastes: "Mis sabores", count_logged: "{n} registrados", search_log: "Busca en tu registro…",
+  count_todo: "{n} por probar", search_todo: "Busca en tu lista por probar…",
   log_taste: "Anota un sabor", recall_title: "¿Ya lo probaste?",
   recall_sub: "Busca antes de gastar. Te decimos qué pensó tu yo del pasado.",
   recall_placeholder: "Prueba “matcha” o “boba”…", recently_recalled: "Recordados hace poco", nearby_eaten: "Comido cerca",

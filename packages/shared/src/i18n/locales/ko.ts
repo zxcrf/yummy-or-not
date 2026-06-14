@@ -3,6 +3,7 @@
 export const ko: Record<string, string> = {
   nav_tastes: "기록", nav_recall: "찾기", nav_saved: "저장", nav_you: "나", nav_stats: "통계", nav_todo: "먹고싶다", nav_nearby: "근처",
   my_tastes: "나의 입맛", count_logged: "{n}개 기록", search_log: "기록 검색…",
+  count_todo: "{n}개 먹고싶다", search_todo: "먹고싶다 목록 검색…",
   log_taste: "맛 기록하기", recall_title: "전에 먹어봤나요?",
   recall_sub: "사기 전에 검색하세요. 과거의 내가 어떻게 생각했는지 알려드려요.",
   recall_placeholder: "“말차” 또는 “버블티” 검색…", recently_recalled: "최근 찾아본 항목", nearby_eaten: "근처에서 먹은",

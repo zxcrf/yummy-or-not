@@ -3,6 +3,7 @@
 export const en: Record<string, string> = {
   nav_tastes: "Tastes", nav_recall: "Recall", nav_saved: "Saved", nav_you: "You", nav_stats: "Stats", nav_todo: "To-Try", nav_nearby: "Nearby",
   my_tastes: "My Tastes", count_logged: "{n} logged", search_log: "Search your log…",
+  count_todo: "{n} to try", search_todo: "Search your to-try list…",
   sort_recent: "Recent", sort_nearby: "Nearby",
   log_taste: "Log a taste", recall_title: "Tasted it before?",
   recall_sub: "Search before you spend. We’ll tell you what past-you thought.",
