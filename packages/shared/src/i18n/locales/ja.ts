@@ -91,6 +91,7 @@ export const ja: Record<string, string> = {
   // S3b — taster / family management
   taster_manage: "テイスター",
   taster_self: "自分",
+  add_for: "記録する人",
   taster_add: "テイスターを追加",
   taster_create: "新しいテイスター",
   taster_name_label: "名前",

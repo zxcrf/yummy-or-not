@@ -46,6 +46,10 @@ jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { warningsEnabled: true } }),
 }))
 
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: [], loading: false }),
   invalidateTagsCache: jest.fn(),

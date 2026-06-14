@@ -55,12 +55,30 @@ jest.mock('@yon/shared', () => {
   }
 })
 
-jest.mock('@/app/(tabs)/_useTastes', () => ({
-  useRefreshableTastes: () => ({
-    items: mockItems,
-    loading: false,
-    refresh: jest.fn().mockResolvedValue(undefined),
-  }),
+// Keep the REAL filterTastesByTaster (the persona-scoping helper) and override
+// only the data hook, so the persona-filter test below exercises the shipping
+// implementation rather than a stand-in.
+jest.mock('@/app/(tabs)/_useTastes', () => {
+  const actual = jest.requireActual('@/app/(tabs)/_useTastes')
+  return {
+    ...actual,
+    useRefreshableTastes: () => ({
+      items: mockItems,
+      loading: false,
+      refresh: jest.fn().mockResolvedValue(undefined),
+    }),
+  }
+})
+
+// Active taster + taster list — controllable per test. Default: self (null) with
+// no family personas, so every pre-existing test sees the full unfiltered list.
+let mockActiveTaster: string | null = null
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => mockActiveTaster,
+}))
+let mockTasters: Array<{ id: string; isSelf: boolean; displayName: string }> = []
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: mockTasters, loading: false }),
 }))
 
 // Location plumbing — controllable per test. sortByNearest is reimplemented
@@ -446,5 +464,78 @@ describe('LibraryView verdict jump + filter reset composition', () => {
 
     expect(cards(renderer, 'matcha latte')).toHaveLength(1)
     expect(cards(renderer, 'Oolong Tea')).toHaveLength(1)
+  })
+})
+
+describe('LibraryView persona filter (issue #104)', () => {
+  beforeEach(() => {
+    mockItems.length = 0
+    mockTagList = []
+    mockCoords = null
+    mockLocationEnabled = false
+    mockActiveTaster = null
+    // Account owns a self persona + one family persona.
+    mockTasters = [
+      { id: 'ts_self', isSelf: true, displayName: 'Me' },
+      { id: 'ts_wife', isSelf: false, displayName: 'Wife' },
+    ]
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    mockActiveTaster = null
+    mockTasters = []
+  })
+
+  // The reported bug: switching the top persona did NOT change the list below.
+  // Pre-fix LibraryView fed the raw `items` straight to the grid, so a family
+  // persona still rendered the self records. This pins that the grid follows the
+  // active persona.
+  it('shows only the active family persona\'s records, not the self records', () => {
+    mockItems.push(
+      taste({ name: 'My Coffee', tasterId: 'ts_self' }),
+      taste({ name: 'Legacy Self Snack', tasterId: null }),
+      taste({ name: 'Wife Cake', tasterId: 'ts_wife' }),
+    )
+    mockActiveTaster = 'ts_wife'
+
+    const renderer = renderLibrary()
+
+    expect(cards(renderer, 'Wife Cake')).toHaveLength(1)
+    expect(cards(renderer, 'My Coffee')).toHaveLength(0)
+    expect(cards(renderer, 'Legacy Self Snack')).toHaveLength(0)
+  })
+
+  it('self default shows own + legacy-null records but not a family persona\'s', () => {
+    mockItems.push(
+      taste({ name: 'My Coffee', tasterId: 'ts_self' }),
+      taste({ name: 'Legacy Self Snack', tasterId: null }),
+      taste({ name: 'Wife Cake', tasterId: 'ts_wife' }),
+    )
+    mockActiveTaster = null // self
+
+    const renderer = renderLibrary()
+
+    expect(cards(renderer, 'My Coffee')).toHaveLength(1)
+    expect(cards(renderer, 'Legacy Self Snack')).toHaveLength(1)
+    expect(cards(renderer, 'Wife Cake')).toHaveLength(0)
+  })
+
+  // Robustness: before the taster list resolves (or if it fails), the self-taster
+  // id is unknown. New self records carry a concrete self id, so a null-only
+  // filter would hide the user's own records — the self default must stay
+  // permissive until the id is known.
+  it('self default shows own concrete-id records even before tasters load', () => {
+    mockItems.push(
+      taste({ name: 'My Coffee', tasterId: 'ts_self' }),
+      taste({ name: 'Legacy Self Snack', tasterId: null }),
+    )
+    mockActiveTaster = null
+    mockTasters = [] // tasters not loaded yet → selfTasterId unknown
+
+    const renderer = renderLibrary()
+
+    expect(cards(renderer, 'My Coffee')).toHaveLength(1)
+    expect(cards(renderer, 'Legacy Self Snack')).toHaveLength(1)
   })
 })

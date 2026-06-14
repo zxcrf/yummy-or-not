@@ -67,6 +67,10 @@ jest.mock('@/providers/AuthProvider', () => ({
 
 let mockUserTags: Array<{ id: string; name: string; createdAt: string }> = []
 const mockInvalidateTagsCache = jest.fn()
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: mockUserTags, loading: false }),
   invalidateTagsCache: (...args: unknown[]) => mockInvalidateTagsCache(...args),

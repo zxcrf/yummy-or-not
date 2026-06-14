@@ -63,6 +63,7 @@ import { useAuth } from '@/providers/AuthProvider'
 import { invalidateTastes, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
+import { useTasters } from '@/app/(tabs)/_useTasters'
 import { PhotoPreview } from './PhotoPreview'
 import { type AddDraft, clearDraft, isDraftMeaningful, loadDraft, saveDraft } from './addDraft'
 import { useRouter } from 'expo-router'
@@ -148,6 +149,25 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // S3b: the active client taster (null = self). Carried into the create payload
   // so a record logged while a non-self persona is active is attributed to it.
   const activeTaster = useActiveTaster()
+  const { tasters } = useTasters()
+  // Non-self personas this account owns. When present (and pro), the Add screen
+  // shows an explicit "记录给" selector so the user can choose who a record is
+  // attributed to instead of it silently following the active persona.
+  const familyTasters = useMemo(
+    () => tasters.filter((ts) => !ts.isSelf),
+    [tasters],
+  )
+  const showTasterPicker = user?.plan === 'pro' && familyTasters.length > 0
+  // The chosen attribution (null = self). Seeded from the active persona so
+  // adding from a family tab pre-selects that family member (and from the self
+  // tab defaults to 自己); the user can override per record via the selector.
+  const [assignTaster, setAssignTaster] = useState<string | null>(activeTaster)
+  // Once the user taps a chip we stop mirroring the active persona, so a late
+  // hydration of the active taster cannot clobber an explicit choice.
+  const tasterTouched = useRef(false)
+  useEffect(() => {
+    if (!tasterTouched.current) setAssignTaster(activeTaster)
+  }, [activeTaster])
 
   // Merge the user's tag library with the built-in TAG_CHOICES, deduped, for
   // the chip list. Built-in choices always appear first so the UX stays stable
@@ -544,9 +564,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
           notes: notes || undefined,
           lat,
           lng,
-          // Only send a non-self taster; null (self) → omitted so the server
-          // applies the self-taster default, never a wrong persona.
-          ...(activeTaster ? { tasterId: activeTaster } : {}),
+          // Only attribute to a persona the user can actually see and change:
+          // send the chosen taster only when the picker is shown. If it's hidden
+          // (free account, or family personas not loaded/removed) we never carry
+          // a stale/invisible id — null (self) → omitted so the server applies
+          // the self-taster default.
+          ...(showTasterPicker && assignTaster ? { tasterId: assignTaster } : {}),
         },
         photo,
       )
@@ -661,6 +684,38 @@ export default function AddModal({ onClose, onSaved }: Props) {
             </Text>
           </Pressable>
         </View>
+
+        {/* taster attribution — only when this pro account owns family personas.
+            "记录给" lets the user choose whose taste this is; defaults to the
+            active persona (self on the self tab). */}
+        {showTasterPicker ? (
+          <View style={{ gap: space[2] }} testID="add-taster-picker">
+            <Text style={KICKER}>{t('add_for')}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
+              <Tag
+                active={assignTaster === null}
+                onPress={() => {
+                  tasterTouched.current = true
+                  setAssignTaster(null)
+                }}
+              >
+                {t('taster_self')}
+              </Tag>
+              {familyTasters.map((ts) => (
+                <Tag
+                  key={ts.id}
+                  active={assignTaster === ts.id}
+                  onPress={() => {
+                    tasterTouched.current = true
+                    setAssignTaster(ts.id)
+                  }}
+                >
+                  {ts.displayName}
+                </Tag>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {/* photo + basic fields */}
         <View style={{ gap: space[4] }}>

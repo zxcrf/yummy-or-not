@@ -19,7 +19,9 @@ import { formatDistance } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
-import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+import { filterTastesByTaster, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
+import { useTasters } from '@/app/(tabs)/_useTasters'
 import { useUserCoords, sortByNearest } from '@/app/(tabs)/_useUserCoords'
 import { useTags } from '@/app/(tabs)/_useTags'
 import { RecallResults } from '@/components/app/RecallResults'
@@ -43,8 +45,21 @@ export default function LibraryView() {
   const isWide = width >= 768
 
   const { user } = useAuth()
-  const { items, loading, refresh } = useRefreshableTastes()
+  const { items: allItems, loading, refresh } = useRefreshableTastes()
   const { tags } = useTags()
+  // S3b: scope the list to the active persona. The shared cache holds every
+  // persona's records; switching the TasterSwitcher chip must re-filter the
+  // list below (not just attribute new records). null = self default.
+  const activeTaster = useActiveTaster()
+  const { tasters } = useTasters()
+  const selfTasterId = useMemo(
+    () => tasters.find((ts) => ts.isSelf)?.id ?? null,
+    [tasters],
+  )
+  const items = useMemo(
+    () => filterTastesByTaster(allItems, activeTaster, selfTasterId),
+    [allItems, activeTaster, selfTasterId],
+  )
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')

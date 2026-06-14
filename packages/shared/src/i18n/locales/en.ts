@@ -126,6 +126,7 @@ export const en: Record<string, string> = {
   // S3b — taster / family management
   taster_manage: "Tasters",
   taster_self: "You",
+  add_for: "Log for",
   taster_add: "Add taster",
   taster_create: "New taster",
   taster_name_label: "Name",

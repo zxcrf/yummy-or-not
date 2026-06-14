@@ -33,8 +33,20 @@ jest.mock('@yon/shared', () => ({
 // ---- mock _useTastes / _useTags -------------------------------------------
 
 let mockItems: Taste[] = []
-jest.mock('@/app/(tabs)/_useTastes', () => ({
-  useRefreshableTastes: () => ({ items: mockItems, loading: false, refresh: jest.fn() }),
+// Keep the real filterTastesByTaster (persona scoping); override only the hook.
+jest.mock('@/app/(tabs)/_useTastes', () => {
+  const actual = jest.requireActual('@/app/(tabs)/_useTastes')
+  return {
+    ...actual,
+    useRefreshableTastes: () => ({ items: mockItems, loading: false, refresh: jest.fn() }),
+  }
+})
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
 }))
 
 jest.mock('@/app/(tabs)/_useTags', () => ({

@@ -74,6 +74,19 @@ jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
   useActiveTaster: () => mockUseActiveTaster(),
 }))
 
+// The Add screen now reads the taster list to render the attribution selector.
+// Provide a self + one family persona so the selector is present; the default
+// attribution still mirrors the active taster (asserted below).
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({
+    tasters: [
+      { id: 'ts_self', isSelf: true, displayName: 'You' },
+      { id: 'ts_partner', isSelf: false, displayName: 'Partner' },
+    ],
+    loading: false,
+  }),
+}))
+
 // ---- mock providers -------------------------------------------------------
 
 jest.mock('@/providers/I18nProvider', () => ({

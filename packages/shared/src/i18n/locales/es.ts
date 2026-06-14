@@ -91,6 +91,7 @@ export const es: Record<string, string> = {
   // S3b — taster / family management
   taster_manage: "Catadores",
   taster_self: "Yo",
+  add_for: "Registrar para",
   taster_add: "Añadir catador",
   taster_create: "Nuevo catador",
   taster_name_label: "Nombre",

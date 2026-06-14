@@ -126,6 +126,7 @@ export const zh: Record<string, string> = {
   // S3b — taster / family management
   taster_manage: "口味家人",
   taster_self: "我自己",
+  add_for: "记录给",
   taster_add: "添加家人",
   taster_create: "新增口味家人",
   taster_name_label: "昵称",

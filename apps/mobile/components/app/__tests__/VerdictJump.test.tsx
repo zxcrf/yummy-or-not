@@ -81,12 +81,23 @@ jest.mock('@/providers/AuthProvider', () => ({
   }),
 }))
 
-jest.mock('@/app/(tabs)/_useTastes', () => ({
-  useRefreshableTastes: () => ({
-    items: mockItems,
-    loading: false,
-    refresh: jest.fn().mockResolvedValue(undefined),
-  }),
+jest.mock('@/app/(tabs)/_useTastes', () => {
+  const actual = jest.requireActual('@/app/(tabs)/_useTastes')
+  return {
+    ...actual,
+    useRefreshableTastes: () => ({
+      items: mockItems,
+      loading: false,
+      refresh: jest.fn().mockResolvedValue(undefined),
+    }),
+  }
+})
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: [], loading: false }),
 }))
 
 // LibraryView's Nearby-sort plumbing — stubbed so the test never loads
