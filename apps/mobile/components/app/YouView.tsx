@@ -29,16 +29,19 @@ function SettingRow({
   label,
   last,
   onPress,
+  testID,
 }: {
   icon: string
   label: string
   last?: boolean
   onPress?: () => void
+  testID?: string
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      testID={testID}
     >
       <View
         style={[
@@ -316,6 +319,25 @@ export default function YouView({ items }: Props) {
           label={t('tag_manage')}
           onPress={() => router.push('/tags')}
         />
+        {/* S3b — taster / family management. Pro-gated: free accounts cannot own
+            multiple personas, so these entries self-hide (consistent with
+            TasterSwitcher hiding for free accounts). */}
+        {user?.plan === 'pro' ? (
+          <>
+            <SettingRow
+              icon="users"
+              label={t('taster_manage')}
+              onPress={() => router.push('/tasters')}
+              testID="taster-manage-row"
+            />
+            <SettingRow
+              icon="heart"
+              label={t('family_feed')}
+              onPress={() => router.push('/family')}
+              testID="family-feed-row"
+            />
+          </>
+        ) : null}
         {/* S3a — "enter import code" fallback (WeChat strips the deep link). */}
         <SettingRow
           icon="download"
