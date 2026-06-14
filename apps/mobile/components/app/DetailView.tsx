@@ -121,8 +121,15 @@ export default function DetailView() {
   // button; the user explicitly picks which kind of share to produce.
   const [shareMenuOpen, setShareMenuOpen] = useState(false)
   const shareCardRef = useRef<RNView>(null)
-  // Resolves the onReady race: set by handleShare, called by ShareCard.
+  // Pure-PNG path resolver: set by waitForShareCardReady, called by
+  // onShareCardReady (ShareCard.onReady — photo onLoad or no-photo effect).
   const shareReadyResolveRef = useRef<(() => void) | null>(null)
+  // 可导入 path resolver: set by waitForQrReady, called by onShareQrReady
+  // (ShareCard.onQrReady — qrWrap onLayout only). Kept entirely separate
+  // from shareReadyResolveRef so no photo/no-photo signal can satisfy the
+  // QR readiness wait, even during the transitional window before the
+  // hasQr=true render commits.
+  const shareQrReadyResolveRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -380,28 +387,29 @@ export default function DetailView() {
 
   // ── 可导入 (importable) QR readiness wait ────────────────────────────────
   // For importable mode the readiness signal is the qrWrap onLayout in
-  // ShareCard — which fires only AFTER React has committed the re-render that
-  // sets importCode/landingUrl AND the native layout engine has measured the QR
-  // subtree. The flow is:
+  // ShareCard, delivered via the DEDICATED onQrReady prop. It fires only AFTER
+  // React has committed the re-render that sets importCode/landingUrl AND the
+  // native layout engine has measured the QR subtree. The flow is:
   //   1. setShareImportCode / setShareLandingUrl — schedules a React commit
   //      (NOT synchronous; the commit happens asynchronously after this returns)
-  //   2. waitForQrReady() — registers the resolver ref synchronously so it is
-  //      in place before React flushes the commit
+  //   2. waitForQrReady() — registers the resolver in shareQrReadyResolveRef
+  //      synchronously, so it is in place before React flushes the commit
   //   3. React commits → ShareCard re-renders with landingUrl → qrWrap
-  //      onLayout fires → onShareCardReady() → resolver resolves → capture
+  //      onLayout fires → onShareQrReady() → shareQrReadyResolveRef resolves
   //
-  // The 600ms fallback used by the PNG path MUST NOT be used here: on a slow
-  // device, GC pause, or large card the commit + layout can take longer than
-  // 600ms, and a 600ms timer win would snapshot the card BEFORE the QR subtree
-  // exists — reproducing the exact bug we are fixing. The 2500ms ceiling below
-  // is a pure crash-safety net so a never-firing layout (e.g. the card was
-  // unmounted mid-share) can't hang the share UI forever. Under normal
-  // operation the onLayout fires well within 100–200ms and the timeout never
-  // triggers.
+  // shareQrReadyResolveRef is COMPLETELY SEPARATE from shareReadyResolveRef
+  // (the PNG-path resolver). A photo onLoad or no-photo useEffect calling
+  // onShareCardReady() touches only shareReadyResolveRef and therefore cannot
+  // satisfy this QR wait — not even during the transitional window before the
+  // hasQr=true render commits (when the card is still link-free).
+  //
+  // The 2500ms ceiling is a crash-safety net: if the card is unmounted
+  // mid-share the layout never fires and this prevents hanging forever. Under
+  // normal operation onLayout fires in <200ms and the timeout never triggers.
   const waitForQrReady = (): Promise<void> =>
     Promise.race([
       new Promise<void>((resolve) => {
-        shareReadyResolveRef.current = resolve
+        shareQrReadyResolveRef.current = resolve
       }),
       new Promise<void>((resolve) => setTimeout(resolve, 2500)),
     ])
@@ -436,9 +444,13 @@ export default function DetailView() {
     if (!item) return
     const captureId = item.id
     await ready
+    // Clear both resolver refs — only one was set per call, the other is already
+    // null. Clearing both avoids a stale reference if the component re-renders
+    // between the await and the captureRef call.
     shareReadyResolveRef.current = null
-    // After onReady (QR laid out) give react-native-svg a couple of frames to
-    // paint into the native backing view, or captureRef snapshots an empty box.
+    shareQrReadyResolveRef.current = null
+    // After the QR onLayout (可导入 path) give react-native-svg a couple of
+    // frames to paint into the native backing view before captureRef snapshots.
     if (paintFrames) await waitFrames()
 
     // Guard: nav moved to a different taste while we waited — abort silently.
@@ -553,6 +565,13 @@ export default function DetailView() {
 
   const onShareCardReady = () => {
     shareReadyResolveRef.current?.()
+  }
+
+  // 可导入 path only — called by ShareCard.onQrReady (qrWrap onLayout).
+  // Completely separate from onShareCardReady so no photo/no-photo signal
+  // can satisfy the QR readiness wait.
+  const onShareQrReady = () => {
+    shareQrReadyResolveRef.current?.()
   }
 
   const submitBuy = async () => {
@@ -919,6 +938,7 @@ export default function DetailView() {
                   importCodeHint={shareImportCode ? t('share_card_import_hint') : undefined}
                   landingUrl={shareLandingUrl ?? undefined}
                   onReady={onShareCardReady}
+                  onQrReady={onShareQrReady}
                 />
               </RNView>
             ) : null}
