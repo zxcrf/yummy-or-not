@@ -20,6 +20,7 @@ export const zh: Record<string, string> = {
   set_default_visibility: "新记录默认公开到附近",
   set_visibility: "可见范围", vis_private: "私密", vis_public: "附近",
   vis_public_no_location: "添加位置后才能公开到附近",
+  vis_publish_failed: "已保存，但未能发布到附近。可在记录详情中重试。",
   loc_recorded: "位置已记录",
   loc_failed: "定位失败，可手动填写",
   loc_locating: "定位中…",

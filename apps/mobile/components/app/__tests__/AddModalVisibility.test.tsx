@@ -95,6 +95,7 @@ jest.mock('@/providers/I18nProvider', () => ({
         save_taste_web: 'Save',
         v_yum: 'YUM', v_meh: 'MEH', v_nah: 'NAH',
         vis_private: 'Private', vis_public: 'Nearby',
+        vis_publish_failed: 'Saved — but could not publish to Nearby. You can retry from the record.',
         loc_use_location: 'Use current location',
       }
       return map[key] ?? key
@@ -134,11 +135,12 @@ jest.mock('expo-location', () => ({
 }))
 jest.mock('expo-image-picker', () => ({}))
 jest.mock('expo-image-manipulator', () => ({}))
-jest.mock('react-native-reanimated', () => ({
-  FadeIn: { duration: () => ({}) },
-  FadeOut: { duration: () => ({}) },
-  default: { View: ({ children }: { children: React.ReactNode }) => children },
-}))
+// react-native-reanimated: use the global __mocks__/react-native-reanimated.js
+// (mapped via moduleNameMapper in jest.config.js). It exports Animated.View as
+// React.createElement('View', ...) which the test-renderer can reconcile cleanly.
+// Do NOT override with an inline jest.mock here — the inline factory runs hoisted
+// (before Babel transforms apply to the factory body), so JSX inside it can fail
+// to compile, and the global mock is already correct for tests.
 
 // ---- mock ds components ---------------------------------------------------
 
@@ -274,6 +276,33 @@ describe('AddModal — per-record visibility (S3c)', () => {
 
     expect(mockCreateTaste).toHaveBeenCalledTimes(1)
     expect(mockPublishTasteGeo).not.toHaveBeenCalled()
+  })
+
+  it('publishTasteGeo rejects → error surfaced, onSaved still called, record NOT implied public', async () => {
+    // RED: old fire-and-forget swallows the error; no error text rendered, user
+    // thinks record is public. GREEN: await + setError on failure so the user sees
+    // the message and knows the record stayed private.
+    authUser.defaultVisibility = 'shared'
+    mockPublishTasteGeo.mockRejectedValueOnce(new Error('network error'))
+    const { renderer, onSaved } = renderModal()
+    fillReady(renderer)
+    await captureLocation(renderer)
+
+    const save = findSaveButton(renderer)
+    await act(async () => { save[0].props.onClick() })
+
+    // createTaste was called (record saved).
+    expect(mockCreateTaste).toHaveBeenCalledTimes(1)
+    // publishTasteGeo was attempted.
+    expect(mockPublishTasteGeo).toHaveBeenCalledTimes(1)
+    // An error message is visible — user knows publish failed.
+    const errorNodes = renderer.root.findAll(
+      (n) => typeof n.props.children === 'string' &&
+        (n.props.children as string).includes('Saved — but could not publish'),
+    )
+    expect(errorNodes.length).toBeGreaterThan(0)
+    // onSaved is still called so navigation proceeds (record exists server-side).
+    expect(onSaved).toHaveBeenCalledWith('new-id')
   })
 
   it('no location → public is disabled and Save never publishes even when seed was shared', async () => {

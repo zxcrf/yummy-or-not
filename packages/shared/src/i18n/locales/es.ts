@@ -19,6 +19,7 @@ export const es: Record<string, string> = {
   set_default_visibility: "Nuevos registros visibles cerca por defecto",
   set_visibility: "Visibilidad", vis_private: "Privado", vis_public: "Cerca",
   vis_public_no_location: "Añade una ubicación para compartir cerca",
+  vis_publish_failed: "Guardado, pero no se pudo publicar en Cerca. Puedes reintentarlo desde el registro.",
   loc_recorded: "Ubicación registrada",
   loc_failed: "No se pudo obtener la ubicación",
   loc_locating: "Localizando…",

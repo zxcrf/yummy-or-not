@@ -19,6 +19,7 @@ export const ja: Record<string, string> = {
   set_default_visibility: "新規記録は既定で「近く」に公開",
   set_visibility: "公開範囲", vis_private: "非公開", vis_public: "近く",
   vis_public_no_location: "近くに公開するには位置を追加してください",
+  vis_publish_failed: "保存しましたが、「近く」への公開に失敗しました。詳細画面から再試行できます。",
   loc_recorded: "位置を記録しました",
   loc_failed: "位置情報を取得できません",
   loc_locating: "位置情報取得中…",

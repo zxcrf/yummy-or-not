@@ -583,15 +583,26 @@ export default function AddModal({ onClose, onSaved }: Props) {
       // S3c: if the user chose "Nearby" AND we captured coords, publish the new
       // record to the geo feed. createTaste can't publish itself (the POST route
       // writes no shares and geo needs the saved record's lat/lng), so this is a
-      // create-then-publish step. Fire-and-forget: the record is already saved,
-      // so a publish failure must NOT block navigation — the user can still flip
-      // it public from DetailView. Public is gated on coords in the UI, so a
-      // location-less record never reaches the 422 path here.
+      // create-then-publish step. The record is already saved — a publish failure
+      // must NOT block navigation, but the user must be told the record stayed
+      // private (not silently implied public). We await so the error can be
+      // surfaced, and we invalidate the cache exactly once with server truth
+      // (the publish response carries the actual visibility) to avoid the
+      // optimistic-race where invalidateTastes() fires before the server has
+      // written the shared visibility.
       if (visibility === 'shared' && lat != null && lng != null) {
-        void publishTasteGeo(created.id).then(
-          () => invalidateTastes(),
-          () => {},
-        )
+        try {
+          await publishTasteGeo(created.id)
+        } catch {
+          // Record is saved but publish failed — surface a non-blocking message
+          // so the user knows it is still private. They can retry from DetailView.
+          setError(t('vis_publish_failed'))
+          setSaving(false)
+          // Still navigate: the taste exists on the server, just unpublished.
+          void invalidateTastes()
+          onSaved(created.id)
+          return
+        }
       }
 
       void invalidateTastes()

@@ -19,6 +19,7 @@ export const ko: Record<string, string> = {
   set_default_visibility: "새 기록 기본 공개: 주변",
   set_visibility: "공개 범위", vis_private: "비공개", vis_public: "주변",
   vis_public_no_location: "주변에 공개하려면 위치를 추가하세요",
+  vis_publish_failed: "저장되었지만 주변에 공개하지 못했습니다. 기록 상세에서 다시 시도하세요.",
   loc_recorded: "위치 기록됨",
   loc_failed: "위치를 가져올 수 없습니다",
   loc_locating: "위치 확인 중…",

@@ -20,6 +20,7 @@ export const en: Record<string, string> = {
   set_default_visibility: "New records default to nearby",
   set_visibility: "Visibility", vis_private: "Private", vis_public: "Nearby",
   vis_public_no_location: "Add a location to share nearby",
+  vis_publish_failed: "Saved — but couldn't publish to Nearby. You can retry from the record.",
   loc_recorded: "Location recorded",
   loc_failed: "Couldn't get location",
   loc_locating: "Locating…",
