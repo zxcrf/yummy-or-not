@@ -496,8 +496,9 @@ export default function NearbyHeatView() {
                             {card.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
                           </View>
                         ) : null}
-                        {/* Category tags (bounded vocabulary — no PII). */}
-                        {card.tags.length > 0 ? (
+                        {/* Category tags (bounded vocabulary — no PII). Guard for
+                            version skew / older API returning no tags array. */}
+                        {Array.isArray(card.tags) && card.tags.length > 0 ? (
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
                             {card.tags.slice(0, 3).map((t) => (
                               <Tag key={t}>{t}</Tag>
@@ -577,7 +578,7 @@ export default function NearbyHeatView() {
                   {detailCard.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
                 </View>
 
-                {detailCard.tags.length > 0 ? (
+                {Array.isArray(detailCard.tags) && detailCard.tags.length > 0 ? (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] }}>
                     {detailCard.tags.map((t) => (
                       <Tag key={t}>{t}</Tag>

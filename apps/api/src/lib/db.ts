@@ -3,7 +3,7 @@
 import { createHash } from 'crypto';
 import { Pool } from 'pg';
 import type { Taste, Stats, CreateTasteInput, UpdateTasteInput, User, Plan, UserTag, TastePurchase, UpdateUserInput, Taster, CreateTasterInput, UpdateTasterInput } from '@yon/shared';
-import { FILTERS, geohashCellsInRadius, geohashCellsInBbox } from '@yon/shared';
+import { FILTERS, TAG_CHOICES, geohashCellsInRadius, geohashCellsInBbox } from '@yon/shared';
 import type { ProviderProfile } from './oauth';
 import { getPhotoPublicBaseUrl, getPhotoStorage, getPhotoCdnBaseUrl } from './env';
 import { getSignedPhotoUrl } from './storage';
@@ -748,10 +748,17 @@ export interface GeoFeedCard {
 
 /** SELECT list shared by the coarsened geo feeds: the taste's display fields +
  *  the share's grid_cell. Deliberately omits ts.geog, t.lat, t.lng, t.user_id,
- *  t.place, t.notes — anything that would deanonymize the card. tags /
- *  bought_count / warn_before_buy are safe to surface: a bounded category
- *  vocabulary, a counter, and a boolean carry no location or identity. */
+ *  t.place, t.notes — anything that would deanonymize the card. bought_count /
+ *  warn_before_buy are safe (a counter + a boolean carry no location/identity);
+ *  tags are FILTERED to a bounded vocabulary in rowToGeoFeedCard — see below. */
 const GEO_FEED_COLUMNS = `t.id, t.name, t.verdict, t.image, t.tags, t.bought_count, t.warn_before_buy, ts.grid_cell`;
+
+/** Tags allowed to cross the user boundary in a geo/family feed card. Stored
+ *  `tags` are FREE TEXT (normalizeTag only trims — a user can save "我家楼下店"),
+ *  so emitting them verbatim would leak a place/person and break S3c anonymity.
+ *  We intersect with the app's bounded tag vocabulary (TAG_CHOICES) so a card
+ *  can only ever surface a known category chip, never arbitrary user text. */
+const SAFE_GEO_TAGS: ReadonlySet<string> = new Set(TAG_CHOICES);
 
 async function rowToGeoFeedCard(row: {
   id: string;
@@ -772,7 +779,8 @@ async function rowToGeoFeedCard(row: {
     imageThumb: urls.imageThumb,
     imageDisplay: urls.imageDisplay,
     gridCell: row.grid_cell ?? '',
-    tags: row.tags ?? [],
+    // Strip any free-text tag — only known-vocabulary chips may cross the boundary.
+    tags: (row.tags ?? []).filter((t) => SAFE_GEO_TAGS.has(t)),
     boughtCount: row.bought_count ?? 1,
     warnBeforeBuy: row.warn_before_buy ?? false,
   };

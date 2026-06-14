@@ -103,9 +103,12 @@ async function seed(): Promise<void> {
   // t_near carries the de-anonymizing fields (place + notes) AND the safe
   // enrichment fields (tags / bought_count / warn_before_buy) so the coarsening
   // test can prove the safe ones surface while place/notes never do.
+  // t_near's tags mix bounded-vocabulary chips (Ramen/Spicy) with a FREE-TEXT
+  // tag that names a place ('我家楼下的店') — the feed must strip the free-text
+  // one and surface only the known-vocabulary chips.
   await raw(
     `INSERT INTO tastes (id, user_id, name, verdict, lat, lng, place, notes, tags, bought_count, warn_before_buy) VALUES
-       ('t_near','owner_a','Near Ramen','yum',$1,$2,'123 Secret St, Apt 4','my place downtown',ARRAY['Ramen','Spicy'],4,true),
+       ('t_near','owner_a','Near Ramen','yum',$1,$2,'123 Secret St, Apt 4','my place downtown',ARRAY['Ramen','我家楼下的店','Spicy'],4,true),
        ('t_far','owner_b','Far Sushi','meh',$3,$4,'','',ARRAY[]::text[],1,false),
        ('t_private','owner_a','Secret Spot','yum',$1,$2,'','',ARRAY[]::text[],1,false);`,
     [NEAR.lat, NEAR.lng, FAR.lat, FAR.lng],
@@ -232,7 +235,9 @@ d('PostGIS geo feed — ST_DWithin radius, coarsening, private-row exclusion', (
     const rows = await listGeoFeedByCell(NEAR_CELL);
     const near = rows.find((c) => c.name === 'Near Ramen');
     expect(near).toBeDefined();
+    // Free-text '我家楼下的店' is STRIPPED — only bounded-vocabulary chips survive.
     expect(near!.tags).toEqual(['Ramen', 'Spicy']);
+    expect(near!.tags).not.toContain('我家楼下的店');
     expect(near!.boughtCount).toBe(4);
     expect(near!.warnBeforeBuy).toBe(true);
     expect(near).not.toHaveProperty('place');
