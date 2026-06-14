@@ -44,6 +44,7 @@ function asVerdict(v: unknown): KnownVerdict | null {
 }
 
 import { initAmapIfConsented } from '@/lib/amapPrivacy'
+import { useLocateResult } from '@/app/(tabs)/_useUserCoords'
 import { decideHeatFetch, heatColorForCount, regionToBbox, type Bbox } from '@/lib/heatView'
 import { Button, Card, Icon, VerdictStamp } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
@@ -51,11 +52,31 @@ import { colors, space, radius, Text } from '@/theme'
 const CONSENT_KEY = 'yon_amap_consent'
 const DEBOUNCE_MS = 300
 
-// Shanghai People's Square — a sane default camera until the map settles.
-const INITIAL = {
+// Shanghai People's Square — the fallback center when we have no GPS fix
+// (permission denied / services off / timeout). WGS-84; converted to GCJ-02
+// before it ever reaches AMap.
+const FALLBACK = {
   latitude: 31.2304,
   longitude: 121.4737,
-  zoom: 13,
+}
+// Zoom that lands inside decideHeatFetch's allowed bbox (so heat loads on entry
+// without first nagging "放大查看").
+const ENTRY_ZOOM = 15
+
+/**
+ * Build the AMap initial camera (GCJ-02) for entry. With a GPS fix we center on
+ * the user; otherwise we center on the FALLBACK city. The input is WGS-84 (GPS
+ * / our default), so we ALWAYS convert via wgs84ToGcj02 — AMap is GCJ-02, and
+ * skipping the conversion would offset the center by ~hundreds of metres in
+ * China. Returns the camera plus whether it reflects a real user fix.
+ */
+export function initialCameraFromCoords(coords: { lat: number; lng: number } | null) {
+  const src = coords ?? { lat: FALLBACK.latitude, lng: FALLBACK.longitude }
+  const g = wgs84ToGcj02(src.lat, src.lng)
+  return {
+    centered: coords != null,
+    camera: { target: { latitude: g.lat, longitude: g.lng }, zoom: ENTRY_ZOOM },
+  }
 }
 
 interface HeatCell {
@@ -82,6 +103,12 @@ export default function NearbyHeatView() {
   const [cells, setCells] = useState<HeatCell[]>([])
   const [hint, setHint] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Default-locate on entry: only request the fix AFTER consent (so the OS
+  // location prompt never precedes the AMap privacy gate). We hold the map
+  // mount until the locate is settled (got a fix, or failed/denied) so the
+  // INITIAL camera reflects the user's position instead of snapping later.
+  const locate = useLocateResult(consent === true)
 
   // Selected-cell bottom sheet.
   const [sheetCell, setSheetCell] = useState<string | null>(null)
@@ -237,12 +264,12 @@ export default function NearbyHeatView() {
     [cells, openCellSheet],
   )
 
-  const initialCameraPosition = useMemo(
-    () => {
-      const c = wgs84ToGcj02(INITIAL.latitude, INITIAL.longitude)
-      return { target: { latitude: c.lat, longitude: c.lng }, zoom: INITIAL.zoom }
-    },
-    [],
+  // Camera is computed from the settled locate result. While locating we keep
+  // it null (we don't mount the map yet — see below) so the very first frame is
+  // already centered on the user and never jumps from the fallback city.
+  const initial = useMemo(
+    () => initialCameraFromCoords(locate.coords),
+    [locate.coords],
   )
 
   // --- Loading consent state ---
@@ -284,12 +311,24 @@ export default function NearbyHeatView() {
     )
   }
 
-  // --- Map (consent granted, SDK initialized) ---
+  // --- Locating (consent granted, waiting for the GPS fix) ---
+  // Hold the map mount until the locate settles so the first frame is already
+  // centered on the user (no fallback-city → user jump).
+  if (locate.status === 'locating') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator color={colors.ink900} />
+        <Text style={{ marginTop: space[3], color: colors.ink500, fontSize: 13 }}>定位中…</Text>
+      </View>
+    )
+  }
+
+  // --- Map (consent granted, SDK initialized, locate settled) ---
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <MapView
         style={{ flex: 1 }}
-        initialCameraPosition={initialCameraPosition}
+        initialCameraPosition={initial.camera}
         // Native gestures own pan/zoom — we don't reimplement them.
         onCameraIdle={onCameraIdle}
         onPress={onMapPress}
@@ -304,6 +343,33 @@ export default function NearbyHeatView() {
           />
         ))}
       </MapView>
+
+      {/* Locate fell back to the default city — say so explicitly (don't show a
+          wrong place silently). Non-blocking; the map is still usable. */}
+      {!initial.centered ? (
+        <View
+          testID="nearby-fallback-notice"
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: space[4],
+            alignSelf: 'center',
+            maxWidth: '88%',
+            backgroundColor: colors.white,
+            borderWidth: 2,
+            borderColor: colors.ink900,
+            borderRadius: radius.pill,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+          }}
+        >
+          <Text style={{ fontWeight: '600', fontSize: 12, textAlign: 'center' }}>
+            {locate.status === 'denied'
+              ? '未授权定位，已显示默认城市'
+              : '定位失败，已显示默认城市'}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Status banner: zoom hint, empty hint, or loading. */}
       {hint ? (

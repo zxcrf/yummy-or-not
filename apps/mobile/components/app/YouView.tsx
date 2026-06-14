@@ -309,12 +309,7 @@ export default function YouView({ items }: Props) {
             testID="default-visibility-switch"
           />
         </View>
-        {/* S3c — "附近 · 热力" nearby heatmap (AMap) entry */}
-        <SettingRow
-          icon="map"
-          label="附近 · 热力"
-          onPress={() => router.push('/nearby')}
-        />
+        {/* "附近 · 热力" is now a bottom tab (附近) — no duplicate entry here. */}
         {/* Tag management — navigates to /tags stack screen */}
         <SettingRow
           icon="tag"

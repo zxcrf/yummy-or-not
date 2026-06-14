@@ -54,11 +54,12 @@ interface NavMeta {
 }
 
 // Ordered to match the shell. `add` is handled separately (FAB/CTA).
-// Recall folded into Library (search inside 口味), so the bar is now
-// Library + To-Try on the left of the FAB and You on the right.
+// Recall folded into Library (search inside 口味). The bar is now
+// Library + To-Try left of the FAB, Nearby + You to its right.
 const NAV: NavMeta[] = [
   { route: 'index', icon: 'grid', labelKey: 'my_tastes' },
   { route: 'todo', icon: 'bookmark', labelKey: 'nav_todo' },
+  { route: 'nearby', icon: 'map', labelKey: 'nav_nearby' },
   { route: 'you', icon: 'user', labelKey: 'nav_you' },
 ]
 
@@ -383,6 +384,7 @@ function TabBar({ props }: { props: TabBarProps }) {
       </View>
 
       {tab(NAV[2])}
+      {tab(NAV[3])}
     </View>
   )
 }
