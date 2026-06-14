@@ -141,6 +141,9 @@ importers:
       react-native:
         specifier: 0.85.3
         version: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3)
+      react-native-amap3d:
+        specifier: ^3.2.4
+        version: 3.2.4
       react-native-keyboard-controller:
         specifier: ^1.21.11
         version: 1.21.11(react-native-reanimated@4.3.1(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
@@ -3311,6 +3314,9 @@ packages:
   jsonify@0.0.1:
     resolution: {integrity: sha512-2/Ki0GcmuqSrgFyelQq9M05y7PS0mEwuIzrf3f1fPqkVDVRvZrPZtVSMHxdgo8Aq0sxAOb/cr2aqqA3LeWHVPg==}
 
+  kdbush@3.0.0:
+    resolution: {integrity: sha512-hRkd6/XW4HTsA9vjVpY9tuXJYLSlelnkTmVFu4M9/7MIYQtFcHpbugAU7UbOfjOiVSVYl2fqgBuJ32JUmRo5Ew==}
+
   kleur@3.0.3:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
@@ -4042,6 +4048,9 @@ packages:
   react-is@19.2.7:
     resolution: {integrity: sha512-kZFnouyVv7eP/Phmrlo9FK+zcAdriZJvzxXHF1Sl1P377WSGe2G/JxVolhTrB/jeV47lKImhNUsijjHAAbcl/A==}
 
+  react-native-amap3d@3.2.4:
+    resolution: {integrity: sha512-Cp7Tqd87arrxoBQdUGwmtjv7BuSt1XAqc/G+a/woI/pJqlUQScMqW/iHNJKC4jWr3wrJeaOYcjkOouoWCdDoOw==}
+
   react-native-drawer-layout@4.2.4:
     resolution: {integrity: sha512-l1Le5HcVidobnJm8xqFZo46Rs8FDHdxbTZhkjxpNSRgU+QMoQXilOfzTHAeNjEGiKVGgIs9cW3ctXeHqgp5jJg==}
     peerDependencies:
@@ -4483,6 +4492,9 @@ packages:
 
   styleq@0.1.3:
     resolution: {integrity: sha512-3ZUifmCDCQanjeej1f6kyl/BeP/Vae5EYkQ9iJfUm/QwZvlgnZzyflqAsAWYURdtea8Vkvswu2GrC57h3qffcA==}
+
+  supercluster@7.1.5:
+    resolution: {integrity: sha512-EulshI3pGUM66o6ZdH3ReiFcvHpM3vAigyK+vcxdjpJyEbIIrtbmBdY23mGgnI24uXiGFvrGq9Gkum/8U7vJWg==}
 
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
@@ -8842,6 +8854,8 @@ snapshots:
 
   jsonify@0.0.1: {}
 
+  kdbush@3.0.0: {}
+
   kleur@3.0.3: {}
 
   lan-network@0.2.1: {}
@@ -9587,6 +9601,10 @@ snapshots:
 
   react-is@19.2.7: {}
 
+  react-native-amap3d@3.2.4:
+    dependencies:
+      supercluster: 7.1.5
+
   react-native-drawer-layout@4.2.4(49a25dd79b3f1d0bc05abe66b286f4b8):
     dependencies:
       color: 4.2.3
@@ -10077,6 +10095,10 @@ snapshots:
 
   styleq@0.1.3:
     optional: true
+
+  supercluster@7.1.5:
+    dependencies:
+      kdbush: 3.0.0
 
   supports-color@5.5.0:
     dependencies:

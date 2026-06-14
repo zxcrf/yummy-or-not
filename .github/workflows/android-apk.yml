@@ -72,7 +72,45 @@ jobs:
 
       - name: Expo prebuild (generate android/)
         working-directory: apps/mobile
+        env:
+          # withAmapAndroidKey reads this to write the AMap key into AndroidManifest.
+          EXPO_PUBLIC_AMAP_ANDROID_SDK_KEY: ${{ secrets.AMAP_ANDROID_SDK_KEY }}
         run: test -f android/settings.gradle || pnpm exec expo prebuild --platform android --no-install
+
+      - name: Configure release signing
+        # Decode the fixed release keystore and expose its credentials as
+        # user-level gradle properties. The release signingConfig itself is
+        # injected into app/build.gradle by the withReleaseSigning config plugin
+        # (survives prebuild regeneration); that block is guarded by
+        # project.hasProperty('YON_RELEASE_STORE_FILE'), so when the secret is
+        # absent (forks / PRs) the build silently falls back to debug signing.
+        # A FIXED keystore is REQUIRED for the AMap SDK: its key is bound to this
+        # keystore's SHA1, so an unstable signature → map white-screen.
+        # (secrets context is unavailable in `if:`, so the presence check lives
+        # inside the script.)
+        env:
+          YON_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          YON_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          YON_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          YON_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${YON_KEYSTORE_BASE64:-}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 secret not set — skipping release signing (APK will be debug-signed)."
+            exit 0
+          fi
+          # Decode OUTSIDE apps/mobile/android — that path is cached by a later
+          # step, and a signing keystore must never land in GHA cache. RUNNER_TEMP
+          # is per-run and discarded. storeFile uses this absolute path.
+          KS="$RUNNER_TEMP/yummyornot-release.keystore"
+          echo "$YON_KEYSTORE_BASE64" | base64 -d > "$KS"
+          mkdir -p ~/.gradle
+          {
+            echo "YON_RELEASE_STORE_FILE=${KS}"
+            echo "YON_RELEASE_KEY_ALIAS=${YON_KEY_ALIAS}"
+            echo "YON_RELEASE_STORE_PASSWORD=${YON_STORE_PASSWORD}"
+            echo "YON_RELEASE_KEY_PASSWORD=${YON_KEY_PASSWORD}"
+          } >> ~/.gradle/gradle.properties
 
       - name: Configure Gradle properties
         # Write to ~/.gradle/gradle.properties (user-level) so android/gradle.properties
@@ -101,6 +139,9 @@ jobs:
           --stacktrace
         env:
           EXPO_PUBLIC_API_URL: https://yon.baobao.click
+          # Inlined into the JS bundle during the metro bundle (assembleRelease) so
+          # amapPrivacy.initAmapIfConsented passes the key to AMapSdk.init.
+          EXPO_PUBLIC_AMAP_ANDROID_SDK_KEY: ${{ secrets.AMAP_ANDROID_SDK_KEY }}
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Save android project cache

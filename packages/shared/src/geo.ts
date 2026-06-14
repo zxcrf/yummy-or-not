@@ -331,6 +331,94 @@ export function geohashCellsInRadius(
   );
 }
 
+// ── Geohash heat layer (S3c "附近·热力" AMap map) ──────────────────────────────
+// The AMap heat layer renders one polygon per precision-5 cell. Two privacy +
+// correctness constraints (see docs/product/plans/share-and-circles.md §S3c):
+//   - AMap consumes GCJ-02. A raw WGS-84 cell center/corner drifts ~hundreds of
+//     metres in China, so EVERY coordinate fed to amap must pass wgs84ToGcj02.
+//   - The viewport gate must agree with the server's GEOHASH_COVER_CAP so a
+//     viewport that would 400 `area_too_large` is refused client-side BEFORE
+//     fetching (zoom-cap). estimateBboxCellCount is the cheap analytic estimate
+//     (no enumeration) used for that gate.
+
+/** A precision-`cell`-length geohash cell's center, shifted WGS-84 → GCJ-02 so
+ *  it can be fed directly to AMap. In China the GCJ-02 offset is ~hundreds of
+ *  metres from the raw WGS-84 midpoint; outside China wgs84ToGcj02 is identity. */
+export function geohashCellCenterGcj02(cell: string): { lat: number; lng: number } {
+  const b = decodeGeohashBounds(cell);
+  const midLat = (b.minLat + b.maxLat) / 2;
+  const midLng = (b.minLng + b.maxLng) / 2;
+  return wgs84ToGcj02(midLat, midLng);
+}
+
+/** The 4 GCJ-02 corners (amap {latitude,longitude} shape) of a geohash cell,
+ *  for an AMap Polygon. Each WGS-84 corner is converted independently via
+ *  wgs84ToGcj02 (the offset varies slightly across the cell, so the rect stays
+ *  a real non-degenerate quad that strictly bounds geohashCellCenterGcj02). */
+export function geohashCellRectGcj02(
+  cell: string,
+): Array<{ latitude: number; longitude: number }> {
+  const b = decodeGeohashBounds(cell);
+  const corners: Array<[number, number]> = [
+    [b.minLat, b.minLng],
+    [b.minLat, b.maxLng],
+    [b.maxLat, b.maxLng],
+    [b.maxLat, b.minLng],
+  ];
+  return corners.map(([lat, lng]) => {
+    const g = wgs84ToGcj02(lat, lng);
+    return { latitude: g.lat, longitude: g.lng };
+  });
+}
+
+/** Grid-aligned UPPER bound on the precision-`precision` geohash cells covering a
+ *  bbox — `(ceil(latSpan/latStep)+1) * (ceil(lngSpan/lngStep)+1)`, NO enumeration.
+ *
+ *  The trailing `+1` per axis is what makes this a true UPPER bound that never
+ *  undercounts the real enumerator (geohashCellsInBbox): a span of width w placed
+ *  at an arbitrary grid offset can straddle one extra cell boundary, so a plain
+ *  `ceil(w/step)` (or `floor(w/step)+1`) can be one short — e.g. a 64-cell-wide
+ *  box can touch 65 distinct cells. Undercounting would let through a viewport the
+ *  server then 400s `area_too_large`. (The authoritative zoom-cap gate is
+ *  isBboxHeatQueryable, which delegates to the enumerator; this estimate is the
+ *  cheap O(1) bound for UI hints.)
+ *
+ *  Position-independent (depends only on span widths), so a wrapped window and a
+ *  non-wrapped one of equal width yield the same count.
+ *
+ *  Antimeridian: when `box.minLng > box.maxLng` the box wraps the dateline; the
+ *  longitude span is the wrapped width `(maxLng - minLng + 360) % 360`. */
+export function estimateBboxCellCount(box: GeohashBounds, precision = 5): number {
+  const latStep = geohashLatStep(precision);
+  const lngStep = geohashLngStep(precision);
+
+  const latSpan = Math.abs(box.maxLat - box.minLat);
+  const lngSpan =
+    box.minLng > box.maxLng
+      ? ((box.maxLng - box.minLng + 360) % 360)
+      : box.maxLng - box.minLng;
+
+  const latCells = Math.ceil(latSpan / latStep) + 1;
+  const lngCells = Math.ceil(lngSpan / lngStep) + 1;
+  return latCells * lngCells;
+}
+
+/** Whether a heat query for this bbox is allowed. AUTHORITATIVE: delegates to the
+ *  SAME enumerator the server uses (geohashCellsInBbox), so the client-side
+ *  zoom-cap gate exactly matches the server's GEOHASH_COVER_CAP — a viewport that
+ *  would 400 `area_too_large` is refused before fetching, and one that wouldn't is
+ *  never spuriously blocked. estimateBboxCellCount stays as the cheap O(1)
+ *  upper-bound (e.g. for UI hints), but the gate itself uses the real cover. */
+export function isBboxHeatQueryable(box: GeohashBounds, precision = 5): boolean {
+  try {
+    geohashCellsInBbox(box, precision);
+    return true;
+  } catch (e) {
+    if (e instanceof GeohashCoverTooLargeError) return false;
+    throw e;
+  }
+}
+
 /** Convert a WGS-84 coordinate to GCJ-02 (China Mars coordinate).
  *  Returns the input unchanged if the point is outside China. */
 export function wgs84ToGcj02(lat: number, lng: number): { lat: number; lng: number } {
@@ -348,4 +436,17 @@ export function wgs84ToGcj02(lat: number, lng: number): { lat: number; lng: numb
   dLng = (dLng * 180.0) / ((a / sqrtMagic) * Math.cos(radLat) * Math.PI);
 
   return { lat: lat + dLat, lng: lng + dLng };
+}
+
+/** Convert a GCJ-02 coordinate back to WGS-84 (the standard one-step inverse of
+ *  wgs84ToGcj02). AMap returns camera/region coords in GCJ-02, but the server's
+ *  geohash space is WGS-84, so every viewport corner sent to the geo heat/feed
+ *  endpoints MUST pass through this first. Outside China the transform is
+ *  identity (matching wgs84ToGcj02). Accuracy is ~1e-4° (well under one cell).
+ *  Input lat/lng are treated as the GCJ-02 point; we compute the forward offset
+ *  AT that point and subtract it (g = wgs84ToGcj02(lat,lng); wgs = 2*p - g). */
+export function gcj02ToWgs84(lat: number, lng: number): { lat: number; lng: number } {
+  if (!isInsideChina(lat, lng)) return { lat, lng };
+  const g = wgs84ToGcj02(lat, lng);
+  return { lat: lat * 2 - g.lat, lng: lng * 2 - g.lng };
 }

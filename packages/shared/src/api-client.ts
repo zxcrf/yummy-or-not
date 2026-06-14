@@ -408,3 +408,47 @@ export async function resolveImportCode(code: string): Promise<{ token: string }
     `/api/share/resolve?code=${encodeURIComponent(code)}`,
   );
 }
+
+/* ── S3c geo feeds ("附近·热力" heat map) ──────────────────────────────────────── */
+
+/** One precision-5 heat grid cell: the cell geohash and its k-anon count.
+ *  The server only returns cells with count >= 3, so sparse cells are absent —
+ *  never assume every cell in a viewport is present. */
+export interface GeoHeatCell {
+  cell: string;
+  count: number;
+}
+
+/** A single anonymous taste card surfaced by the cell feed. Coarsened to
+ *  `gridCell` (precision-5 geohash) — never a precise coordinate or identity. */
+export interface GeoFeedCard {
+  id: string;
+  name: string;
+  verdict: string | null;
+  image: string;
+  imageThumb: string;
+  imageDisplay: string;
+  gridCell: string;
+}
+
+/** GET /api/feed/geo/heat?bbox=minLng,minLat,maxLng,maxLat — the precision-5 heat
+ *  grid for a viewport. bbox component order is EXACTLY minLng,minLat,maxLng,maxLat
+ *  with literal commas (raw numbers, no encodeURIComponent). A bbox over the cover
+ *  cap answers 400 {error:'area_too_large'} → apiFetch rejects Error('area_too_large');
+ *  callers gate with isBboxHeatQueryable before calling to avoid that round-trip. */
+export async function getGeoHeat(box: {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}): Promise<GeoHeatCell[]> {
+  const bbox = `${box.minLng},${box.minLat},${box.maxLng},${box.maxLat}`;
+  return apiFetch<GeoHeatCell[]>(`/api/feed/geo/heat?bbox=${bbox}`);
+}
+
+/** GET /api/feed/geo?cell=<geohash5> — the anonymous taste cards in one cell.
+ *  A missing/empty cell answers 400 {error:'cell_required'} → rejects
+ *  Error('cell_required'). */
+export async function getGeoFeedByCell(cell: string): Promise<GeoFeedCard[]> {
+  return apiFetch<GeoFeedCard[]>(`/api/feed/geo?cell=${encodeURIComponent(cell)}`);
+}

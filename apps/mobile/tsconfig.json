@@ -6,12 +6,16 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "react-native-amap3d": [
+        "./types/react-native-amap3d.d.ts"
       ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    "types/**/*.d.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ]
