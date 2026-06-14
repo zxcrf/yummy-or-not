@@ -398,7 +398,7 @@ export default function YouView({ items }: Props) {
                   onPress={submitEditName}
                   testID="save-name-btn"
                 >
-                  {t('save_taste')}
+                  {t('save')}
                 </Button>
               </View>
             </Pressable>

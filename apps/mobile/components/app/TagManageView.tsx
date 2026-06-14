@@ -157,7 +157,7 @@ export default function TagManageView() {
                   onPress={submitRename}
                   testID="rename-confirm-btn"
                 >
-                  {t('save_taste')}
+                  {t('save')}
                 </Button>
               </View>
             </Pressable>

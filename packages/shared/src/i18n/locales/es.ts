@@ -9,7 +9,7 @@ export const es: Record<string, string> = {
   verdict_on_file: "Veredicto guardado", loved_it: "Te encantó", soso: "Estuvo regular", skip_it: "Dijiste que no",
   no_record: "Sin registro de “{q}”.", try_then_log: "Prúebalo y anota tu veredicto.", log_it_now: "Anótalo ahora",
   add_photo: "Añadir foto", photo_permission_denied: "Se necesita acceso a fotos para elegir una imagen.", f_what: "¿Qué probaste?", f_what_todo: "¿Qué quieres probar?", f_where: "¿Dónde?", f_price: "Precio",
-  how_was_it: "¿Qué tal estuvo?", tags: "Etiquetas", add_tag: "Añadir etiqueta", tag_placeholder: "Nueva etiqueta", your_take: "Tu opinión", save_taste: "Guardar este sabor", save_taste_web: "Guardar",
+  how_was_it: "¿Qué tal estuvo?", tags: "Etiquetas", add_tag: "Añadir etiqueta", tag_placeholder: "Nueva etiqueta", your_take: "Tu opinión", save: "Guardar", save_taste: "Guardar este sabor", save_taste_web: "Guardar",
   add_close_title: "¿Guardar el borrador?", add_close_body: "Tienes cambios sin guardar. ¿Guardarlos como borrador para terminar luego?", add_save_draft: "Guardar borrador", add_discard: "Descartar",
   cancel: "Cancelar", bought_n: "Comprado {n}×", your_note: "Tu nota", warn_before: "Avísame antes de volver a comprarlo",
   delete_log: "Eliminar registro", edit: "Editar", del: "Eliminar", stats_title: "Tus datos", saved_amt: "{amt} ahorrados",

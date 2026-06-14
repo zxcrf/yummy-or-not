@@ -10,7 +10,7 @@ export const zh: Record<string, string> = {
   verdict_on_file: "已存评价", loved_it: "你很喜欢", soso: "一般般", skip_it: "你说别买",
   no_record: "没有“{q}”的记录。", try_then_log: "尝过之后记录你的评价。", log_it_now: "立即记录",
   add_photo: "添加照片", photo_permission_denied: "需要照片权限才能选择图片。", f_what: "你吃了什么？", f_what_todo: "想吃什么？", f_where: "在哪里？", f_price: "价格",
-  how_was_it: "怎么样？", tags: "标签", add_tag: "添加标签", tag_placeholder: "新增标签", your_take: "你的看法", save_taste: "保存这个口味", save_taste_web: "保存",
+  how_was_it: "怎么样？", tags: "标签", add_tag: "添加标签", tag_placeholder: "新增标签", your_take: "你的看法", save: "保存", save_taste: "保存这个口味", save_taste_web: "保存",
   add_close_title: "保存草稿？", add_close_body: "你有未保存的内容。保存为草稿，下次继续？", add_save_draft: "保存草稿", add_discard: "不保存",
   cancel: "取消", bought_n: "购买 {n} 次", your_note: "你的备注", warn_before: "再次购买前提醒我",
   delete_log: "删除记录", edit: "编辑", del: "删除", stats_title: "你的统计", saved_amt: "省下 {amt}",

@@ -10,7 +10,7 @@ export const en: Record<string, string> = {
   verdict_on_file: "Verdict on file", loved_it: "You loved it", soso: "It was so-so", skip_it: "You said skip it",
   no_record: "No record of “{q}”.", try_then_log: "Try it, then log the verdict.", log_it_now: "Log it now",
   add_photo: "Add a photo", photo_permission_denied: "Photo access is needed to choose a picture.", f_what: "What did you have?", f_what_todo: "What do you want to try?", f_where: "Where?", f_price: "Price",
-  how_was_it: "How was it?", tags: "Tags", add_tag: "Add tag", tag_placeholder: "New tag", your_take: "Your take", save_taste: "Save this taste", save_taste_web: "Save taste",
+  how_was_it: "How was it?", tags: "Tags", add_tag: "Add tag", tag_placeholder: "New tag", your_take: "Your take", save: "Save", save_taste: "Save this taste", save_taste_web: "Save taste",
   add_close_title: "Save your draft?", add_close_body: "You have unsaved changes. Keep them as a draft to finish later?", add_save_draft: "Save draft", add_discard: "Discard",
   cancel: "Cancel", bought_n: "Bought {n}×", your_note: "Your note", warn_before: "Warn me before I buy again",
   delete_log: "Delete log", edit: "Edit", del: "Delete", stats_title: "Your stats", saved_amt: "{amt} saved",

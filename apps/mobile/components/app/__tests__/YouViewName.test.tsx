@@ -73,7 +73,8 @@ jest.mock('@/providers/I18nProvider', () => ({
         meh: 'Meh',
         nah: 'Nah',
         pro_plan: 'Pro',
-        save_taste: 'Save',
+        save: 'Save',
+        save_taste: 'Save this taste',
         saved_amt: `${vars?.amt} saved`,
         saved_sub: 'by skipping',
         set_location: 'Location',
@@ -200,6 +201,19 @@ describe('YouView nickname edit modal', () => {
     expect(mockUpdateUser).toHaveBeenCalledWith({ displayName: 'New Name' })
     // patchUser receives whatever the server returned (only displayName in this mock)
     expect(mockPatchUser).toHaveBeenCalledWith(expect.objectContaining({ displayName: 'Alice Edited' }))
+  })
+
+  // Regression (#103): the nickname save button reused the taste-record string
+  // t('save_taste') = "Save this taste" / "保存这个口味", which is absurd on a
+  // username edit sheet. It must use the generic t('save').
+  it('save button shows the generic save label, not the taste-record string', () => {
+    const renderer = renderYouView()
+    act(() => {
+      renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
+    })
+    const saveBtn = renderer.root.findByProps({ testID: 'save-name-btn' })
+    expect(saveBtn.props.children).toBe('Save')
+    expect(saveBtn.props.children).not.toBe('Save this taste')
   })
 
   it('shows error and does not call updateUser for empty input', async () => {
