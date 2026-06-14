@@ -21,7 +21,7 @@
    ============================================================ */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, ScrollView, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Image } from 'expo-image'
 import { MapView, Polygon } from 'react-native-amap3d'
@@ -125,6 +125,10 @@ export default function NearbyHeatView() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reqSeq = useRef(0)
+  // Tracks the most-recently SEEN viewport (set unconditionally in onCameraIdle).
+  // Refresh reads this so it always re-fetches what the user is currently looking at.
+  const currentViewportBboxRef = useRef<Bbox | null>(null)
+  const mapRef = useRef<InstanceType<typeof MapView> | null>(null)
 
   // Restore persisted consent on mount; init the SDK if already consented.
   useEffect(() => {
@@ -225,6 +229,9 @@ export default function NearbyHeatView() {
         longitudeDelta: Math.abs(ne.lng - sw.lng),
       }
       const box = regionToBbox(region)
+      // Always record the current viewport for Refresh, regardless of whether
+      // decideHeatFetch would approve the bbox (e.g. zoomed out too far).
+      currentViewportBboxRef.current = box
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         void loadHeat(box)
@@ -274,6 +281,44 @@ export default function NearbyHeatView() {
     },
     [cells, openCellSheet],
   )
+
+
+  const handleLocate = useCallback(() => {
+    if (!locate.coords) return
+    const g = wgs84ToGcj02(locate.coords.lat, locate.coords.lng)
+    mapRef.current?.moveCamera({ target: { latitude: g.lat, longitude: g.lng }, zoom: ENTRY_ZOOM }, 400)
+  }, [locate.coords])
+
+  const handleRefresh = useCallback(() => {
+    const box = currentViewportBboxRef.current
+    if (!box) return // no viewport seen yet — safe no-op
+    // Bypass decideHeatFetch: an explicit user refresh should always hit the
+    // network for whatever the user is currently looking at, even if the bbox
+    // would normally be skipped (oversized, dedup, etc.).
+    const seq = ++reqSeq.current
+    setLoading(true)
+    setHint(null)
+    void getGeoHeat(box)
+      .then((heat) => {
+        if (seq !== reqSeq.current) return
+        const next: HeatCell[] = heat.map(({ cell, count }) => ({
+          cell,
+          count,
+          points: geohashCellRectGcj02(cell),
+        }))
+        setCells(next)
+        setHint(next.length === 0 ? '这一带还没有公开的味道' : null)
+      })
+      .catch((err) => {
+        if (seq !== reqSeq.current) return
+        const code = err instanceof Error ? err.message : ''
+        setCells([])
+        setHint(code === 'area_too_large' ? '放大查看附近热力' : '加载失败，稍后再试')
+      })
+      .finally(() => {
+        if (seq === reqSeq.current) setLoading(false)
+      })
+  }, [])
 
   // Camera is computed from the settled locate result. While locating we keep
   // it null (we don't mount the map yet — see below) so the very first frame is
@@ -338,6 +383,7 @@ export default function NearbyHeatView() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <MapView
+        ref={mapRef}
         style={{ flex: 1 }}
         initialCameraPosition={initial.camera}
         // Native gestures own pan/zoom — we don't reimplement them.
@@ -355,6 +401,28 @@ export default function NearbyHeatView() {
         ))}
       </MapView>
 
+
+      {/* Map overlay controls: locate + refresh. */}
+      <View style={styles.mapControls} pointerEvents="box-none">
+        <Pressable
+          testID="nearby-locate-btn"
+          accessibilityRole="button"
+          accessibilityLabel="定位到我的位置"
+          onPress={handleLocate}
+          style={styles.mapControlBtn}
+        >
+          <Icon name="pin" size={20} color={colors.ink900} />
+        </Pressable>
+        <Pressable
+          testID="nearby-refresh-btn"
+          accessibilityRole="button"
+          accessibilityLabel="刷新附近数据"
+          onPress={handleRefresh}
+          style={styles.mapControlBtn}
+        >
+          <Icon name="arrow-up" size={20} color={colors.ink900} />
+        </Pressable>
+      </View>
       {/* Locate fell back to the default city — say so explicitly (don't show a
           wrong place silently). Non-blocking; the map is still usable. */}
       {!initial.centered ? (
@@ -487,13 +555,10 @@ export default function NearbyHeatView() {
                       </View>
                       <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
                         <Text style={{ fontWeight: '700', fontSize: 16 }}>{card.name}</Text>
-                        {/* Safe meta row: repurchase counter + warn flag. */}
-                        {card.boughtCount > 1 || card.warnBeforeBuy ? (
+                        {/* Repurchase counter (warnBeforeBuy removed — overkill for geo cards). */}
+                        {card.boughtCount > 1 ? (
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
-                            {card.boughtCount > 1 ? (
-                              <Badge tone="dark">回购 {card.boughtCount}</Badge>
-                            ) : null}
-                            {card.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
+                            <Badge tone="dark">回购 {card.boughtCount}</Badge>
                           </View>
                         ) : null}
                         {/* Category tags (bounded vocabulary — no PII). Guard for
@@ -523,7 +588,7 @@ export default function NearbyHeatView() {
       </Modal>
 
       {/* Card detail sub-sheet — a richer view of the SAME coarsened fields:
-          big image + verdict + tags + repurchase + warn. NEVER precise coord,
+          big image + verdict + tags + repurchase. NEVER precise coord,
           place, notes, or identity (those are not even on GeoFeedCard). */}
       <Modal visible={detailCard != null} transparent animationType="slide" onRequestClose={closeDetail}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={closeDetail}>
@@ -575,7 +640,6 @@ export default function NearbyHeatView() {
                     <VerdictStamp verdict={asVerdict(detailCard.verdict)!} size="md" />
                   ) : null}
                   {detailCard.boughtCount > 1 ? <Badge tone="dark">回购 {detailCard.boughtCount}</Badge> : null}
-                  {detailCard.warnBeforeBuy ? <Badge tone="nah">⚠️ 踩雷</Badge> : null}
                 </View>
 
                 {Array.isArray(detailCard.tags) && detailCard.tags.length > 0 ? (
@@ -597,3 +661,25 @@ export default function NearbyHeatView() {
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  mapControls: {
+    position: 'absolute',
+    right: 12,
+    bottom: 80,
+    gap: 8,
+    alignItems: 'center',
+    pointerEvents: 'box-none',
+  },
+  mapControlBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#191017',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+  },
+})
