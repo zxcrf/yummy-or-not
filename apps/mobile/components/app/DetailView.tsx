@@ -36,6 +36,7 @@ import {
   VerdictStamp,
 } from '@/components/ds'
 import { ShareCard } from '@/components/app/ShareCard'
+import { markShareCodeHandled } from '@/components/app/shareImportDedupe'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -428,9 +429,6 @@ export default function DetailView() {
     }
   }
 
-  // The original top-row "Share" button now uses the pure-PNG mode.
-  const handleShare = handleSharePng
-
   // ── 可导入 (淘口令) share mode ────────────────────────────────────────────
   // Mint a thin token, then deliver the importCode through THREE channels so it
   // reaches the recipient no matter how the share is forwarded:
@@ -468,11 +466,19 @@ export default function DetailView() {
       // Plain text (not via t() interpolation) so the link/口令 survive verbatim.
       const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}\n${passphrase}`
       await captureAndShare(ready, text)
+      // The share completed. Record the self-import guard BEFORE the 口令 ever
+      // enters this device's clipboard, so the marker is persisted by the time
+      // any foreground transition can read that clipboard. Marking first (then
+      // writing the clipboard) closes the race where the app foregrounds
+      // between the clipboard write and a marker written after it — the
+      // foreground auto-detect (useShareTokenImport) would otherwise resolve the
+      // sender's OWN code and copy-on-import a duplicate of their own taste (the
+      // import API has no server-side self guard). Keyed on the importCode the
+      // 口令 parses back to — the same key the recipient dedupe uses.
+      await markShareCodeHandled(importCode)
       // Only NOW write the 口令 to the clipboard. If the user cancelled the
       // system share sheet (or captureAndShare threw), we never reach here, so
-      // the sender's token does NOT leak into their own clipboard — which would
-      // otherwise auto-import on their next foreground even though nothing was
-      // actually shared.
+      // the sender's token does NOT leak into their own clipboard.
       await Clipboard.setStringAsync(passphrase)
     } catch {
       Alert.alert(t('share_failed'))
@@ -792,19 +798,9 @@ export default function DetailView() {
                   {t('detail_buy_again')}
                 </Button>
               ) : null}
-              {/* share only available for tasted items (verdict present for share card) */}
-              {item.status !== 'todo' && sharingAvailable ? (
-                <Button
-                  variant="secondary"
-                  iconLeft={<Icon name="arrow-right" size={18} />}
-                  disabled={sharing}
-                  onPress={handleShare}
-                  testID="share-btn"
-                >
-                  {t('share')}
-                </Button>
-              ) : null}
-              {/* S3a — share to a friend: opens a picker for the TWO modes. */}
+              {/* S3a — share to a friend: opens a picker for the TWO modes
+                  (仅图片 / 可导入). The old top-level "分享" button was removed —
+                  it was a duplicate of 仅图片（无链接）(both call handleSharePng). */}
               {item.status !== 'todo' && sharingAvailable ? (
                 <Button
                   variant="secondary"

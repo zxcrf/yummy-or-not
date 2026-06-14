@@ -24,17 +24,11 @@ import { useRouter } from 'expo-router'
 import { parseShareToken, resolveImportCode } from '@yon/shared'
 
 import { useAuth } from '@/providers/AuthProvider'
-
-// AsyncStorage key holding the last importCode we already handled (dedupe).
-const LAST_HANDLED_KEY = '@yon/share-import:last-handled-code'
-
-function getAsyncStorage(): typeof import('@react-native-async-storage/async-storage').default {
-  // The real package exposes the API on `.default`; the jest mock exports it at
-  // the module top level. Normalize so both production and tests resolve the
-  // same getItem/setItem surface.
-  const mod = require('@react-native-async-storage/async-storage')
-  return mod.default ?? mod
-}
+import {
+  isShareCodeHandled,
+  markShareCodeHandled,
+  readHandledShareCodes,
+} from './shareImportDedupe'
 
 /**
  * useShareTokenImport — mounted in AppGate (which renders for loading /
@@ -53,13 +47,15 @@ function getAsyncStorage(): typeof import('@react-native-async-storage/async-sto
 export function useShareTokenImport(): void {
   const router = useRouter()
   const { user } = useAuth()
-  // Last-handled importCode held in-memory for the dedupe check. Hydrated from
-  // AsyncStorage on mount and updated synchronously when we handle a code, so
-  // the foreground hot path needs only the single clipboard read (no extra
-  // await before resolve, and no re-prompt for an already-handled code).
-  const lastHandledRef = useRef<string | null>(null)
+  // Set of import codes already handled, held in-memory for the fast dedupe
+  // check. Hydrated from AsyncStorage on mount and updated synchronously when we
+  // handle a code, so the foreground hot path needs only the single clipboard
+  // read (no extra await before resolve for already-handled codes). A SET (not
+  // a single slot) so the recipient-dedupe and sender self-guard paths never
+  // evict each other.
+  const handledRef = useRef<Set<string>>(new Set())
   // In-flight guard so two rapid 'active' transitions don't double-resolve the
-  // same code before lastHandledRef is set.
+  // same code before it lands in handledRef.
   const handlingRef = useRef(false)
 
   useEffect(() => {
@@ -70,16 +66,11 @@ export function useShareTokenImport(): void {
 
     let alive = true
 
-    // Hydrate the dedupe marker so a code handled in a PREVIOUS app session is
-    // not re-prompted after a cold start.
-    void getAsyncStorage()
-      .getItem(LAST_HANDLED_KEY)
-      .then((stored) => {
-        if (alive && stored && lastHandledRef.current == null) {
-          lastHandledRef.current = stored
-        }
-      })
-      .catch(() => {})
+    // Hydrate the dedupe set so codes handled in a PREVIOUS app session are not
+    // re-prompted after a cold start.
+    void readHandledShareCodes().then((stored) => {
+      if (alive) for (const c of stored) handledRef.current.add(c)
+    })
 
     const handleForeground = async () => {
       if (handlingRef.current) return
@@ -91,7 +82,20 @@ export function useShareTokenImport(): void {
         // Not a 口令 → ignore entirely (privacy: never act on ordinary text).
         if (!code) return
         // DEDUPE: same code already handled → never re-prompt.
-        if (lastHandledRef.current === code) return
+        if (handledRef.current.has(code)) return
+
+        // SELF-IMPORT GUARD: also consult the PERSISTED set. The sender's own
+        // share (DetailView.handleShareImportable) records the freshly-minted
+        // code AFTER this hook already mounted, so the in-memory set (hydrated
+        // once at mount) can't see it. Without this read the sender would be
+        // auto-prompted to import their OWN share — copy-on-import would then
+        // duplicate their own taste (the import API has no self guard).
+        if (await isShareCodeHandled(code)) {
+          if (!alive) return
+          handledRef.current.add(code)
+          return
+        }
+        if (!alive) return
 
         // Resolve FIRST. The in-flight `handlingRef` guard (set above, cleared
         // in finally) already prevents a concurrent 'active' from double-firing
@@ -104,19 +108,17 @@ export function useShareTokenImport(): void {
         const { token } = await resolveImportCode(code)
         if (!alive) return
 
-        // Resolve succeeded → NOW persist the dedupe marker so the SAME live
-        // 口令 won't re-prompt on a later foreground. (On a 404 we fall through
-        // to catch and leave lastHandledRef unset, so the user can retry once
-        // the sender reshares a fresh token.)
-        lastHandledRef.current = code
-        void getAsyncStorage()
-          .setItem(LAST_HANDLED_KEY, code)
-          .catch(() => {})
+        // Resolve succeeded → NOW record the code so the SAME live 口令 won't
+        // re-prompt on a later foreground. (On a 404 we fall through to catch
+        // and leave it UNrecorded, so the user can retry once the sender
+        // reshares a fresh token.)
+        handledRef.current.add(code)
+        void markShareCodeHandled(code)
 
         router.push(`/import/${token}`)
       } catch {
         // 404 (expired token) / resolve failure / clipboard read error → do
-        // nothing and, crucially, leave lastHandledRef UNSET so a later fresh
+        // nothing and, crucially, leave the code UNrecorded so a later fresh
         // token under the same importCode can still be auto-imported. We never
         // surface an error toast from a background clipboard sniff.
       } finally {

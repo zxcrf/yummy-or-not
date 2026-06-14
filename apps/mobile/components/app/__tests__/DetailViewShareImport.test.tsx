@@ -50,6 +50,14 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
   invalidateTagsCache: jest.fn(),
 }))
 
+// Self-import guard: handleShareImportable marks its freshly-minted code handled
+// so the foreground auto-detect never prompts the sender to import their own
+// share. Spy on the marker to pin the wiring.
+const mockMarkShareCodeHandled = jest.fn()
+jest.mock('@/components/app/shareImportDedupe', () => ({
+  markShareCodeHandled: (...a: unknown[]) => mockMarkShareCodeHandled(...a),
+}))
+
 const routeParams = { id: 'taste-1' }
 
 jest.mock('expo-router', () => ({
@@ -186,6 +194,10 @@ describe('DetailView importable share (S3a)', () => {
     expect(mockedMintShare).toHaveBeenCalledWith('taste-1')
     expect(shareAsync).toHaveBeenCalledTimes(1)
 
+    // Self-import guard: the minted code is marked handled so the sender's own
+    // foreground auto-detect won't prompt them to import their own share.
+    expect(mockMarkShareCodeHandled).toHaveBeenCalledWith('AB12CD')
+
     // DELIVERY CHANNEL: the import code must be PRINTED on the captured PNG so it
     // survives image-only forwarding (WeChat strips the deep link + any
     // shareAsync text option). Assert the code reached the ShareCard at capture
@@ -203,15 +215,19 @@ describe('DetailView importable share (S3a)', () => {
     expect(callArgs).not.toContain('presignedtoken')
   })
 
-  it('does NOT print an import code on the plain (S1) PNG share', async () => {
-    // The plain share path (handleShare) must never set an import code on the
-    // card, so a non-importable share can't accidentally print a stray code.
+  it('does NOT print an import code on the plain (仅图片) PNG share', async () => {
+    // The pure-PNG path (handleSharePng, reached via 仅图片（无链接）) must never
+    // set an import code on the card, so a non-importable share can't
+    // accidentally print a stray code. (The old top-level 分享 button was
+    // removed — 仅图片 is now the only plain-PNG entry.)
     mockedGetTaste.mockResolvedValueOnce(makeTaste())
 
     const r = await renderDetail()
     const { shareAsync } = require('expo-sharing')
 
-    const plainBtn = r.root.findAll((n) => n.props?.testID === 'share-btn')[0]
+    const entry = findImportableShareBtn(r)
+    act(() => { entry.props.onPress() })
+    const plainBtn = r.root.findAll((n) => n.props?.testID === 'share-mode-png')[0]
     expect(plainBtn).toBeTruthy()
 
     await act(async () => {
@@ -225,5 +241,7 @@ describe('DetailView importable share (S3a)', () => {
     expect(mockedMintShare).not.toHaveBeenCalled()
     // Every render of the card during the plain share had no importCode.
     expect(shareCardProps.every((p) => !p.importCode)).toBe(true)
+    // Pure-PNG mints no code, so nothing is marked handled.
+    expect(mockMarkShareCodeHandled).not.toHaveBeenCalled()
   })
 })

@@ -149,10 +149,25 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             {/* 可导入 mode only: a QR encoding the https landing URL so WeChat
                 "识别图中二维码" reaches the import landing without the deep link
                 (which forwarded images strip). Pure-PNG mode passes no
-                landingUrl, so no scannable link is ever embedded. */}
+                landingUrl, so no scannable link is ever embedded.
+
+                MUST be standard dark-modules-on-light-background. An inverted QR
+                (light modules on dark) is unreadable by most phone cameras and
+                WeChat's scanner, which silently degrades 可导入 to a 淘口令-only
+                share. The white qrWrap below also gives the code its quiet zone. */}
             {landingUrl ? (
               <View style={styles.qrWrap}>
-                <QRCode value={landingUrl} size={96} backgroundColor="#191017" color="#fff" />
+                {/* quietZone renders the spec-mandated blank margin INSIDE the
+                    SVG (≈4 modules) so scanners lock on even when the white
+                    qrWrap padding is tight — the wrapper padding alone is too
+                    small for a ~29-module URL. */}
+                <QRCode
+                  value={landingUrl}
+                  size={96}
+                  quietZone={16}
+                  backgroundColor="#fff"
+                  color="#191017"
+                />
               </View>
             ) : null}
           </View>
@@ -262,8 +277,9 @@ const styles = StyleSheet.create({
   },
   qrWrap: {
     marginTop: 8,
-    padding: 6,
+    padding: 8,
     borderRadius: 8,
-    backgroundColor: '#191017',
+    // White quiet zone around the standard dark-on-light QR so scanners lock on.
+    backgroundColor: '#fff',
   },
 })
