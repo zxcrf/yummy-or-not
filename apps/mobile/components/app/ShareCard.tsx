@@ -157,7 +157,17 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
                 share. The white qrWrap below also gives the code its quiet zone. */}
             {landingUrl ? (
               <View style={styles.qrWrap}>
-                <QRCode value={landingUrl} size={96} backgroundColor="#fff" color="#191017" />
+                {/* quietZone renders the spec-mandated blank margin INSIDE the
+                    SVG (≈4 modules) so scanners lock on even when the white
+                    qrWrap padding is tight — the wrapper padding alone is too
+                    small for a ~29-module URL. */}
+                <QRCode
+                  value={landingUrl}
+                  size={96}
+                  quietZone={16}
+                  backgroundColor="#fff"
+                  color="#191017"
+                />
               </View>
             ) : null}
           </View>

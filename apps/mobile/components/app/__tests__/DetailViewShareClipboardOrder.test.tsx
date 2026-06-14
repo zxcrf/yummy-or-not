@@ -84,6 +84,14 @@ jest.mock('@/components/app/ShareCard', () => {
   return { ShareCard }
 })
 
+// Spy on the self-import marker so the order test can assert it commits BEFORE
+// the clipboard write (so a foreground can never read the 口令 with a stale
+// dedupe set).
+const mockMarkShareCodeHandled = jest.fn((..._a: unknown[]) => Promise.resolve())
+jest.mock('@/components/app/shareImportDedupe', () => ({
+  markShareCodeHandled: (...a: unknown[]) => mockMarkShareCodeHandled(...a),
+}))
+
 function makeTaste(overrides: Partial<Taste> = {}): Taste {
   return {
     id: 'taste-1',
@@ -178,17 +186,23 @@ describe('DetailView 可导入 clipboard order', () => {
     const { shareAsync } = require('expo-sharing')
     const { setStringAsync } = require('expo-clipboard')
 
-    // Record call order: share must run before the clipboard write.
+    // Record call order: share runs first, then the self-import marker COMMITS,
+    // then the 口令 is written to the clipboard. Marking before the clipboard
+    // write closes the race where a foreground reads the 口令 before the dedupe
+    // set has it (→ sender self-imports their own taste).
     const order: string[] = []
     ;(shareAsync as jest.Mock).mockImplementation(async () => { order.push('share') })
+    mockMarkShareCodeHandled.mockImplementation(async () => { order.push('mark') })
     ;(setStringAsync as jest.Mock).mockImplementation(async () => { order.push('clipboard'); return true })
 
     const r = await renderDetail()
     await pickImportable(r)
 
     expect(shareAsync).toHaveBeenCalledTimes(1)
+    expect(mockMarkShareCodeHandled).toHaveBeenCalledWith('AB12CD')
     expect(setStringAsync).toHaveBeenCalledTimes(1)
-    // The 口令 is written, but only after the share completes.
-    expect(order).toEqual(['share', 'clipboard'])
+    // The marker is persisted AFTER the share completes but BEFORE the 口令
+    // reaches the clipboard.
+    expect(order).toEqual(['share', 'mark', 'clipboard'])
   })
 })

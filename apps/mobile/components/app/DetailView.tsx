@@ -466,19 +466,20 @@ export default function DetailView() {
       // Plain text (not via t() interpolation) so the link/口令 survive verbatim.
       const text = `${t('share_import_intro')}\n${deepLink}\n${t('share_import_code_label')} ${importCode}\n${passphrase}`
       await captureAndShare(ready, text)
+      // The share completed. Record the self-import guard BEFORE the 口令 ever
+      // enters this device's clipboard, so the marker is persisted by the time
+      // any foreground transition can read that clipboard. Marking first (then
+      // writing the clipboard) closes the race where the app foregrounds
+      // between the clipboard write and a marker written after it — the
+      // foreground auto-detect (useShareTokenImport) would otherwise resolve the
+      // sender's OWN code and copy-on-import a duplicate of their own taste (the
+      // import API has no server-side self guard). Keyed on the importCode the
+      // 口令 parses back to — the same key the recipient dedupe uses.
+      await markShareCodeHandled(importCode)
       // Only NOW write the 口令 to the clipboard. If the user cancelled the
       // system share sheet (or captureAndShare threw), we never reach here, so
-      // the sender's token does NOT leak into their own clipboard — which would
-      // otherwise auto-import on their next foreground even though nothing was
-      // actually shared.
+      // the sender's token does NOT leak into their own clipboard.
       await Clipboard.setStringAsync(passphrase)
-      // Self-import guard: this device now holds its OWN 口令 in the clipboard.
-      // Mark the importCode handled so the foreground auto-detect
-      // (useShareTokenImport) never prompts the SENDER to import their own
-      // share — copy-on-import would otherwise duplicate their own taste (the
-      // import API has no server-side self guard). Same marker the recipient
-      // dedupe uses, keyed on the importCode the 口令 parses back to.
-      await markShareCodeHandled(importCode)
     } catch {
       Alert.alert(t('share_failed'))
     } finally {

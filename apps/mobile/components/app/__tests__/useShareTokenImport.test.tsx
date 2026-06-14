@@ -178,6 +178,27 @@ describe('useShareTokenImport (S3a foreground auto-detect)', () => {
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
+  it('does not let one handled code evict another: recipient-X and self-Y both stay deduped', async () => {
+    // A single-slot store would drop X when Y is later marked, so X would
+    // re-resolve (recipient re-prompt) — and symmetrically a sender's own code
+    // could self-import after importing someone else's share. A SET keeps both.
+    clipboardText = encodeShareToken('XXXXXX')
+    mockResolveImportCode.mockResolvedValue({ token: 'tok_live_1' })
+
+    await mountHarness() // hydrate: set empty at mount
+
+    // X was recipient-imported earlier; Y is the sender's own freshly-shared
+    // code. Both recorded AFTER mount.
+    await markShareCodeHandled('XXXXXX')
+    await markShareCodeHandled('YYYYYY')
+
+    await foreground()
+
+    // X is still deduped despite Y being recorded after it → no re-resolve.
+    expect(mockResolveImportCode).not.toHaveBeenCalled()
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
   it('is INERT when there is no signed-in user: no AppState subscription, no clipboard read', async () => {
     // AppGate mounts this hook for the loading / signed-out states too. Until a
     // user exists it must register NO AppState subscription and do NO clipboard

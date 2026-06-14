@@ -95,6 +95,11 @@ describe('ShareCard QR (S3a 可导入 mode)', () => {
     expect(qr).toBeTruthy()
     expect(qr.props.color).toBe('#191017') // dark modules
     expect(qr.props.backgroundColor).toBe('#fff') // light background
+    // A scannable QR needs the spec ~4-module blank margin. The wrapper padding
+    // alone is too tight for a ~29-module URL, so a real quietZone is rendered
+    // inside the SVG. Pin it so a regression that drops it (← unscannable in
+    // WeChat) fails here.
+    expect(qr.props.quietZone).toBeGreaterThanOrEqual(12)
   })
 
   it('renders NO QR in pure-PNG mode (no landingUrl) — link-free privacy guard', () => {
