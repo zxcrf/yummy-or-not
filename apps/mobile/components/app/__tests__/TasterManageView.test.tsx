@@ -67,7 +67,8 @@ jest.mock('@/providers/I18nProvider', () => ({
         cancel: 'Cancel',
         del: 'Delete',
         edit_profile: 'Edit',
-        save_taste: 'Save',
+        save: 'Save',
+        save_taste: 'Save this taste',
         taster_add: 'Add taster',
         taster_create: 'New taster',
         taster_manage: 'Tasters',
@@ -109,6 +110,19 @@ describe('TasterManageView — pro CRUD', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
     mockUseActiveTaster.mockReturnValue(null) // self default
+  })
+
+  // Regression (#103): the taster sheet save button reused t('save_taste') =
+  // "保存这个口味" / "Save this taste", absurd when adding/editing a family
+  // member. It must use the generic t('save').
+  it('taster save button shows the generic save label, not the taste-record string', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'add-taster-btn' }).props.onPress()
+    })
+    const saveBtn = renderer.root.findByProps({ testID: 'taster-save-btn' })
+    expect(saveBtn.props.children).toBe('Save')
+    expect(saveBtn.props.children).not.toBe('Save this taste')
   })
 
   it('create calls createTaster with the entered payload then invalidateTasters', async () => {

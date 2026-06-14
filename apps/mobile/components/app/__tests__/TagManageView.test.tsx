@@ -51,7 +51,8 @@ jest.mock('@/providers/I18nProvider', () => ({
       const map: Record<string, string> = {
         cancel: 'Cancel',
         del: 'Delete',
-        save_taste: 'Save',
+        save: 'Save',
+        save_taste: 'Save this taste',
         tag_delete_confirm: 'Delete tag?',
         tag_empty: 'No tags yet',
         tag_manage: 'Tag library',
@@ -96,6 +97,19 @@ describe('TagManageView — rename', () => {
 
     expect(mockRenameTag).toHaveBeenCalledWith('tag-1', { name: 'Very Spicy' })
     expect(mockInvalidateTagsCache).toHaveBeenCalled()
+  })
+
+  // Regression (#103): the rename save button reused t('save_taste') =
+  // "保存这个口味" / "Save this taste", which makes no sense on a tag-rename
+  // sheet. It must use the generic t('save').
+  it('rename confirm button shows the generic save label, not the taste-record string', () => {
+    const renderer = renderTagManageView()
+    act(() => {
+      renderer.root.findByProps({ testID: 'rename-tag-tag-1' }).props.onPress()
+    })
+    const confirmBtn = renderer.root.findByProps({ testID: 'rename-confirm-btn' })
+    expect(confirmBtn.props.children).toBe('Save')
+    expect(confirmBtn.props.children).not.toBe('Save this taste')
   })
 
   it('name_conflict error renders inline error text without crashing', async () => {

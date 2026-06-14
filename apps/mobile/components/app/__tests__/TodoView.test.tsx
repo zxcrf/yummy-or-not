@@ -78,7 +78,9 @@ jest.mock('@/providers/I18nProvider', () => ({
       const map: Record<string, string> = {
         nav_todo: 'To-Try',
         count_logged: '{n} logged',
-        search_log: 'Search…',
+        search_log: 'Search your log…',
+        count_todo: '{n} to try',
+        search_todo: 'Search your to-try list…',
         todo_badge: 'Want to Try',
         nothing_here: 'Nothing here.',
         bought_n: 'Bought {n}×',
@@ -102,8 +104,8 @@ jest.mock('@/components/ds', () => ({
     </div>
   ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
-  Input: ({ value, onChangeText }: { value: string; onChangeText?: (t: string) => void }) => (
-    <input value={value} onChange={(e) => onChangeText?.(e.target.value)} />
+  Input: ({ value, onChangeText, placeholder }: { value: string; onChangeText?: (t: string) => void; placeholder?: string }) => (
+    <input value={value} placeholder={placeholder} onChange={(e) => onChangeText?.(e.target.value)} />
   ),
   Tag: ({ children, onPress, active }: { children: React.ReactNode; onPress?: () => void; active?: boolean }) => (
     <button data-active={active ? 'true' : 'false'} onClick={onPress}>{children}</button>
@@ -174,6 +176,27 @@ describe('TodoView — 想吃 tab', () => {
     mockItems = []
     mockCoords = null
     mockLocationEnabled = false
+  })
+
+  // Regression (#103): the To-Try tab reused the Tastes-log copy
+  // count_logged ("{n} logged") and search_log ("Search your log…"), which
+  // implies already-tasted records. To-Try items are NOT eaten yet, so it must
+  // use the to-try-specific count_todo / search_todo.
+  it('uses to-try copy, not the tasted-log strings', () => {
+    mockItems = [todoTaste()]
+    const renderer = render()
+
+    const texts: string[] = []
+    renderer.root.findAll((n) => {
+      if (typeof n.props.children === 'string') texts.push(n.props.children)
+      return false
+    })
+    expect(texts).toContain('{n} to try')
+    expect(texts).not.toContain('{n} logged')
+
+    const input = renderer.root.findByType('input')
+    expect(input.props.placeholder).toBe('Search your to-try list…')
+    expect(input.props.placeholder).not.toBe('Search your log…')
   })
 
   it('renders only todo records — tasted items are excluded', () => {

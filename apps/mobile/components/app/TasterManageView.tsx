@@ -262,7 +262,7 @@ export default function TasterManageView() {
                   onPress={submitSheet}
                   testID="taster-save-btn"
                 >
-                  {t('save_taste')}
+                  {t('save')}
                 </Button>
               </View>
             </Pressable>
