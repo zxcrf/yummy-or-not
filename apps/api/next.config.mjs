@@ -25,6 +25,22 @@ const nextConfig = {
   // external rather than bundling it, so the prebuilt @img/sharp-* binary
   // survives the standalone copy without a separate webpack loader.
   serverExternalPackages: ['sharp'],
+  // The shared api-client exports a MOBILE-ONLY upload helper
+  // (uploadToPresignedUrl) that lazy-`require`s 'expo-file-system/legacy'. The
+  // API imports @yon/shared, so webpack statically follows that require into
+  // expo-file-system's RN source (→ expo-modules-core) and fails the production
+  // build ("Module not found" / "Build failed because of webpack errors") even
+  // though the API never calls it. Stub the RN-only module to an empty module
+  // for the server build (a standard platform-stub) — it is never executed
+  // server-side. Mobile is unaffected (it bundles via metro, not next.config).
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'expo-file-system/legacy': false,
+      'expo-file-system': false,
+    };
+    return config;
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
