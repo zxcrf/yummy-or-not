@@ -37,6 +37,16 @@ export interface AddDraft {
   photo: PhotoInput | null
   /** Local uri used to render the photo preview. */
   photoPreview: string | null
+  /** S3b Phase 2 — staged video clip local uri (null on image / no-media drafts).
+   *  Persisted so a remount mid-add (Android activity recreation after the
+   *  picker/crop) does NOT silently drop the clip and downgrade the record to
+   *  an image. Before this was carried, `photo` (the poster) survived a restore
+   *  but `clipUri` did not, so Save sent no clipKey and the video was lost. */
+  clipUri: string | null
+  /** Client-measured clip duration (ms) — rides alongside clipUri. */
+  clipDurationMs: number | null
+  /** Resolved clip content-type (video/mp4 | video/quicktime) — rides alongside clipUri. */
+  clipContentType: string | null
 }
 
 function storageKey(userId: string | null): string {
@@ -57,7 +67,10 @@ export function isDraftMeaningful(d: AddDraft): boolean {
       d.notes.trim() ||
       d.verdict ||
       d.picked.length > 0 ||
-      d.photoPreview,
+      d.photoPreview ||
+      // A staged clip alone is worth restoring even when poster extraction
+      // failed (no photoPreview) — otherwise a video-only draft is dropped.
+      d.clipUri,
   )
 }
 
