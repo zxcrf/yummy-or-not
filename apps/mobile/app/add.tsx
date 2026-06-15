@@ -27,6 +27,16 @@ const SPRING = { damping: 20, stiffness: 180, mass: 0.9 }
 // write lands. withSpring/withTiming are interruptible; this deadline is the
 // un-preemptible backstop (see assertOpen).
 const OPEN_BACKSTOP_MS = 350
+// Close mirror of OPEN_BACKSTOP_MS. The close animation drives progress→0 and
+// fires navigation (router.back / replace) from its completion callback — but
+// withTiming is interruptible, so the same Android relayout / activity-recreation
+// storm that preempts the open spring can also swallow the close completion.
+// When that happens the callback never runs → the route never unmounts → it
+// lingers as the FAB-rect morph at progress≈0 (a solid #ff2e88 circle + white
+// plus over the list). This deadline is the un-preemptible guarantee that
+// navigation happens regardless. Longer than the 350ms close so the pretty
+// animated path wins on a healthy frame.
+const CLOSE_BACKSTOP_MS = 500
 
 export default function AddRoute() {
   const { width: SW, height: SH } = useWindowDimensions()
@@ -34,6 +44,12 @@ export default function AddRoute() {
   const fab = fabLayout.value ?? { x: SW / 2 - 29, y: SH - 80, width: 58, height: 58 }
   const closing = useRef(false)
   const backstopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Close-path navigation guard + backstop. `navAction` holds the pending
+  // navigation (back, or replace→detail) so both the animation completion and
+  // the un-preemptible deadline below run the SAME action exactly once.
+  const navAction = useRef<(() => void) | null>(null)
+  const navigated = useRef(false)
+  const navTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const progress = useSharedValue(0)
 
@@ -74,6 +90,7 @@ export default function AddRoute() {
     return () => {
       sub.remove()
       if (backstopTimer.current) clearTimeout(backstopTimer.current)
+      if (navTimer.current) clearTimeout(navTimer.current)
     }
   }, [assertOpen])
 
@@ -105,26 +122,38 @@ export default function AddRoute() {
     opacity: interpolate(progress.value, [0.25, 0.65], [0, 1], 'clamp'),
   }))
 
-  const handleClose = () => {
+  // Run the pending close navigation exactly once. Called from BOTH the close
+  // animation's completion callback (the pretty path) and the CLOSE_BACKSTOP_MS
+  // deadline (the guarantee). Whichever fires first navigates; the `navigated`
+  // latch makes the loser a no-op so we never double-navigate.
+  const runNav = useCallback(() => {
+    if (navigated.current) return
+    navigated.current = true
+    if (navTimer.current) clearTimeout(navTimer.current)
+    navAction.current?.()
+  }, [])
+
+  // Start the close morph (progress→0) AND arm the un-preemptible nav backstop.
+  // If the animation completes normally its callback runs runNav; if the storm
+  // swallows it, the deadline runs runNav instead — either way the route
+  // unmounts and can never strand as the FAB-rect overlay.
+  const startClose = (duration: number, action: () => void) => {
     if (closing.current) return
     closing.current = true
-    progress.value = withTiming(0, {
-      duration: 350,
-      easing: Easing.in(Easing.ease),
-    }, () => {
-      runOnJS(router.back)()
+    navAction.current = action
+    progress.value = withTiming(0, { duration, easing: Easing.in(Easing.ease) }, () => {
+      runOnJS(runNav)()
     })
+    if (navTimer.current) clearTimeout(navTimer.current)
+    navTimer.current = setTimeout(runNav, CLOSE_BACKSTOP_MS)
+  }
+
+  const handleClose = () => {
+    startClose(350, () => router.back())
   }
 
   const handleSaved = (id: string) => {
-    if (closing.current) return
-    closing.current = true
-    progress.value = withTiming(0, {
-      duration: 300,
-      easing: Easing.in(Easing.ease),
-    }, () => {
-      runOnJS(router.replace)(`/taste/${id}`)
-    })
+    startClose(300, () => router.replace(`/taste/${id}`))
   }
 
   return (
