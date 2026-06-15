@@ -1,0 +1,15 @@
+# Value smoke: login, walk the 4 tabs, assert a stable testID on the You tab.
+# Requires EMAIL / PASSWORD env (see .env.example). Run after 01-launch.
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp:
+    clearState: false
+- runFlow: ../subflows/login.yaml
+- tapOn:
+    text: "Nearby|附近"
+- takeScreenshot: nearby-tab
+- tapOn:
+    text: "You|我的|个人"
+- assertVisible:
+    id: "display-name"
+- takeScreenshot: you-tab

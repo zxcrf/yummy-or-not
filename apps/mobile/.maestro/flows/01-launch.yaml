@@ -1,0 +1,10 @@
+# Smoke: app launches without crash and reaches a known first screen.
+# Locale-agnostic — matches either the auth screen (logged out) or a tab
+# label (logged in). Regex so it passes under en/zh/ja/ko device locales.
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp:
+    clearState: false
+- assertVisible:
+    text: "Sign in|Create account|登录|注册|Library|Nearby|附近|To-Try"
+- takeScreenshot: launch

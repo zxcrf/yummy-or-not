@@ -1,0 +1,7 @@
+# Maestro global config — https://maestro.dev
+# Explicit flow list (no blind wildcard) for deterministic ordering.
+flows:
+  - flows/*.yaml
+
+# Animation disable is the #1 flake killer on RN (material-motion + keyboard).
+disableAnimations: true

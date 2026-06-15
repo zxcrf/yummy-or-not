@@ -1,0 +1,23 @@
+# Reusable email login. Inputs target placeholder text (i18n-rendered).
+# Override creds per-env: maestro test -e EMAIL=... -e PASSWORD=...
+# Skips silently if already authenticated (auth screen not present).
+appId: ${MAESTRO_APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        text: "Email|邮箱|Correo|メールアドレス|이메일"
+    commands:
+      - tapOn:
+          text: "you@example.com|tu@ejemplo.com"
+      - inputText: ${EMAIL}
+      - tapOn:
+          text: "At least 6 characters|至少 6 个字符|.*6.*"
+      - inputText: ${PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          text: "Sign in|登录|Iniciar|サインイン|로그인"
+      - extendedWaitUntil:
+          visible:
+            text: "Library|Nearby|附近|To-Try"
+          timeout: 15000
