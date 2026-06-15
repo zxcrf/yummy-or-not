@@ -5,7 +5,7 @@
    On close: reverse. */
 
 import { useCallback, useEffect, useRef } from 'react'
-import { StyleSheet, useWindowDimensions } from 'react-native'
+import { AppState, StyleSheet, useWindowDimensions } from 'react-native'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,39 +23,59 @@ import { Icon } from '@/components/ds'
 import { useAddTransition } from '@/providers/AddTransitionProvider'
 
 const SPRING = { damping: 20, stiffness: 180, mass: 0.9 }
+// How long after an open-assert we wait before the HARD, non-animated terminal
+// write lands. withSpring/withTiming are interruptible; this deadline is the
+// un-preemptible backstop (see assertOpen).
+const OPEN_BACKSTOP_MS = 350
 
 export default function AddRoute() {
   const { width: SW, height: SH } = useWindowDimensions()
   const { fabLayout } = useAddTransition()
   const fab = fabLayout.value ?? { x: SW / 2 - 29, y: SH - 80, width: 58, height: 58 }
   const closing = useRef(false)
-  const openWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const backstopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const progress = useSharedValue(0)
 
-  // Re-assert the open animation on every focus (incl. returning from the
-  // Android photo-crop activity, which can remount/strand this route). Without
-  // this, the one-shot open spring could be interrupted and leave the morph
-  // stranded at the FAB rect — the stuck-overlay bug (#55).
-  useFocusEffect(useCallback(() => {
-    if (!closing.current && progress.value < 0.999) {
-      progress.value = withSpring(1, SPRING)
-    }
-  }, [progress]))
+  // Drive the entrance morph to its terminal OPEN state and GUARANTEE it gets
+  // there. The pretty path is `withSpring`; the durable guarantee is a hard,
+  // NON-animated `progress.value = 1` backstop.
+  //
+  // Why the backstop must be non-animated: withSpring/withTiming are both
+  // interruptible. The Android photo/video crop activity returns through a
+  // relayout / activity-recreation storm that preempts even a heal animation,
+  // stranding `progress` below 1 → the pink FAB-rect overlay that traps touches
+  // over the list. This regressed across #46 → #55 precisely because every
+  // prior heal (open spring, then a withTiming watchdog) was itself animated
+  // and so could be preempted too. A direct SharedValue write cannot be.
+  //
+  // Armed on two independent triggers so no crop-return path is missed:
+  //   - focus (route mount / remount — covers activity recreation that restores
+  //     the route from the autosaved draft), and
+  //   - AppState 'active' (fires when the app foregrounds after the crop
+  //     activity, even when the JS tree did NOT remount and focus never re-ran).
+  // Every arm is guarded on `!closing.current` so a deadline firing mid-close
+  // can never snap the modal back open and strand navigation.
+  const assertOpen = useCallback(() => {
+    if (closing.current || progress.value >= 0.999) return
+    progress.value = withSpring(1, SPRING)
+    if (backstopTimer.current) clearTimeout(backstopTimer.current)
+    backstopTimer.current = setTimeout(() => {
+      if (!closing.current && progress.value < 0.999) progress.value = 1
+    }, OPEN_BACKSTOP_MS)
+  }, [progress])
+
+  useFocusEffect(assertOpen)
 
   useEffect(() => {
-    openWatchdog.current = setTimeout(() => {
-      if (!closing.current && progress.value < 0.999) {
-        progress.value = withTiming(1, { duration: 120 })
-      }
-    }, 700)
-
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') assertOpen()
+    })
     return () => {
-      if (openWatchdog.current) {
-        clearTimeout(openWatchdog.current)
-      }
+      sub.remove()
+      if (backstopTimer.current) clearTimeout(backstopTimer.current)
     }
-  }, [progress])
+  }, [assertOpen])
 
   const containerStyle = useAnimatedStyle(() => {
     const p = progress.value
@@ -109,7 +129,11 @@ export default function AddRoute() {
 
   return (
     <Animated.View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View style={containerStyle}>
+      {/* box-none so the morph chrome itself never captures touches — only the
+          AddModal destination layer below does. Defense-in-depth: even if the
+          morph were ever stranded mid-open, taps that miss the modal content
+          pass through to the list instead of hitting a dead pink rect. */}
+      <Animated.View style={containerStyle} pointerEvents="box-none">
         {/* Source: FAB content (+ icon), fades out early */}
         <Animated.View
           pointerEvents="none"
