@@ -455,8 +455,23 @@ export async function uploadToPresignedUrl(
   // NOTE: SDK 54+ moved uploadAsync / FileSystemUploadType to the `/legacy`
   // subpath; the top-level entry is the new File/Directory API which has no
   // uploadAsync. The legacy direct-PUT helper still ships in the APK.
+  // Minimal STRUCTURAL type for just the legacy bits we use — deliberately NOT
+  // `typeof import("expo-file-system/legacy")`. The API bundles @yon/shared and
+  // type-checks it during `next build`; a `typeof import(...)` of an RN-only
+  // module fails there ("Cannot find module 'expo-file-system/legacy'") because
+  // the API build context has no expo-file-system. An inline literal type has no
+  // external reference, so it resolves everywhere. (Value require is stubbed for
+  // the API webpack build via next.config resolve.alias; never run server-side.)
+  type LegacyFileSystem = {
+    uploadAsync(
+      url: string,
+      fileUri: string,
+      options: { httpMethod: "PUT"; uploadType: number; headers: Record<string, string> },
+    ): Promise<{ status: number }>;
+    FileSystemUploadType: { BINARY_CONTENT: number };
+  };
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const FileSystem = require("expo-file-system/legacy") as typeof import("expo-file-system/legacy");
+  const FileSystem = require("expo-file-system/legacy") as LegacyFileSystem;
   const res = await FileSystem.uploadAsync(uploadUrl, fileUri, {
     httpMethod: "PUT",
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
