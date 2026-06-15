@@ -21,7 +21,9 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "jest.config.*", "tsconfig*.json"],
+      "outputs": []
     }
   }
 }
