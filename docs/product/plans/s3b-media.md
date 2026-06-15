@@ -59,37 +59,36 @@ buffered in Node heap = OOM under concurrency, and sharp can't make a poster for
 
 ---
 
-## 3. Open decisions — NEED HUMAN CONFIRM before build
+## 3. Decisions — RESOLVED 2026-06-15 (user-confirmed)
 
-These change cost / UX / scope; defaults in **bold**.
+- **D1. Video read delivery → private bucket + presigned GET.** Matches current photo privacy
+  posture. TTL 3600s ≫ any 15s clip; player must **re-fetch a fresh presigned URL on error**
+  (covers the pause-past-TTL edge). Not public CDN — clips stay private like photos.
 
-- **D1. Video read delivery: public CDN base vs presigned GET?**
-  If clips can sit on the same public CDN base as images (`resolvePhotoUrls` already prefers
-  CDN), presigning disappears and the TTL-expiry-mid-playback gotcha vanishes. If the bucket
-  must stay private, presigned GET is fine for 15s clips (TTL 3600 ≫ clip).
-  → **Default: keep private + presigned GET** (matches current photo privacy posture). Confirm
-  whether food clips are OK to serve from a public CDN — that's simpler + cheaper if acceptable.
+- **D2. Pro gate → manual `media_enabled` flag for v1.** No billing dependency; admin/self sets
+  the flag. Real Pro purchase wiring comes later, independently.
 
-- **D2. Pro gate UX.** `media_enabled` is set how? No billing exists yet. For v1, is it a manual
-  flag (admin/self) or tied to a (not-yet-built) Pro purchase?
-  → **Default: manual flag for v1** (no billing dependency), real Pro purchase later.
+- **D3. Schema → add columns.** New migration `0012` adds to `tastes`: `media_type`
+  (`'image' | 'video'`, default `'image'`), `clip_key` (text, nullable — the `t/{uuid}/clip.mp4`
+  sibling), `duration_ms` (int, nullable). `image` stays the poster key (reuses the entire
+  variant + read-resolver path unchanged). Explicit + queryable beats the implicit sibling-key
+  convention.
 
-- **D3. Schema for media metadata.** Need new columns vs sibling-key convention. Minimum:
-  a `media_type` discriminator on `tastes` (`'image' | 'video'`), plus `duration_ms`,
-  `poster_key` (or reuse `image` for poster + new `clip_key`). New migration `0012`.
-  → **Default: add `media_type`, `clip_key`, `duration_ms` to `tastes`; `image` stays the poster.**
+- **D4. Android compression → caps-as-backstop, NO native dep in v1.** iOS uses picker
+  `videoExportPreset` (reliable on-device re-encode); Android compression is weak, so the
+  server hard caps (size+duration) + post-PUT `HEAD` verify reject anything oversize → user
+  re-picks a shorter clip. A native compressor (`react-native-compressor`-class) is the
+  **Phase 2 optimization** if Android cap-hit rate proves high — deferred to avoid the EAS
+  rebuild + maintenance burden during v1. Decision is reversible (driven by real usage data).
 
-- **D4. Android compression reliability.** `expo-image-picker` video compression is
-  export-preset on iOS, weak on Android. Accept "Android may hit the cap + re-pick" for v1, or
-  add a native compressor (EAS build + maintenance burden)?
-  → **Default: accept caps-as-backstop, no native dep in v1.**
+- **D5. Playback → tap-to-play.** Card shows poster + play button; tap opens the clip. Cheaper
+  bandwidth (every view re-downloads from R2; no autoplay-on-scroll re-download storm).
 
-- **D5. Autoplay-muted-on-scroll vs tap-to-play.**
-  → **Default: tap-to-play** (cheaper bandwidth; every view re-downloads from R2).
-
-- **D6. sharp HEIF support in the Docker image** (needed to make a poster from a Live Photo HEIC
-  still). If absent → convert still to JPEG on-device first (already do JPEG re-encode in
-  `compressAsset`). **Verify during impl, not assumed.**
+- **D6. HEIC poster → client converts to JPEG; server never decodes HEIF.** iOS Live Photo still
+  is HEIC, but `compressAsset` (expo-image-manipulator) already outputs JPEG on-device (iOS
+  decodes HEIC natively; Android 10+ too, and Android doesn't produce Apple Live Photos anyway).
+  So the poster reaching the server is **always JPEG** → sharp never sees HEIC → **no libheif
+  needed in the Docker image.** Risk eliminated, not deferred.
 
 ---
 
@@ -102,9 +101,9 @@ These change cost / UX / scope; defaults in **bold**.
 | Presigned URL expires mid-playback (long pause) | player re-fetches a fresh presigned URL on error; don't shorten video TTL |
 | Each playback re-downloads from R2 (bandwidth = real cost) | size cap matters more than storage cap; tap-to-play not autoplay |
 | Direct-PUT lets client upload arbitrary bytes | server `HEAD` verifies size/type before persisting; key namespaced + server-generated |
-| sharp can't decode HEIC in Docker | on-device HEIC→JPEG before upload (poster path) |
+| sharp can't decode HEIC in Docker | **eliminated** (D6): client always sends JPEG poster; server never decodes HEIF |
 
-Unverified (validate in impl, do NOT assume): SDK 56 Android compression behavior; sharp HEIF in prod image. SDK 56 `expo-video` / `generateThumbnailsAsync` / `pairedVideoAsset` / Passthrough-default confirmed from v56 docs.
+Unverified (validate in impl, do NOT assume): SDK 56 Android compression behavior (D4 caps absorb it). SDK 56 `expo-video` / `generateThumbnailsAsync` / `pairedVideoAsset` / Passthrough-default confirmed from v56 docs.
 
 ---
 
