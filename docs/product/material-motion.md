@@ -84,6 +84,40 @@ Spring config: damping 18, stiffness 160. Expand duration ~380ms.
 
 Fallback: if FAB measurement fails, defaults to bottom-center of screen.
 
+#### ⛔ REQUIREMENT — every entrance/morph animation needs a NON-animated terminal backstop
+
+The Add morph regressed into a **stuck overlay** three times (#46 → #55 → #125)
+because its terminal OPEN state was driven *only* by animations
+(`withSpring`/`withTiming`). On Android the photo/video **crop activity returns
+through a relayout / activity-recreation storm that preempts even the heal
+animation**, stranding the open `progress` SharedValue below 1 → a small opaque
+pink FAB-rect that swallows touches over the list. Each prior fix swapped one
+interruptible animation for another, so the bug kept coming back.
+
+Rules for any FAB/sheet/modal entrance morph driven by a reanimated SharedValue:
+
+1. **Hard backstop, not another animation.** After the pretty `withSpring`,
+   arm a short deadline (~350ms) that writes the terminal value **directly**
+   (`progress.value = 1`) — a plain SharedValue write cannot be preempted. An
+   animated watchdog (`withTiming`) is NOT a backstop; it strands the same way.
+2. **Arm on every return path.** `useFocusEffect` (route remount /
+   activity-recreation restored from draft) **and** `AppState 'active'` (app
+   foregrounds after a native picker/crop activity even when the JS tree did not
+   remount and focus never re-ran).
+3. **Guard every open-write on `!closing.current`** so a deadline firing
+   mid-close can't snap a closing modal back open and strand navigation.
+4. **Fail open, not closed.** The morph container is `pointerEvents="box-none"`
+   so a stranded rect can never deaden the list beneath it — only the
+   destination content layer captures touches.
+5. **Test the preempted case.** The regression test mock must let **neither**
+   `withSpring` nor `withTiming` settle, and assert the morph still reaches its
+   terminal state via the hard write. A mock that settles `withTiming` instantly
+   (the old `AddRoute-stuck.test.tsx`) is the blind spot that shipped this bug
+   twice — see `AddRoute-stuck-preempt.test.tsx`.
+
+This applies equally to the **tasted** and **to-taste/todo** add flows (same
+route) and to both the photo and video pick paths (same crop activity).
+
 ## Architecture Decisions
 
 1. **Tamagui animation driver over manual reanimated for press feedback** — one config change animates all existing pressStyle/focusStyle. Minimal code, maximum coverage.
