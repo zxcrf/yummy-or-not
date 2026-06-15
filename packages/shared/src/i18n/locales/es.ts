@@ -75,6 +75,8 @@ export const es: Record<string, string> = {
   display_name_label: "Apodo",
   default_name: "Foodie",
   invalid_display_name: "El apodo debe tener entre 1 y 50 caracteres",
+  change_photo: "Cambiar foto",
+  avatar_upload_failed: "No se pudo actualizar tu foto. Inténtalo de nuevo.",
   tag_manage: "Gestión de etiquetas",
   tag_rename: "Renombrar",
   tag_delete_confirm: "¿Eliminar etiqueta? Las etiquetas en tus registros no se verán afectadas.",

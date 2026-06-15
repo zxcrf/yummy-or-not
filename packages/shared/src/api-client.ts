@@ -37,6 +37,8 @@ import type {
   Taster,
   CreateTasterInput,
   UpdateTasterInput,
+  PresignUploadInput,
+  PresignUploadResult,
 } from "./types";
 import { ProRequiredError } from "./types";
 
@@ -375,13 +377,61 @@ export async function reverseGeocode(
   );
 }
 
-/** PATCH /api/user — update signed-in user settings (e.g. warningsEnabled). */
+/** PATCH /api/user — update signed-in user settings (e.g. warningsEnabled).
+ *  Also the avatar COMMIT: after a direct-to-R2 upload, call
+ *  `updateUser({ avatar: key })` with the server-issued key; the server
+ *  byte-verifies the uploaded object before persisting. */
 export async function updateUser(input: UpdateUserInput): Promise<{ user: User }> {
   return apiFetch<{ user: User }>("/api/user", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+/* ── S3b-media direct-to-R2 upload (avatar, Phase 1, NATIVE-ONLY) ──────────── */
+
+/** POST /api/uploads/presign — ask the server for a short-lived presigned PUT
+ *  URL. The server generates the object key (client never supplies it). Auth
+ *  bearer is forwarded (same as every other call). The returned `headers` must
+ *  be replayed verbatim on the subsequent PUT so the SigV4 signature matches. */
+export async function requestAvatarPresign(
+  input: PresignUploadInput,
+): Promise<PresignUploadResult> {
+  return apiFetch<PresignUploadResult>("/api/uploads/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** PUT a local file straight to the presigned R2 URL (Phase 1 is native-only).
+ *  Uses expo-file-system's uploadAsync BINARY_CONTENT path — the proven Expo
+ *  direct-to-S3 PUT — because RN's Blob/ArrayBuffer PUT is unreliable on Expo 56.
+ *  No auth header: the presigned URL IS the capability. `headers` are the ones
+ *  returned by requestAvatarPresign (notably Content-Type, which binds the
+ *  signature). Throws on a non-2xx status. */
+export async function uploadToPresignedUrl(
+  uploadUrl: string,
+  headers: Record<string, string>,
+  fileUri: string,
+): Promise<void> {
+  // Lazy require keeps this module platform-neutral so apps/api can import the
+  // api-client types without pulling in the RN-only expo-file-system dep at
+  // module-eval time (mirrors AuthProvider's expo-secure-store require pattern).
+  // NOTE: SDK 54+ moved uploadAsync / FileSystemUploadType to the `/legacy`
+  // subpath; the top-level entry is the new File/Directory API which has no
+  // uploadAsync. The legacy direct-PUT helper still ships in the APK.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const FileSystem = require("expo-file-system/legacy") as typeof import("expo-file-system/legacy");
+  const res = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+    httpMethod: "PUT",
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers,
+  });
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`upload_failed_${res.status}`);
+  }
 }
 
 /* ── S3a share / import ─────────────────────────────────────────────────────── */

@@ -75,6 +75,8 @@ export const ko: Record<string, string> = {
   display_name_label: "닉네임",
   default_name: "미식가",
   invalid_display_name: "닉네임은 1–50자여야 합니다",
+  change_photo: "사진 변경",
+  avatar_upload_failed: "사진을 업데이트하지 못했습니다. 다시 시도해 주세요.",
   tag_manage: "태그 관리",
   tag_rename: "이름 변경",
   tag_delete_confirm: "태그를 삭제할까요? 기록에 이미 있는 태그는 영향 받지 않습니다.",

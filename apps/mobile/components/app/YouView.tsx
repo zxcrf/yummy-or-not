@@ -9,14 +9,29 @@
    way without hitting the stats endpoint.
    ============================================================ */
 
-import { useCallback, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { KeyboardStickyView } from 'react-native-keyboard-controller'
 import { useRouter } from 'expo-router'
-import { LANGS, updateUser, type Taste } from '@yon/shared'
+import * as ImagePicker from 'expo-image-picker'
+import {
+  LANGS,
+  updateUser,
+  requestAvatarPresign,
+  uploadToPresignedUrl,
+  type Taste,
+} from '@yon/shared'
 
 import { Avatar, Button, Card, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
+import { compressAsset } from '@/lib/compressAsset'
 import { useAuth } from '@/providers/AuthProvider'
 import { useI18n } from '@/providers/I18nProvider'
 
@@ -84,6 +99,55 @@ export default function YouView({ items }: Props) {
   const [nameInput, setNameInput] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameError, setNameError] = useState('')
+
+  // S3b-media: avatar upload state. `avatarUploading` drives the spinner over the
+  // header; `avatarError` is a non-blocking message (the old avatar stays put on
+  // failure). A ref guards against a double-tap re-entering the picker.
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
+  const avatarPickInFlight = useRef(false)
+
+  // Pick → compress → presign → PUT-to-R2 → commit (PATCH /api/user) → refresh
+  // the in-memory user so the header re-renders the new presigned avatar URL.
+  // Picker cancel is a no-op; any failure keeps the old avatar and surfaces a
+  // non-blocking inline message (never crashes).
+  async function changeAvatar() {
+    if (avatarPickInFlight.current) return
+    avatarPickInFlight.current = true
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        setAvatarError(t('photo_permission_denied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      })
+      if (result.canceled || !result.assets[0]) return
+      setAvatarError('')
+      setAvatarUploading(true)
+      const compressed = await compressAsset(result.assets[0])
+      // Phase 1 is native-only, so compressAsset always yields an RNFile (the
+      // {uri,name,type} shape). The PhotoInput union also admits a web File,
+      // hence the guard before reading uri.
+      const fileUri = 'uri' in compressed ? compressed.uri : ''
+      const { uploadUrl, key, headers } = await requestAvatarPresign({
+        kind: 'avatar',
+        contentType: 'image/jpeg',
+      })
+      await uploadToPresignedUrl(uploadUrl, headers, fileUri)
+      const { user: updated } = await updateUser({ avatar: key })
+      patchUser({ avatar: updated.avatar })
+    } catch {
+      setAvatarError(t('avatar_upload_failed'))
+    } finally {
+      setAvatarUploading(false)
+      avatarPickInFlight.current = false
+    }
+  }
 
   const toggleWarnings = async (next: boolean) => {
     const prev = warningsEnabled
@@ -218,7 +282,20 @@ export default function YouView({ items }: Props) {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* avatar header */}
       <View style={styles.header}>
-        <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
+        <Pressable
+          onPress={changeAvatar}
+          disabled={avatarUploading}
+          accessibilityRole="button"
+          accessibilityLabel={t('change_photo')}
+          testID="avatar-change-btn"
+        >
+          <Avatar name={displayName} src={user?.avatar || undefined} size="lg" />
+          {avatarUploading ? (
+            <View style={styles.avatarSpinner} testID="avatar-uploading">
+              <ActivityIndicator color={colors.white} />
+            </View>
+          ) : null}
+        </Pressable>
         <View style={styles.headerInfo}>
           <View style={styles.nameRow}>
             <Text style={styles.displayName} testID="display-name">
@@ -255,6 +332,13 @@ export default function YouView({ items }: Props) {
           triggerMode="flag"
         />
       </View>
+
+      {/* non-blocking avatar upload error — old avatar stays on failure */}
+      {avatarError ? (
+        <Text style={styles.avatarError} testID="avatar-error">
+          {avatarError}
+        </Text>
+      ) : null}
 
       {/* verdict stat tiles */}
       <View style={styles.statRow}>
@@ -420,6 +504,19 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
+  },
+  // Spinner overlay covering the avatar while an upload is in flight.
+  avatarSpinner: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: radius.md,
+  },
+  avatarError: {
+    color: colors.verdictNah2,
+    fontSize: 13,
+    marginTop: space[2],
   },
   nameRow: {
     flexDirection: 'row',

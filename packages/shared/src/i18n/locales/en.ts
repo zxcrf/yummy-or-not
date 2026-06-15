@@ -121,6 +121,8 @@ export const en: Record<string, string> = {
   display_name_label: "Nickname",
   default_name: "Foodie",
   invalid_display_name: "Nickname must be 1–50 characters",
+  change_photo: "Change photo",
+  avatar_upload_failed: "Couldn't update your photo. Please try again.",
   tag_manage: "Tag library",
   tag_rename: "Rename",
   tag_delete_confirm: "Delete tag? Tags already on your logs won't be affected.",
