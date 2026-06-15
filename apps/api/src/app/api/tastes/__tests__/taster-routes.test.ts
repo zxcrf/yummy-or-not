@@ -29,23 +29,31 @@ jest.mock('@/lib/cors', () => ({
 
 // The route imports CreateTasteError and does `err instanceof CreateTasteError`,
 // so the mock must export the SAME class the route catches against.
-class CreateTasteError extends Error {
-  constructor(public readonly code: 'invalid_taster') {
-    super(code);
-    this.name = 'CreateTasteError';
+// Class is defined inside the factory to avoid TDZ issues with jest.mock hoisting.
+jest.mock('@/lib/db', () => {
+  class CreateTasteError extends Error {
+    constructor(public readonly code: 'invalid_taster') {
+      super(code);
+      this.name = 'CreateTasteError';
+    }
   }
-}
+  return {
+    listTastes: (...args: unknown[]) => mockListTastes(...args),
+    createTaste: (...args: unknown[]) => mockCreateTaste(...args),
+    countTastes: (...args: unknown[]) => mockCountTastes(...args),
+    updateTaste: (...args: unknown[]) => mockUpdateTaste(...args),
+    getTaste: jest.fn(),
+    deleteTaste: jest.fn(),
+    getRawImage: jest.fn(),
+    CreateTasteError,
+  };
+});
 
-jest.mock('@/lib/db', () => ({
-  listTastes: (...args: unknown[]) => mockListTastes(...args),
-  createTaste: (...args: unknown[]) => mockCreateTaste(...args),
-  countTastes: (...args: unknown[]) => mockCountTastes(...args),
-  updateTaste: (...args: unknown[]) => mockUpdateTaste(...args),
-  getTaste: jest.fn(),
-  deleteTaste: jest.fn(),
-  getRawImage: jest.fn(),
-  CreateTasteError,
-}));
+// Retrieve the class from the mock so test code (new CreateTasteError(...)) uses
+// the exact same reference that the route module sees via instanceof.
+const { CreateTasteError } = jest.requireMock('@/lib/db') as {
+  CreateTasteError: new (code: 'invalid_taster') => Error;
+};
 
 jest.mock('@/lib/storage', () => ({
   uploadPhoto: jest.fn(),

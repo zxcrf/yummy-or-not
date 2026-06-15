@@ -24,6 +24,8 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@swc/core": "^1.15.41",
+    "@swc/jest": "^0.2.39",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
     "@types/pg": "^8.11.10",
