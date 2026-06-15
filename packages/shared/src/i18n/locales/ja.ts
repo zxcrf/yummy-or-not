@@ -75,6 +75,8 @@ export const ja: Record<string, string> = {
   display_name_label: "ニックネーム",
   default_name: "食いしん坊",
   invalid_display_name: "ニックネームは1〜50文字にしてください",
+  change_photo: "写真を変更",
+  avatar_upload_failed: "写真を更新できませんでした。もう一度お試しください。",
   tag_manage: "タグ管理",
   tag_rename: "名前変更",
   tag_delete_confirm: "タグを削除しますか？ログに付いているタグには影響しません。",

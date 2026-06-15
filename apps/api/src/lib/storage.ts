@@ -35,7 +35,7 @@
 
 import path from 'path';
 import { writeFile, mkdir, unlink, copyFile } from 'fs/promises';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getPhotoStorage } from './env';
 
@@ -234,6 +234,128 @@ export async function getSignedPhotoUrl(
     new GetObjectCommand({ Bucket: bucket, Key: key }),
     { expiresIn: ttlSeconds }
   );
+}
+
+// ── Presigned upload (direct PUT) — S3b-media Phase 1 ─────────────────────────
+//
+// Direct-to-R2 upload primitive: the API hands the client a short-lived presigned
+// PUT URL so the bytes never transit the API host. The signature binds Bucket +
+// Key + Content-Type, so the client MUST replay the same Content-Type header on
+// the PUT (returned to the client in the route response). The key is ALWAYS
+// server-generated (IDOR guard) — never derived from a client value.
+
+/** TTL for a presigned PUT URL. Short: the upload starts immediately after the
+ *  presign call, so a long window only widens the abuse surface. */
+export const PRESIGN_PUT_TTL_SECONDS = 120;
+
+/** Upper bound on a committed avatar's TRUE byte size (8 MiB). Enforced from the
+ *  GET-probed buffer length, not a spoofable Content-Length header. */
+export const AVATAR_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Build a presigned PUT URL for a server-generated key. Does NOT set an ACL
+ *  (R2 / S3_NO_ACL). Keeps AWS SDK usage in storage.ts (mirrors getSignedPhotoUrl).
+ */
+export async function getPresignedUploadUrl(
+  key: string,
+  contentType: string,
+  ttlSeconds = PRESIGN_PUT_TTL_SECONDS
+): Promise<string> {
+  const client = s3Client();
+  const bucket = process.env.S3_BUCKET ?? '';
+
+  return getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    { expiresIn: ttlSeconds }
+  );
+}
+
+/** Thrown by getObjectBuffer when the object's byte count exceeds maxBytes.
+ *  Lets callers map this to a 413 without reading the caller-supplied limit back
+ *  out of a union return type. */
+export class OversizeError extends Error {
+  constructor(public readonly bytesSeen: number) {
+    super(`Object exceeds size limit (${bytesSeen} bytes seen)`);
+    this.name = 'OversizeError';
+  }
+}
+
+/** GET-probe an object's BYTES into a Buffer with a bounded read.
+ *
+ *  - Returns null when the object is missing (NoSuchKey / 404).
+ *  - Throws OversizeError when the TRUE byte count exceeds maxBytes. Two layers
+ *    of protection:
+ *      1. ContentLength header — abort WITHOUT reading the body when defined and
+ *         already above the cap (cheap; no allocation).
+ *      2. Streaming byte-count guard — abort the stream once the running tally
+ *         exceeds maxBytes even when ContentLength is absent or incorrect.
+ *
+ *  Used by the avatar commit to byte-verify a freshly-PUT object with sharp.
+ *  The Content-Type header the client signed is NOT trusted — only the decoded
+ *  bytes prove format. Presigned PUT has no content-length bound enforced by R2,
+ *  so a client can PUT arbitrarily large bytes to its own key before calling
+ *  PATCH /api/user. The bounded read is the DoS guard.
+ *
+ *  @param maxBytes   Reject if the true size exceeds this (default: unlimited).
+ */
+export async function getObjectBuffer(
+  key: string,
+  maxBytes?: number
+): Promise<Buffer | null> {
+  const client = s3Client();
+  const bucket = process.env.S3_BUCKET ?? '';
+
+  let res: GetObjectCommandOutput;
+  try {
+    res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (err) {
+    const name = (err as { name?: string; Code?: string })?.name;
+    const code = (err as { name?: string; Code?: string })?.Code;
+    const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+    if (name === 'NoSuchKey' || code === 'NoSuchKey' || status === 404) return null;
+    throw err;
+  }
+
+  const body = res.Body;
+  if (!body) return null;
+
+  // Layer 1: ContentLength header fast-path — skip streaming entirely when the
+  // declared size already breaches the cap. ContentLength may be absent (chunked
+  // transfer) or lie (Range requests), so this is an optimistic early-exit only.
+  if (maxBytes !== undefined && res.ContentLength !== undefined) {
+    if (res.ContentLength > maxBytes) {
+      // Destroy the stream to release the TCP connection promptly.
+      if (typeof (body as { destroy?: () => void }).destroy === 'function') {
+        (body as { destroy: () => void }).destroy();
+      }
+      throw new OversizeError(res.ContentLength);
+    }
+  }
+
+  // Layer 2: bounded streaming — accumulate chunks and abort once the running
+  // count exceeds maxBytes, regardless of the ContentLength header.
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  // AWS SDK v3 Body is a Readable stream (Node.js) or a web ReadableStream.
+  // The SDK provides transformToByteArray() but that buffers everything first —
+  // we need chunk-by-chunk inspection. Use the async iterator interface which
+  // both Readable and web ReadableStream support under the SDK's stream wrapper.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (maxBytes !== undefined && total > maxBytes) {
+      // Destroy stream to release connection before throwing.
+      if (typeof (body as { destroy?: () => void }).destroy === 'function') {
+        (body as { destroy: () => void }).destroy();
+      }
+      throw new OversizeError(total);
+    }
+    chunks.push(buf);
+  }
+
+  return Buffer.concat(chunks);
 }
 
 // ── Vercel Blob backend ─────────────────────────────────────────────────────────

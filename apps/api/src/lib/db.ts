@@ -68,7 +68,7 @@ function relativeDate(createdAt: Date): string {
 /** Return true when the stored image value is a legacy absolute URL or local
  *  path that should be passed through unchanged (no variants, no presigning).
  *  Single source of truth shared by resolvePhotoUrls and imageKeyFromRow. */
-function isLegacyPhotoValue(image: string): boolean {
+export function isLegacyPhotoValue(image: string): boolean {
   return (
     image.startsWith('http://') ||
     image.startsWith('https://') ||
@@ -1054,15 +1054,29 @@ export async function listFamilyFeed(q: {
 
 // ── Users & auth ────────────────────────────────────────────────────────────
 
-/** Map a users row → the client-safe User (never includes password_hash). */
+/** Resolve a stored `users.avatar` value into a fetchable URL.
+ *  - empty            → '' (no avatar)
+ *  - legacy absolute  → http(s)://, /uploads/: pass through (OAuth avatars, etc.)
+ *  - bare R2 key      → presigned GET URL (flat-key branch of resolvePhotoUrls;
+ *                       on s3 this signs `u/{uid}/avatar/...` for 1h)
+ *  S3b: avatars are now stored as bare R2 keys after a presigned-PUT upload, so
+ *  every User serialization must resolve them. */
+async function resolveAvatarUrl(avatar: string | null | undefined): Promise<string> {
+  if (!avatar) return '';
+  if (isLegacyPhotoValue(avatar)) return avatar;
+  return (await resolvePhotoUrls(avatar)).image;
+}
+
+/** Map a users row → the client-safe User (never includes password_hash).
+ *  Async because the avatar may be a bare R2 key that needs presigning. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToUser(row: any): User {
+async function rowToUser(row: any): Promise<User> {
   return {
     id:              row.id,
     displayName:     row.display_name ?? '',
     phone:           row.phone ?? '',
     email:           row.email ?? '',
-    avatar:          row.avatar ?? '',
+    avatar:          await resolveAvatarUrl(row.avatar),
     locale:          row.locale ?? 'zh',
     plan:            row.plan ?? 'free',
     warningsEnabled: row.warnings_enabled != null ? Boolean(row.warnings_enabled) : true,
@@ -1075,12 +1089,21 @@ function rowToUser(row: any): User {
 
 export async function findUserById(id: string): Promise<User | null> {
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-  return rows.length ? rowToUser(rows[0]) : null;
+  return rows.length ? await rowToUser(rows[0]) : null;
+}
+
+/** Fetch the RAW stored `avatar` value (bare key or legacy URL) for a user.
+ *  Unlike findUserById, this does NOT presign, so a caller that needs the actual
+ *  storage key (e.g. to delete the prior object on avatar replace) gets it
+ *  verbatim. Returns '' when the row is missing or has no avatar. */
+export async function getRawAvatar(userId: string): Promise<string> {
+  const { rows } = await pool.query('SELECT avatar FROM users WHERE id = $1', [userId]);
+  return rows.length ? (rows[0].avatar ?? '') : '';
 }
 
 export async function findUserByPhone(phone: string): Promise<User | null> {
   const { rows } = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
-  return rows.length ? rowToUser(rows[0]) : null;
+  return rows.length ? await rowToUser(rows[0]) : null;
 }
 
 /** Fetch by email INCLUDING the password hash — for login verification only. */
@@ -1089,7 +1112,7 @@ export async function findUserByEmailWithHash(
 ): Promise<{ user: User; passwordHash: string | null } | null> {
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
   if (!rows.length) return null;
-  return { user: rowToUser(rows[0]), passwordHash: rows[0].password_hash ?? null };
+  return { user: await rowToUser(rows[0]), passwordHash: rows[0].password_hash ?? null };
 }
 
 export async function createUser(input: {
@@ -1115,7 +1138,7 @@ export async function createUser(input: {
       input.plan ?? 'free',
     ]
   );
-  const user = rowToUser(rows[0]);
+  const user = await rowToUser(rows[0]);
   // S3b: every new account gets its self-taster up front, so its records are
   // attributed from the very first save (idempotent — the createTaste fallback
   // also ensures one for pre-S3b accounts).
@@ -1195,7 +1218,7 @@ export async function getSessionUser(token: string): Promise<User | null> {
       LIMIT 1`,
     [hashSessionToken(token), token]
   );
-  return rows.length ? rowToUser(rows[0]) : null;
+  return rows.length ? await rowToUser(rows[0]) : null;
 }
 
 export async function deleteSession(token: string): Promise<void> {
@@ -1484,7 +1507,7 @@ export async function setUserPlan(userId: string, plan: Plan): Promise<User | nu
     'UPDATE users SET plan = $2 WHERE id = $1 RETURNING *',
     [userId, plan]
   );
-  return rows.length ? rowToUser(rows[0]) : null;
+  return rows.length ? await rowToUser(rows[0]) : null;
 }
 
 /** Look up a promo code by its canonical (normalized) form, or null. */
@@ -1560,7 +1583,7 @@ export async function redeemPromoCode(userId: string, rawCode: string): Promise<
       [userId, promo.grants_plan]
     );
     await client.query('COMMIT');
-    return { ok: true, user: rowToUser(upd.rows[0]) };
+    return { ok: true, user: await rowToUser(upd.rows[0]) };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1581,6 +1604,8 @@ export async function updateUserWarnings(
 
 export async function updateUserSettings(
   userId: string,
+  // S3b: `avatar` (a bare R2 key or legacy/empty value, already validated by the
+  // route) rides on UpdateUserInput, which now carries an optional `avatar`.
   input: UpdateUserInput
 ): Promise<User | null> {
   const setClauses: string[] = [];
@@ -1602,6 +1627,10 @@ export async function updateUserSettings(
     values.push(input.defaultVisibility);
     setClauses.push(`default_visibility = $${values.length}`);
   }
+  if (input.avatar !== undefined) {
+    values.push(input.avatar);
+    setClauses.push(`avatar = $${values.length}`);
+  }
 
   if (setClauses.length === 0) return findUserById(userId);
 
@@ -1609,7 +1638,7 @@ export async function updateUserSettings(
     `UPDATE users SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
     values
   );
-  return rows.length ? rowToUser(rows[0]) : null;
+  return rows.length ? await rowToUser(rows[0]) : null;
 }
 
 /** Add a purchase entry to the ledger for a taste the user owns.

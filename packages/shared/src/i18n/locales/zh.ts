@@ -121,6 +121,8 @@ export const zh: Record<string, string> = {
   display_name_label: "昵称",
   default_name: "吃货",
   invalid_display_name: "昵称需为 1–50 个字符",
+  change_photo: "更换照片",
+  avatar_upload_failed: "头像更新失败，请重试。",
   tag_manage: "标签管理",
   tag_rename: "重命名",
   tag_delete_confirm: "删除标签？记录上已有的标签不受影响",

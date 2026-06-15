@@ -180,6 +180,28 @@ export interface UpdateUserInput {
   displayName?: string;
   /** S3c: default visibility for new records ('private' | 'shared'). */
   defaultVisibility?: 'private' | 'shared';
+  /** S3b-media: account avatar. Either a bare freshly-PUT R2 key
+   *  (`u/{uid}/avatar/...`, server byte-verifies before persisting) or a legacy
+   *  passthrough value (http(s):// or /uploads/). '' clears it. */
+  avatar?: string;
+}
+
+/** POST /api/uploads/presign — request a short-lived presigned PUT URL for a
+ *  direct-to-R2 upload. v1 only supports `kind: 'avatar'`. The server generates
+ *  the object key (client never supplies it) and returns the URL + the headers
+ *  the client MUST replay on the PUT so the signature matches. */
+export interface PresignUploadInput {
+  kind: 'avatar';
+  contentType: string;
+}
+
+/** POST /api/uploads/presign response. `headers` must be replayed verbatim on
+ *  the PUT (Content-Type binds the SigV4 signature). `key` is the server-chosen
+ *  bare R2 key to commit via PATCH /api/user `{ avatar: key }`. */
+export interface PresignUploadResult {
+  uploadUrl: string;
+  key: string;
+  headers: Record<string, string>;
 }
 
 /* ----------------------------------------------------------------
