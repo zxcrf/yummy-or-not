@@ -240,6 +240,7 @@ export default function LibraryView() {
                 price={formatMoney(it.price)}
                 status={it.status}
                 verdict={it.verdict}
+                mediaType={it.mediaType}
                 tags={it.tags}
                 boughtCount={it.boughtCount}
                 boughtLabel={t('bought_n', { n: it.boughtCount })}

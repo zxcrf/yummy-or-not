@@ -131,8 +131,20 @@ CREATE TABLE tastes (
   taster_id      text,
   -- S3c: 'private' (default — never in any cross-user feed) or 'shared' (≥1 publish).
   visibility     text        NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'shared')),
+  -- S3b Phase 2 (migration 0012): media kind + private video clip.
+  -- media_type 'image' (default) keeps `image` as the only media; 'video' adds a
+  -- private clip sibling (clip_key) with `image` as the POSTER. duration_ms ≤15000.
+  media_type     text        NOT NULL DEFAULT 'image' CHECK (media_type IN ('image', 'video')),
+  clip_key       text,       -- u/{userId}/clips/{uuid}/clip.{ext}; NULL on image rows
+  duration_ms    integer,    -- clip length in ms; NULL on image rows
   created_at     timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT tastes_status_verdict_check CHECK (status <> 'tasted' OR verdict IS NOT NULL)
+  CONSTRAINT tastes_status_verdict_check CHECK (status <> 'tasted' OR verdict IS NOT NULL),
+  -- ⟦DR#2⟧ media invariant: image rows carry no clip; video rows must carry one.
+  CONSTRAINT tastes_media_invariant_check CHECK (
+    (media_type = 'image' AND clip_key IS NULL AND duration_ms IS NULL)
+    OR
+    (media_type = 'video' AND clip_key IS NOT NULL)
+  )
 );
 
 -- Per-user, newest-first queries (the hot path)

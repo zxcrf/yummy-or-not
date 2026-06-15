@@ -35,7 +35,7 @@
 
 import path from 'path';
 import { writeFile, mkdir, unlink, copyFile } from 'fs/promises';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, CopyObjectCommand, type GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getPhotoStorage } from './env';
 
@@ -356,6 +356,52 @@ export async function getObjectBuffer(
   }
 
   return Buffer.concat(chunks);
+}
+
+// ── HEAD-probe — S3b-media Phase 2 (video clip commit) ────────────────────────
+//
+// A video clip is up to CLIP_MAX_BYTES (20 MiB), so the commit MUST NOT buffer it
+// (getObjectBuffer would pull the whole object into Node heap = OOM under load).
+// HEAD returns only the metadata the commit needs — declared Content-Type + size —
+// without transferring the body. The server never decodes the video (no sharp /
+// no transcode), so HEAD proves the declared type + size only; that the bytes are
+// real video and duration≤15s is client-trusted (documented risk — the clip is
+// consumed solely by the native player, never rendered in a web DOM; web paused).
+
+/** Upper bound on a committed video clip's byte size (20 MiB). Separate from and
+ *  lower than the 25 MiB image cap — enforced via the HEAD-probed Content-Length,
+ *  not a spoofable client header (R2 returns the true stored size). */
+export const CLIP_MAX_BYTES = 20 * 1024 * 1024;
+
+/** HEAD-probe an object's metadata WITHOUT transferring its body.
+ *
+ *  - Returns null when the object is missing (NotFound / NoSuchKey / 404).
+ *  - Returns { contentLength, contentType } otherwise (either may be undefined if
+ *    R2 omits the header, though it sets both for a normal PUT). The caller maps
+ *    a missing object to a 400 and an out-of-policy type/size to 400/413.
+ *
+ *  Re-added in Phase 2: Phase 1 removed HEAD in favour of getObjectBuffer (which
+ *  the avatar commit needs to byte-verify a small image with sharp). Video needs
+ *  HEAD specifically to AVOID buffering 20 MiB. */
+export async function headObject(
+  key: string
+): Promise<{ contentLength?: number; contentType?: string } | null> {
+  const client = s3Client();
+  const bucket = process.env.S3_BUCKET ?? '';
+
+  try {
+    const res = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return { contentLength: res.ContentLength, contentType: res.ContentType };
+  } catch (err) {
+    const name = (err as { name?: string; Code?: string })?.name;
+    const code = (err as { name?: string; Code?: string })?.Code;
+    const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+    // HEAD on a missing key returns 404 — surfaced as NotFound (SDK) / NoSuchKey.
+    if (name === 'NotFound' || name === 'NoSuchKey' || code === 'NotFound' || code === 'NoSuchKey' || status === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 // ── Vercel Blob backend ─────────────────────────────────────────────────────────

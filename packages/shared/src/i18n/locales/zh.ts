@@ -158,4 +158,10 @@ export const zh: Record<string, string> = {
   family_feed_error: "加载失败，请重试",
   upgrade_to_pro: "升级 Pro",
   retry: "重试",
+  // S3b Phase 2 — 口味卡片视频
+  add_video: "添加视频",
+  video_too_long: "视频不能超过 15 秒，请选择更短的片段。",
+  video_too_large: "视频太大了（最大 20 MB），请选择更小的片段。",
+  video_play: "播放视频",
+  video_load_failed: "暂时无法播放该视频，请稍后再试。",
 };

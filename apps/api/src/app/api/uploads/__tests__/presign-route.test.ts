@@ -73,8 +73,8 @@ describe('POST /api/uploads/presign', () => {
     expect(mockedPresign).not.toHaveBeenCalled();
   });
 
-  it('400 invalid_kind when kind is not avatar', async () => {
-    const res = await POST(reqOf({ kind: 'video', contentType: 'image/jpeg' }));
+  it('400 invalid_kind when kind is neither avatar nor video', async () => {
+    const res = await POST(reqOf({ kind: 'document', contentType: 'image/jpeg' }));
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.error).toBe('invalid_kind');
@@ -124,6 +124,65 @@ describe('POST /api/uploads/presign', () => {
     expect(res.status).toBe(200);
     // server key is under THIS user's namespace, never the injected one
     expect(body.key).toMatch(/^u\/u1\/avatar\/[0-9a-f-]+\.jpg$/);
+    expect(body.key).not.toContain('victim');
+  });
+});
+
+describe('POST /api/uploads/presign — kind:video (S3b Phase 2)', () => {
+  it('⟦GATE⟧ 403 media_not_enabled when the account lacks the media capability', async () => {
+    // user.mediaEnabled is false by default — the Pro gate at the presign boundary.
+    const res = await POST(reqOf({ kind: 'video', contentType: 'video/mp4' }));
+    const body = await res.json();
+    expect(res.status).toBe(403);
+    expect(body.error).toBe('media_not_enabled');
+    expect(mockedPresign).not.toHaveBeenCalled();
+  });
+
+  it('400 unsupported_content_type for a non-video type even when media is enabled', async () => {
+    mockedAuth.mockResolvedValue({ ...user, mediaEnabled: true });
+    const res = await POST(reqOf({ kind: 'video', contentType: 'image/jpeg' }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('unsupported_content_type');
+    expect(mockedPresign).not.toHaveBeenCalled();
+  });
+
+  it('400 unsupported_content_type for "constructor" (prototype-chain bypass)', async () => {
+    mockedAuth.mockResolvedValue({ ...user, mediaEnabled: true });
+    const res = await POST(reqOf({ kind: 'video', contentType: 'constructor' }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('unsupported_content_type');
+    expect(mockedPresign).not.toHaveBeenCalled();
+  });
+
+  it('200 mints a clip key under u/{uid}/clips/{uuid}/clip.mp4 for video/mp4', async () => {
+    mockedAuth.mockResolvedValue({ ...user, mediaEnabled: true });
+    const res = await POST(reqOf({ kind: 'video', contentType: 'video/mp4' }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    // ⟦DR#1⟧ user-owned clips prefix + shape — never a shared t/ key.
+    expect(body.key).toMatch(/^u\/u1\/clips\/[0-9a-f-]+\/clip\.mp4$/);
+    expect(body.headers).toEqual({ 'Content-Type': 'video/mp4' });
+    expect(mockedPresign).toHaveBeenCalledWith(body.key, 'video/mp4');
+  });
+
+  it('200 maps video/quicktime → .mov', async () => {
+    mockedAuth.mockResolvedValue({ ...user, mediaEnabled: true });
+    const res = await POST(reqOf({ kind: 'video', contentType: 'video/quicktime' }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.key).toMatch(/^u\/u1\/clips\/[0-9a-f-]+\/clip\.mov$/);
+  });
+
+  it('⟦DR#1⟧ the clip key is under THIS user, never a client-injected namespace', async () => {
+    mockedAuth.mockResolvedValue({ ...user, mediaEnabled: true });
+    const res = await POST(
+      reqOf({ kind: 'video', contentType: 'video/mp4', key: 'u/victim/clips/x/clip.mp4' })
+    );
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.key).toMatch(/^u\/u1\/clips\//);
     expect(body.key).not.toContain('victim');
   });
 });

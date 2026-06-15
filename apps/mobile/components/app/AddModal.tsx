@@ -35,13 +35,16 @@ import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import { Text, colors, space, radius } from '@/theme'
 import { compressAsset } from '@/lib/compressAsset'
+import { extractVideoPoster } from '@/lib/extractVideoPoster'
 import {
   TAG_CHOICES,
   createTaste,
   createTag,
   publishTasteGeo,
+  requestClipPresign,
   reverseGeocode,
   searchTastes,
+  uploadToPresignedUrl,
   type PhotoInput,
   type Taste,
   type TasteStatus,
@@ -167,8 +170,20 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [locFailed, setLocFailed] = useState(false)
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
+  // For a VIDEO record this slot holds the extracted JPEG poster (or null when
+  // poster extraction failed — the clip still uploads with a placeholder).
   const [photo, setPhoto] = useState<PhotoInput | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+
+  // S3b Phase 2 — picked video clip (native-only). `clipUri` is the local file
+  // to upload; `clipDurationMs` is the client-measured duration sent as
+  // durationMs; `clipContentType` is derived at pick time from asset.mimeType
+  // (most reliable) → filename extension → URI extension → safe default.
+  // All three null on an image-only record. When set, the record is submitted
+  // as mediaType:'video' (poster rides the `photo` slot above).
+  const [clipUri, setClipUri] = useState<string | null>(null)
+  const [clipDurationMs, setClipDurationMs] = useState<number | null>(null)
+  const [clipContentType, setClipContentType] = useState<string | null>(null)
 
   // Measured height of the sticky action footer. The footer floats up over the
   // scroll viewport when the keyboard opens (KeyboardStickyView), so the scroll
@@ -390,6 +405,87 @@ export default function AddModal({ onClose, onSaved }: Props) {
     }
   }
 
+  // --- Native video capture (S3b Phase 2) ----------------------------------
+  // Pick a short clip, enforce client caps (duration ≤15s, size ≤20MB — the
+  // server backstops both), extract a poster frame, and stage the clip for
+  // upload on save. Poster-extract failure is non-blocking: the clip still
+  // uploads and the card shows a generic play-button placeholder.
+  const CLIP_MAX_MS = 15_000
+  const CLIP_MAX_BYTES = 20 * 1024 * 1024
+  const pickVideo = async () => {
+    if (pickInFlight.current) return
+    pickInFlight.current = true
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        setError(t('photo_permission_denied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        videoMaxDuration: 15,
+        // iOS re-encodes to a smaller preset on export; Android ignores it.
+        videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+        quality: 1,
+      })
+      if (result.canceled || !result.assets[0]) return
+      const asset = result.assets[0]
+
+      // Cap: duration (ms). asset.duration is in ms for videos. Missing (null /
+      // undefined) or zero → treat as unknowable → reject (prevents wasted
+      // upload and server reject). Over 15s → same inline error + re-pick.
+      const durationMs = asset.duration ?? 0
+      if (durationMs <= 0 || durationMs > CLIP_MAX_MS) {
+        setClipUri(null)
+        setClipDurationMs(null)
+        setClipContentType(null)
+        setError(t('video_too_long'))
+        return
+      }
+      // Cap: file size when knowable. Over 20MB → warn + re-pick.
+      if (asset.fileSize != null && asset.fileSize > CLIP_MAX_BYTES) {
+        setClipUri(null)
+        setClipDurationMs(null)
+        setClipContentType(null)
+        setError(t('video_too_large'))
+        return
+      }
+
+      // Derive content-type at pick time when asset metadata is available.
+      // Priority: mimeType (most reliable) → fileName extension → URI extension
+      // → safe default. Only video/mp4 and video/quicktime are accepted; anything
+      // else (or unknown) falls back to video/mp4.
+      const resolveContentType = (): string => {
+        if (asset.mimeType === 'video/quicktime' || asset.mimeType === 'video/mp4') {
+          return asset.mimeType
+        }
+        const name = asset.fileName ?? asset.uri
+        if (name.toLowerCase().endsWith('.mov')) return 'video/quicktime'
+        if (name.toLowerCase().endsWith('.mp4')) return 'video/mp4'
+        return 'video/mp4'
+      }
+      const resolvedContentType = resolveContentType()
+
+      setError(null)
+      setClipUri(asset.uri)
+      setClipDurationMs(durationMs)
+      setClipContentType(resolvedContentType)
+
+      // Extract a ~0.5s poster frame → JPEG. On failure (null) the card falls
+      // back to a generic play-button placeholder; the clip still uploads.
+      const poster = await extractVideoPoster(asset.uri)
+      if (poster) {
+        setPhoto(poster)
+        setPhotoPreview('uri' in poster ? poster.uri : null)
+      } else {
+        setPhoto(null)
+        setPhotoPreview(null)
+      }
+    } finally {
+      pickInFlight.current = false
+    }
+  }
+
   const fillPlaceFromAddress = (address: Location.LocationGeocodedAddress | null | undefined) => {
     if (!address) return
     const line1 = [address.name, address.street].filter(Boolean).join(' ')
@@ -523,6 +619,32 @@ export default function AddModal({ onClose, onSaved }: Props) {
     setSaving(true)
     setError(null)
     try {
+      // S3b Phase 2 — when a clip is staged, upload it to R2 first (presign →
+      // PUT), then submit the taste as mediaType:'video' with the server-issued
+      // clipKey. The poster (if extracted) rides the `photo` slot; a failed
+      // poster-extract leaves photo null and the server stores no poster (the
+      // card shows a play-button placeholder). An upload failure aborts the save
+      // with an inline error so the record is never created without its clip.
+      let clipKey: string | undefined
+      if (clipUri) {
+        try {
+          // Use the content-type resolved at pick time (from asset.mimeType /
+          // filename / URI). Falls back to video/mp4 if state is somehow null
+          // (defensive — clipContentType is always set alongside clipUri).
+          const contentType = clipContentType ?? 'video/mp4'
+          const { uploadUrl, key, headers } = await requestClipPresign({
+            kind: 'video',
+            contentType,
+          })
+          await uploadToPresignedUrl(uploadUrl, headers, clipUri)
+          clipKey = key
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Upload failed')
+          setSaving(false)
+          return
+        }
+      }
+
       const created = await createTaste(
         {
           name,
@@ -534,6 +656,14 @@ export default function AddModal({ onClose, onSaved }: Props) {
           notes: notes || undefined,
           lat,
           lng,
+          // S3b Phase 2 video attachment. Only sent when a clip was uploaded.
+          ...(clipKey
+            ? {
+                mediaType: 'video' as const,
+                clipKey,
+                ...(clipDurationMs != null ? { durationMs: clipDurationMs } : {}),
+              }
+            : {}),
           // Only attribute to a persona the user can actually see and change:
           // send the chosen taster only when the picker is shown. If it's hidden
           // (free account, or family personas not loaded/removed) we never carry
@@ -741,6 +871,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
           >
             {photoPreview ? (
               <PhotoPreview uri={photoPreview} />
+            ) : clipUri ? (
+              // A clip is staged but poster extraction failed → generic
+              // play-button placeholder (the card uses the same fallback).
+              <>
+                <Icon name="arrow-right" size={32} color="#a89fae" />
+                <Text
+                  style={{ color: colors.ink500, fontSize: 9, letterSpacing: 1.1, textTransform: 'uppercase' }}
+                >
+                  {t('add_video')}
+                </Text>
+              </>
             ) : (
               <>
                 <Icon name="camera" size={32} color="#a89fae" />
@@ -752,6 +893,18 @@ export default function AddModal({ onClose, onSaved }: Props) {
               </>
             )}
           </Pressable>
+
+          {/* S3b Phase 2 — video affordance. Picks a short clip (≤15s), extracts
+              a poster, and stages the clip for upload on save. Native-only. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={() => void pickVideo()}
+            testID="add-video-btn"
+            iconLeft={<Icon name="arrow-right" size={16} color="#191017" />}
+          >
+            {t('add_video')}
+          </Button>
 
           {/* text fields — title reflects mode: tasted asks "what did you eat",
               todo asks "what do you want to try" (user hasn't eaten it yet). */}

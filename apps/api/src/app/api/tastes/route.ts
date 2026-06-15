@@ -6,10 +6,94 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listTastes, createTaste, countTastes, CreateTasteError } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
-import { uploadPhoto, deletePhoto, assertMediaAllowed } from '@/lib/storage';
+import { uploadPhoto, deletePhoto, assertMediaAllowed, headObject, CLIP_MAX_BYTES } from '@/lib/storage';
 import { getPhotoStorage } from '@/lib/env';
 import { origKey, variantKeys, makeVariants, safeExt } from '@/lib/image-variants';
 import { FREE_TASTE_CAP, type CreateTasteInput, type Verdict, type TasteStatus } from '@yon/shared';
+
+/** Max clip duration the server accepts (ms). The client caps the picker at 15s;
+ *  a small tolerance absorbs container-vs-track rounding (a 15.0s clip can report
+ *  ~15040ms). Anything beyond is a 400 clip_too_long. */
+const CLIP_MAX_DURATION_MS = 15_000;
+const CLIP_DURATION_TOLERANCE_MS = 500;
+
+/** ⟦DR#1/DR#2⟧ Validate a video commit's media fields. Returns an error code the
+ *  route maps to a status, or `{ clipKey, durationMs }` when valid. Pure: does NO
+ *  network IO (the HEAD probe is done by the caller so a thrown error there is
+ *  handled in one place). Enforces, in order:
+ *   - clipKey is a string under THIS user's clips prefix (ownership — rejects a
+ *     foreign u/{other}/clips/... key = IDOR) and matches .../clip.{mp4|mov}.
+ *   - durationMs is a finite number ≤ the cap (+tolerance). */
+function validateClipFields(
+  userId: string,
+  clipKey: unknown,
+  durationMs: unknown
+):
+  | { error: 'invalid_clip_key' | 'clip_too_long' }
+  | { ok: true; clipKey: string; durationMs: number } {
+  if (typeof clipKey !== 'string') return { error: 'invalid_clip_key' };
+  const prefix = `u/${userId}/clips/`;
+  // Ownership prefix + shape. The presign route mints exactly
+  // u/{user.id}/clips/{uuid}/clip.{mp4|mov}; pin that shape so a client can't
+  // commit an arbitrary key (e.g. another user's object, or a non-clip path).
+  const shape = new RegExp(`^u/${userId}/clips/[0-9a-fA-F-]+/clip\\.(mp4|mov)$`);
+  if (!clipKey.startsWith(prefix) || !shape.test(clipKey)) {
+    return { error: 'invalid_clip_key' };
+  }
+  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return { error: 'clip_too_long' };
+  }
+  if (durationMs > CLIP_MAX_DURATION_MS + CLIP_DURATION_TOLERANCE_MS) {
+    return { error: 'clip_too_long' };
+  }
+  return { ok: true, clipKey, durationMs: Math.round(durationMs) };
+}
+
+/** Resolve + validate a `mediaType:'video'` commit. Shared by the multipart and
+ *  JSON request paths so both enforce the SAME gate. Returns either a ready-to-send
+ *  error response (status-tagged) or the validated `{ clipKey, durationMs }` to
+ *  persist. ⟦GATE⟧ + ⟦DR#1/DR#2/DR#5⟧:
+ *   - re-assert media_enabled (commit-side, not just presign) → 403.
+ *   - clipKey ownership prefix + shape, duration cap → 400.
+ *   - ⟦DR#5⟧ HEAD-verify the freshly-PUT object (NO body buffer — clips are 20MB):
+ *       missing → 400 clip_not_uploaded; type not video/* → 400 unsupported_content_type;
+ *       size > CLIP_MAX_BYTES → 413 clip_too_large. Best-effort delete on any HEAD
+ *       failure so a rejected upload doesn't linger. */
+async function resolveVideoCommit(
+  user: { id: string; mediaEnabled: boolean },
+  clipKey: unknown,
+  durationMs: unknown,
+  origin: string | null
+): Promise<{ error: NextResponse } | { ok: true; clipKey: string; durationMs: number }> {
+  const fail = (code: string, status: number) => ({
+    error: withCors(NextResponse.json({ error: code }, { status }), origin),
+  });
+
+  // ⟦GATE⟧ commit-side Pro gate — never rely on the presign gate alone.
+  if (!user.mediaEnabled) return fail('media_not_enabled', 403);
+
+  const validated = validateClipFields(user.id, clipKey, durationMs);
+  if ('error' in validated) {
+    return fail(validated.error, 400);
+  }
+
+  // ⟦DR#5⟧ HEAD (not getObjectBuffer): prove the object exists + declared type/size
+  // without pulling 20MB into the API heap.
+  const head = await headObject(validated.clipKey);
+  if (!head) {
+    return fail('clip_not_uploaded', 400);
+  }
+  if (!(head.contentType ?? '').toLowerCase().startsWith('video/')) {
+    await deletePhoto(validated.clipKey).catch(() => {});
+    return fail('unsupported_content_type', 400);
+  }
+  if (head.contentLength !== undefined && head.contentLength > CLIP_MAX_BYTES) {
+    await deletePhoto(validated.clipKey).catch(() => {});
+    return fail('clip_too_large', 413);
+  }
+
+  return { ok: true, clipKey: validated.clipKey, durationMs: validated.durationMs };
+}
 
 export async function OPTIONS(req: NextRequest) {
   return corsPreflight(req.headers.get('origin'));
@@ -103,6 +187,16 @@ export async function POST(req: NextRequest) {
       const lng = parseOptionalFloat(form.get('lng'));
       const tasterField = (form.get('tasterId') as string | null)?.trim() || undefined;
 
+      // S3b Phase 2 media fields. The POSTER arrives as the `photo` file (existing
+      // variant pipeline → `image` col, UNCHANGED). These describe the optional clip.
+      const mediaTypeField = (form.get('mediaType') as string | null) ?? '';
+      const clipKeyField = (form.get('clipKey') as string | null) ?? '';
+      const durationField = form.get('durationMs');
+      const durationParsed =
+        typeof durationField === 'string' && durationField.trim() !== ''
+          ? Number(durationField)
+          : undefined;
+
       // Read all 'tags' values (one per fd.append call from the client).
       // Also handle legacy backward-compat where a single JSON-array string was sent.
       const tagsRaw = form.getAll('tags').map(String);
@@ -171,10 +265,40 @@ export async function POST(req: NextRequest) {
             // Store the orig key in the DB image column; resolvePhotoUrls reads it.
             imageUrl = ok;
           } catch (sharpErr) {
-            // Transcode or a variant upload failed: fall back to the legacy
-            // single-key path so the upload still succeeds (e.g. unsupported
-            // format). All three uploads have settled by now, so deleting any
-            // partial siblings cannot race a pending PUT.
+            // Transcode or a variant upload failed. Before falling back to the
+            // legacy single-key path, confirm the buffer is actually a decodable
+            // image. Without this check, a renamed video (e.g. video.mp4 →
+            // photo.jpg sent as image/jpeg) passes the content-type gate above
+            // (image/ prefix → assertMediaAllowed passes), makeVariants throws on
+            // the video bytes, and the raw fallback would persist arbitrary
+            // non-image bytes — bypassing the media gate entirely.
+            //
+            // sharp().metadata() does NOT transcode — it reads the header only.
+            // Known-decodable image formats: jpeg/png/webp/gif/tiff/avif/heif/svg.
+            // If metadata throws, the bytes are not a recognisable image format.
+            const ALLOWED_IMAGE_FORMATS = new Set([
+              'jpeg', 'png', 'webp', 'gif', 'tiff', 'avif', 'heif', 'svg',
+            ]);
+            let isDecodableImage = false;
+            try {
+              const { default: sharp } = await import('sharp');
+              const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+              isDecodableImage = ALLOWED_IMAGE_FORMATS.has(meta.format ?? '');
+            } catch {
+              // metadata() itself threw — definitely not a recognised image.
+              isDecodableImage = false;
+            }
+
+            if (!isDecodableImage) {
+              // Bytes are not a decodable image. Clean up any partial uploads and
+              // reject — do NOT store arbitrary bytes under an image key.
+              console.error('POST /api/tastes: non-image bytes rejected in fallback path');
+              await Promise.allSettled([deletePhoto(ok), deletePhoto(thumbKey), deletePhoto(displayKey)]);
+              return withCors(NextResponse.json({ error: 'invalid_image' }, { status: 400 }), origin);
+            }
+
+            // Buffer is a valid image that sharp couldn't TRANSCODE (e.g. unusual
+            // sub-format). Fall back to the legacy single-key upload.
             console.error('POST /api/tastes: variant generation failed, using legacy path:', sharpErr);
             await Promise.allSettled([deletePhoto(ok), deletePhoto(thumbKey), deletePhoto(displayKey)]);
             const key = `${crypto.randomUUID()}.${safeExt(photo.name)}`;
@@ -190,6 +314,21 @@ export async function POST(req: NextRequest) {
       if (!tastedRequiresVerdict(input)) {
         return withCors(NextResponse.json({ error: 'verdict_required' }, { status: 400 }), origin);
       }
+
+      // S3b Phase 2: video commit. The `photo` above is the POSTER (image col);
+      // the clip is the separately-uploaded private object referenced by clipKey.
+      if (mediaTypeField === 'video') {
+        const v = await resolveVideoCommit(user, clipKeyField, durationParsed, origin);
+        if ('error' in v) return v.error;
+        input.mediaType = 'video';
+        input.clipKey = v.clipKey;
+        input.durationMs = v.durationMs;
+      } else if (clipKeyField || durationParsed !== undefined) {
+        // ⟦DR#2⟧ clip fields on a non-video create are rejected early (the DB CHECK
+        // is the backstop). A poster-only image must never carry a clip.
+        return withCors(NextResponse.json({ error: 'invalid_media' }, { status: 400 }), origin);
+      }
+
       const taste = await createTaste(user.id, input, imageUrl);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     } else {
@@ -203,6 +342,20 @@ export async function POST(req: NextRequest) {
       if (!tastedRequiresVerdict(input)) {
         return withCors(NextResponse.json({ error: 'verdict_required' }, { status: 400 }), origin);
       }
+
+      // S3b Phase 2: a JSON create may also attach a clip (poster-via-photo is the
+      // common case, but the same gate must hold here). ⟦DR#2⟧ reject clip fields on
+      // a non-video create.
+      if (input.mediaType === 'video') {
+        const v = await resolveVideoCommit(user, input.clipKey, input.durationMs, origin);
+        if ('error' in v) return v.error;
+        input.mediaType = 'video';
+        input.clipKey = v.clipKey;
+        input.durationMs = v.durationMs;
+      } else if (input.clipKey || input.durationMs !== undefined) {
+        return withCors(NextResponse.json({ error: 'invalid_media' }, { status: 400 }), origin);
+      }
+
       const taste = await createTaste(user.id, input);
       return withCors(NextResponse.json(taste, { status: 201 }), origin);
     }

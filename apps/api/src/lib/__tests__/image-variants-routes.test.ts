@@ -42,6 +42,18 @@ jest.mock('../image-variants', () => ({
   makeVariants: jest.fn(),
 }));
 
+// The sharp-failure fallback path now byte-validates the buffer via
+// sharp().metadata() BEFORE re-uploading (media-gate hardening: video bytes
+// disguised as image/jpeg are rejected rather than stored raw). These tests
+// exercise the fallback MECHANICS for a genuine image whose transcode failed,
+// so metadata must succeed with an allowed format. The attack case (metadata
+// throws / unknown format → 400 invalid_image) is pinned in
+// photo-byte-validation.test.ts.
+jest.mock('sharp', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({ metadata: jest.fn().mockResolvedValue({ format: 'jpeg' }) })),
+}));
+
 // db: mock getRawImage + createTaste; keep everything else real-shaped.
 jest.mock('../db', () => ({
   ...jest.requireActual('../db'),

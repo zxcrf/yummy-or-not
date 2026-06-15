@@ -71,6 +71,17 @@ export interface Taste {
   /** S3b: the taster persona this record is attributed to. null on legacy rows
    *  that predate the backfill (treated as the owner's self-taster). */
   tasterId?: string | null;
+  /** S3b Phase 2: media kind of this record. 'image' (default) or 'video'.
+   *  Absent ≡ 'image' for old-APK back-compat; rowToTaste always populates it.
+   *  When 'video', `image` is the POSTER and `clipUrl` plays the clip. */
+  mediaType?: 'image' | 'video';
+  /** S3b Phase 2: short-lived presigned GET URL for the video clip (private R2),
+   *  present ONLY on owner-facing payloads of video records. NEVER emitted on
+   *  share / public / feed payloads (clips are private-only in v1). The player
+   *  re-fetches a fresh URL on playback error (TTL ~1h). */
+  clipUrl?: string;
+  /** S3b Phase 2: clip duration in milliseconds (≤15000). null on image rows. */
+  durationMs?: number | null;
   /** Display-quality image URL (presigned R2 or /uploads/... path). "" if none.
    *  Kept as the legacy field name for old-APK compatibility; new code should
    *  prefer imageDisplay for display and imageThumb for list thumbnails. */
@@ -108,6 +119,15 @@ export interface CreateTasteInput {
   /** S3b: the active client taster to attribute this record to. Omitted → the
    *  server applies the caller's self-taster (never a wrong persona). */
   tasterId?: string;
+  /** S3b Phase 2: 'video' attaches a clip (poster rides the `photo` upload).
+   *  Omitted ≡ 'image'. The server gates 'video' on media_enabled + validates
+   *  clipKey ownership/HEAD before persisting. */
+  mediaType?: 'image' | 'video';
+  /** S3b Phase 2: server-owned clip key from the video presign
+   *  (`u/{userId}/clips/{uuid}/clip.{mp4|mov}`). Required iff mediaType='video'. */
+  clipKey?: string;
+  /** S3b Phase 2: client-measured clip duration in ms (≤15000). */
+  durationMs?: number;
 }
 
 /** Payload to update a taste (PATCH /api/tastes/[id]). All fields optional. */

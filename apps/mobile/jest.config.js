@@ -27,6 +27,10 @@ module.exports = {
     // installed; the impl adds expo-clipboard + react-native-qrcode-svg.
     '^expo-clipboard$': '<rootDir>/__mocks__/expo-clipboard.js',
     '^react-native-qrcode-svg$': '<rootDir>/__mocks__/react-native-qrcode-svg.js',
+    // S3b Phase 2: expo-video is a native module with no JS fallback — jest-expo
+    // can't load it. Map to a stub so suites that transitively import the player
+    // (DetailView → VideoPlayerModal) run; precise tests re-mock it inline.
+    '^expo-video$': '<rootDir>/__mocks__/expo-video.js',
     // Map workspace package to its TypeScript source — no build step needed.
     '^@yon/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@yon/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1.ts',

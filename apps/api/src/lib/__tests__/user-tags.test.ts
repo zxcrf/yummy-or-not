@@ -57,6 +57,9 @@ function createSchema() {
       bought_count int  NOT NULL DEFAULT 1,
       notes        text NOT NULL DEFAULT '',
       image        text NOT NULL DEFAULT '',
+      media_type   text NOT NULL DEFAULT 'image',
+      clip_key     text,
+      duration_ms  integer,
       created_at   timestamptz NOT NULL DEFAULT now()
     );
   `);
