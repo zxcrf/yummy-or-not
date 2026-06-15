@@ -69,6 +69,8 @@ tastes 加 status（tasted / todo），todo 无 verdict，吃完转正。
 - **S3a** 单条分享→导入：mint share token + deep link/导入码 → 对方存入 to-taste（快照解耦）。
 - **S3b** Taster 切换 + Family：persona 无登录帮人记录，pro 解锁多 taster；
   live photo/mini video 走能力位 `media_enabled`（pro 升级档），独立子拆 S3b-media。
+  taster/family 已落地（#91）；S3b-media 设计稿 + 6 决策已定，build-ready：
+  📄 [plans/s3b-media.md](plans/s3b-media.md)（presign-PUT 直传 / 不转码 / Phase1 头像优先）。
 - **S3c** Geo 可见性 + 网格热度：**PostGIS** 半径查询 + **geohash** 热力/隐私粗化（并存，
   正交），可见性定向到 geo/family/member，private 记录任何 feed 旁路不可读。本人「附近」
   仍走 PR #90 客户端 `sortByNearest`，PostGIS 只进跨用户 feed。
