@@ -192,6 +192,21 @@ function parsePgArray(value: unknown): string[] {
 async function rowToTaste(row: any): Promise<Taste> {
   const urls = await resolvePhotoUrls(row.image);
 
+  // S3b Phase 2 media. media_type defaults to 'image' (absent ≡ 'image' for rows
+  // that predate migration 0012). `image` is the POSTER either way — the variant
+  // pipeline above resolves it unchanged. ⟦DR#3⟧ clipUrl is OWNER-ONLY: rowToTaste
+  // is the owner serializer (list / getTaste for the owner). It is NEVER spread
+  // into any share / feed / public DTO (those hand-build poster-only shapes), so
+  // resolving the clip here cannot leak a private clip into a cross-user payload.
+  const mediaType: 'image' | 'video' = row.media_type === 'video' ? 'video' : 'image';
+  // Presign the private clip GET only for a video row that actually carries a key
+  // (the DB invariant guarantees a video row has clip_key, but stay defensive).
+  const clipUrl =
+    mediaType === 'video' && row.clip_key
+      ? await getSignedPhotoUrl(row.clip_key)
+      : undefined;
+  const durationMs = row.duration_ms != null ? Number(row.duration_ms) : null;
+
   // If the caller pre-fetched purchases (purchase_count + purchases_json on row),
   // use them directly. Otherwise do a separate query. This keeps list queries
   // from issuing N+1 queries when the caller passes the aggregated data.
@@ -234,6 +249,10 @@ async function rowToTaste(row: any): Promise<Taste> {
     lng:           row.lng ?? null,
     visibility:    row.visibility === 'shared' ? 'shared' : 'private',
     tasterId:      row.taster_id ?? null,
+    mediaType,
+    // clipUrl is owner-only (⟦DR#3⟧); omit the key entirely on image rows.
+    ...(clipUrl ? { clipUrl } : {}),
+    durationMs,
     image:         urls.image,
     imageThumb:    urls.imageThumb,
     imageDisplay:  urls.imageDisplay,
@@ -393,6 +412,20 @@ export async function createTaste(
   const effectiveVerdict = isTodo ? null : verdict;
 
   const resolvedImage = imageUrl ?? image;
+
+  // S3b Phase 2 media. The route has already gated + validated a 'video' commit
+  // (media_enabled, clipKey ownership/shape, HEAD type/size, duration cap, and
+  // rejected clip fields on a non-video). Here we only persist what it passed:
+  // 'video' rows store clip_key + duration_ms; 'image' rows force both null so the
+  // DB invariant (tastes_media_invariant_check) always holds even if a caller
+  // sends stray fields. `image` stays the poster key for both.
+  const mediaType: 'image' | 'video' = input.mediaType === 'video' ? 'video' : 'image';
+  const clipKey = mediaType === 'video' ? (input.clipKey ?? null) : null;
+  const durationMs =
+    mediaType === 'video' && typeof input.durationMs === 'number' && Number.isFinite(input.durationMs)
+      ? Math.round(input.durationMs)
+      : null;
+
   const normalizedPrice = normalizePrice(price);
   const warnBeforeBuy = !isTodo && effectiveVerdict === 'nah';
   const normalizedLat =
@@ -422,10 +455,10 @@ export async function createTaste(
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng, taster_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image, warn_before_buy, lat, lng, taster_id, media_type, clip_key, duration_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
-    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng, tasterId]
+    [userId, name, place, normalizedPrice, status, effectiveVerdict, tags, notes, resolvedImage, warnBeforeBuy, normalizedLat, normalizedLng, tasterId, mediaType, clipKey, durationMs]
   );
   // New taste has no purchases yet — pass empty aggregates directly.
   const row = { ...rows[0], purchase_count: 0, purchases_json: [] };
@@ -531,6 +564,18 @@ export async function getRawImage(userId: string, id: string): Promise<string | 
     [id, userId]
   );
   return rows.length ? (rows[0].image ?? null) : null;
+}
+
+/** Fetch the RAW stored `clip_key` (private video clip key) for a taste, or null.
+ *  ⟦DR#4⟧ Used by DELETE /api/tastes/[id] to clean up the clip object alongside
+ *  the image variants. Returns null when the row is absent, not owned, or carries
+ *  no clip (image rows). Owner-scoped (user_id) like getRawImage. */
+export async function getRawClipKey(userId: string, id: string): Promise<string | null> {
+  const { rows } = await pool.query(
+    'SELECT clip_key FROM tastes WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  return rows.length ? (rows[0].clip_key ?? null) : null;
 }
 
 /** Delete a taste owned by the user; returns true if a row was deleted. */

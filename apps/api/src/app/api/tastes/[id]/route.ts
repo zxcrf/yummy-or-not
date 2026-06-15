@@ -4,7 +4,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getTaste, updateTaste, deleteTaste, getRawImage } from '@/lib/db';
+import { getTaste, updateTaste, deleteTaste, getRawImage, getRawClipKey } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
 import { deletePhoto } from '@/lib/storage';
@@ -67,8 +67,11 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
   if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { id } = await params;
   try {
-    // Capture the stored key BEFORE deleting the row so we can clean up the object.
+    // Capture the stored keys BEFORE deleting the row so we can clean up the
+    // objects. ⟦DR#4⟧ A video row also carries a private clip key (image is the
+    // poster) — capture it too so DELETE cleans the clip, not just the poster.
     const rawImage = await getRawImage(user.id, id);
+    const rawClipKey = await getRawClipKey(user.id, id);
 
     const deleted = await deleteTaste(user.id, id);
     if (!deleted) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
@@ -97,6 +100,17 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
         } catch (cleanupErr) {
           console.error(`DELETE /api/tastes/${id}: photo cleanup failed for "${rawImage}":`, cleanupErr);
         }
+      }
+    }
+
+    // ⟦DR#4⟧ Best-effort clip cleanup. The clip is a single private object under
+    // u/{uid}/clips/... (no variants), so a flat deletePhoto suffices. Never fail
+    // the request over an orphaned clip — the DB row (authoritative) is gone.
+    if (rawClipKey) {
+      try {
+        await deletePhoto(rawClipKey);
+      } catch (cleanupErr) {
+        console.error(`DELETE /api/tastes/${id}: clip cleanup failed for "${rawClipKey}":`, cleanupErr);
       }
     }
 

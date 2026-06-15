@@ -172,6 +172,12 @@ export async function createTaste(
     // this, every save WITH a photo silently fell back to the self-taster
     // regardless of the active taster (the JSON path already sends it).
     if (input.tasterId) fd.append("tasterId", input.tasterId);
+    // S3b Phase 2: video records carry the poster as the `photo` part above and
+    // attach the clip via these fields. The server gates 'video' on
+    // media_enabled + validates clipKey ownership / HEAD before persisting.
+    if (input.mediaType) fd.append("mediaType", input.mediaType);
+    if (input.clipKey) fd.append("clipKey", input.clipKey);
+    if (input.durationMs != null) fd.append("durationMs", String(input.durationMs));
     input.tags?.forEach((t) => fd.append("tags", t));
     return apiFetch<Taste>("/api/tastes", { method: "POST", body: fd });
   }
@@ -397,6 +403,33 @@ export async function updateUser(input: UpdateUserInput): Promise<{ user: User }
  *  be replayed verbatim on the subsequent PUT so the SigV4 signature matches. */
 export async function requestAvatarPresign(
   input: PresignUploadInput,
+): Promise<PresignUploadResult> {
+  return apiFetch<PresignUploadResult>("/api/uploads/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Input to POST /api/uploads/presign for a S3b Phase 2 video clip. Mirrors
+ *  PresignUploadInput but with `kind:'video'` (kept local to the api-client
+ *  because PresignUploadInput.kind is the avatar-only v1 type owned by the
+ *  shared types contract). The server gates this on `media_enabled`, allowlists
+ *  the video content-type, and issues a user-owned clip key
+ *  (`u/{userId}/clips/{uuid}/clip.{ext}`) — the client never supplies the key. */
+export interface ClipPresignInput {
+  kind: "video";
+  /** 'video/mp4' | 'video/quicktime' — the server allowlists + maps to an ext. */
+  contentType: string;
+}
+
+/** POST /api/uploads/presign — ask the server for a short-lived presigned PUT
+ *  URL for a VIDEO clip (S3b Phase 2). Same shape + contract as
+ *  requestAvatarPresign: the server generates the object key, the returned
+ *  `headers` must be replayed verbatim on the PUT, and the resulting `key` is
+ *  committed via createTaste's `clipKey` field. Auth bearer is forwarded. */
+export async function requestClipPresign(
+  input: ClipPresignInput,
 ): Promise<PresignUploadResult> {
   return apiFetch<PresignUploadResult>("/api/uploads/presign", {
     method: "POST",

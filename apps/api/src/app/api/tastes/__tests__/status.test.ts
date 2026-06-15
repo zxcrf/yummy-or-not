@@ -96,6 +96,9 @@ function createSchema() {
       lat            double precision,
       lng            double precision,
       taster_id      text,
+      media_type     text NOT NULL DEFAULT 'image',
+      clip_key       text,
+      duration_ms    integer,
       created_at     timestamptz NOT NULL DEFAULT now()
     );
   `);

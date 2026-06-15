@@ -216,6 +216,13 @@ export async function importSharedTaste(input: {
     // lat/lng are DELIBERATELY omitted from this INSERT (privacy): the importer
     // must not receive the owner's exact coordinates. Consistent with S3c geo
     // coarsening — do NOT start copying lat/lng here.
+    //
+    // ⟦DR#4⟧ Import is POSTER-ONLY: media_type / clip_key / duration_ms are
+    // DELIBERATELY omitted so the imported row defaults to media_type='image'
+    // (clip_key NULL). A shared VIDEO surfaces to the importer as its poster only
+    // — we never copy the private clip across users (no cross-user clip
+    // duplication in v1; token-gated clip sharing is a later phase). copySourcePhoto
+    // copies the poster (`image`) just like an image record.
     const ins = await client.query(
       `INSERT INTO tastes (user_id, name, place, price, status, verdict, tags, notes, image)
        VALUES ($1, $2, $3, $4, 'todo', NULL, $5, $6, $7)

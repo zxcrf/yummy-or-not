@@ -17,6 +17,7 @@ import type { TasteStatus, Verdict } from '@yon/shared'
 import { colors, radius, space } from '@/theme'
 import { VerdictStamp } from './VerdictStamp'
 import { Tag } from './Tag'
+import { Icon } from './Icon'
 
 export interface FoodCardProps extends Omit<ViewProps, 'style'> {
   /** Thumbnail image URL (≤300 px). Falls back to `image` for old records. */
@@ -48,6 +49,10 @@ export interface FoodCardProps extends Omit<ViewProps, 'style'> {
   todoLabel?: string
   /** Taste status — drives badge vs stamp decision. When 'todo', todoLabel takes precedence over verdict. */
   status?: TasteStatus
+  /** S3b Phase 2: media kind. When 'video' the poster (image/imageThumb) gets a
+   *  play-button overlay so the user knows tapping opens the player. Absent ≡
+   *  'image' (no overlay). */
+  mediaType?: 'image' | 'video'
   onPress?: () => void
   /** Style pass-through applied to the outermost card frame. */
   style?: StyleProp<ViewStyle>
@@ -99,6 +104,7 @@ export function FoodCard({
   verdictLabel,
   todoLabel,
   status,
+  mediaType,
   onPress,
   style,
   // Strip Tamagui-era props that JS/any callers may still forward.
@@ -145,6 +151,15 @@ export function FoodCard({
             style={styles.image}
             contentFit="cover"
           />
+        ) : null}
+        {/* S3b Phase 2: video records show a play-button overlay on the poster
+            so the user knows tapping opens the player. Image rows have none. */}
+        {mediaType === 'video' ? (
+          <View style={styles.playOverlay} testID="food-card-play-overlay">
+            <View style={styles.playBadge}>
+              <Icon name="arrow-right" size={22} color="#fff" />
+            </View>
+          </View>
         ) : null}
         {status === 'todo' ? (
           todoLabel != null ? (
@@ -234,6 +249,23 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(25,16,23,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   body: {
     padding: space[3],

@@ -74,6 +74,9 @@ function createSchema() {
       image          text NOT NULL DEFAULT '',
       lat            double precision,
       lng            double precision,
+      media_type     text NOT NULL DEFAULT 'image',
+      clip_key       text,
+      duration_ms    integer,
       created_at     timestamptz NOT NULL DEFAULT now()
     );
   `);

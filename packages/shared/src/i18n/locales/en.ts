@@ -157,4 +157,10 @@ export const en: Record<string, string> = {
   family_feed_error: "Couldn't load family tastes. Please try again.",
   upgrade_to_pro: "Upgrade to Pro",
   retry: "Retry",
+  // S3b Phase 2 — video on taste cards
+  add_video: "Add video",
+  video_too_long: "Videos must be 15 seconds or shorter. Please pick a shorter clip.",
+  video_too_large: "That video is too large (max 20 MB). Please pick a smaller clip.",
+  video_play: "Play video",
+  video_load_failed: "Couldn't play this video. Please try again later.",
 };

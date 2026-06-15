@@ -64,7 +64,8 @@
       "expo-image",
       "expo-sharing",
       "./plugins/withAmapAndroidKey",
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

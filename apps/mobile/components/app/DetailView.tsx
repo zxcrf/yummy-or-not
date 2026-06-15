@@ -22,6 +22,7 @@ import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
+import { VideoPlayerModal } from './VideoPlayerModal'
 import {
   Badge,
   Button,
@@ -71,6 +72,8 @@ export default function DetailView() {
   // refreshed by the publish/unpublish response), so no separate value state.
   const [visSaving, setVisSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // S3b Phase 2: whether the tap-to-play video modal is open.
+  const [playerOpen, setPlayerOpen] = useState(false)
   const [buySheetOpen, setBuySheetOpen] = useState(false)
   const [buyPrice, setBuyPrice] = useState('')
   const [buyPlace, setBuyPlace] = useState('')
@@ -688,6 +691,39 @@ export default function DetailView() {
               contentFit="cover"
             />
           ) : null}
+          {/* S3b Phase 2: a video record's poster is tappable → opens the
+              player. The play-button overlay signals it; a record with no
+              resolved clipUrl yet stays a plain poster. */}
+          {item.mediaType === 'video' && item.clipUrl ? (
+            <Pressable
+              onPress={() => setPlayerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('video_play')}
+              testID="detail-play-overlay"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: 'rgba(25,16,23,0.55)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="arrow-right" size={26} color="#fff" />
+              </View>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* back button */}
@@ -1185,6 +1221,16 @@ export default function DetailView() {
           </KeyboardStickyView>
         </Pressable>
       </Modal>
+
+      {/* S3b Phase 2: tap-to-play video modal. Mounted only while open so the
+          native player is created on demand and released on close. */}
+      {playerOpen && item.mediaType === 'video' && item.clipUrl ? (
+        <VideoPlayerModal
+          tasteId={item.id}
+          clipUrl={item.clipUrl}
+          onClose={() => setPlayerOpen(false)}
+        />
+      ) : null}
 
       {/* Fullscreen original image modal */}
       <Modal
