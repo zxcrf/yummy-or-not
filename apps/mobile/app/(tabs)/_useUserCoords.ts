@@ -7,8 +7,10 @@
    `enabled` is true (the caller gates it on the user's locationEnabled
    preference AND the active sort mode), so opening a list never triggers
    a surprise OS permission prompt — the prompt happens when the user
-   picks "Nearby". Silent degrade: a denied permission or a slow fix
-   (10s timeout) leaves coords null, and the list simply keeps its order.
+   picks "Nearby". A fresh fix can stall on a cold GPS, so it falls back
+   to the OS's last-known position (see getAvailablePositionCoords) before
+   degrading. Silent degrade: a denied permission or every source coming
+   up empty leaves coords null, and the list simply keeps its order.
 
    sortByNearest(items, coords): pure ranking helper. With coords it sorts
    by haversine distance ascending and tags each item with its distance;
@@ -47,21 +49,11 @@ export function useUserCoords(enabled: boolean): Coords | null {
       try {
         const perm = await Location.requestForegroundPermissionsAsync()
         if (!perm.granted || cancelled) return
-        const posPromise = Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        })
-        let timer: ReturnType<typeof setTimeout> | undefined
-        const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('timeout')), 10_000)
-        })
-        try {
-          const pos = await Promise.race([posPromise, timeout])
-          if (!cancelled) {
-            setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-          }
-        } finally {
-          if (timer) clearTimeout(timer)
-        }
+        // Acquire a fix from the most reliable source available: a fresh fix
+        // raced against a timeout, falling back to the OS's last-known position
+        // when that stalls (cold GPS). Only null when every source comes up empty.
+        const next = await getAvailablePositionCoords()
+        if (!cancelled && next) setCoords(next)
       } catch {
         // Silent degrade — no coords, list keeps its non-distance order.
       }

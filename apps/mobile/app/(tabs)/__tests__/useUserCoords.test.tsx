@@ -10,7 +10,9 @@
    useUserCoords pins the gated one-shot locate:
    - disabled → never touches expo-location, stays null;
    - granted → resolves to the device coords;
-   - denied → degrades silently to null.
+   - cold GPS (fresh fix rejects) → falls back to the OS last-known fix;
+   - denied → degrades silently to null;
+   - every source empty → degrades silently to null.
 
    expo-location is mocked; @yon/shared (haversineMeters) is real so the
    distance ordering is exercised for real.
@@ -21,11 +23,13 @@ import { useUserCoords, sortByNearest } from '../_useUserCoords'
 
 const mockRequestPerm = jest.fn()
 const mockGetPosition = jest.fn()
+const mockGetLastKnown = jest.fn()
 
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: (...args: unknown[]) => mockRequestPerm(...args),
   getCurrentPositionAsync: (...args: unknown[]) => mockGetPosition(...args),
-  Accuracy: { Balanced: 3 },
+  getLastKnownPositionAsync: (...args: unknown[]) => mockGetLastKnown(...args),
+  Accuracy: { Balanced: 3, High: 4 },
 }))
 
 // ---- sortByNearest ------------------------------------------------------
@@ -72,6 +76,8 @@ function Harness({ enabled, onValue }: { enabled: boolean; onValue: (v: unknown)
 describe('useUserCoords', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    // Default: no cached fix. Cases that exercise the fallback override this.
+    mockGetLastKnown.mockResolvedValue(null)
   })
 
   it('does not request location while disabled', async () => {
@@ -94,6 +100,35 @@ describe('useUserCoords', () => {
     expect(latest).toEqual({ lat: 1.5, lng: 2.5 })
   })
 
+  // Regression (roadmap follow-up #1): on a cold GPS the fresh fix can stall
+  // past the timeout. The old hook gave up with null coords, so the Nearby sort
+  // silently no-op'd even when the OS had a perfectly good cached position.
+  // It must now fall back to the last-known fix. Against the pre-fix hook this
+  // FAILS (coords stay null); after the fix it surfaces the cached coords.
+  it('falls back to last-known coords when the fresh fix rejects (cold GPS)', async () => {
+    mockRequestPerm.mockResolvedValue({ granted: true })
+    mockGetPosition.mockRejectedValue(new Error('timeout'))
+    mockGetLastKnown.mockResolvedValue({ coords: { latitude: 39.9042, longitude: 116.4074 } })
+
+    let latest: unknown = 'unset'
+    await act(async () => {
+      TestRenderer.create(<Harness enabled onValue={(v) => { latest = v }} />)
+    })
+    expect(latest).toEqual({ lat: 39.9042, lng: 116.4074 })
+  })
+
+  it('stays null when both the fresh fix and last-known come up empty', async () => {
+    mockRequestPerm.mockResolvedValue({ granted: true })
+    mockGetPosition.mockRejectedValue(new Error('timeout'))
+    mockGetLastKnown.mockResolvedValue(null)
+
+    let latest: unknown = 'unset'
+    await act(async () => {
+      TestRenderer.create(<Harness enabled onValue={(v) => { latest = v }} />)
+    })
+    expect(latest).toBeNull()
+  })
+
   it('stays null when permission is denied', async () => {
     mockRequestPerm.mockResolvedValue({ granted: false })
 
@@ -102,6 +137,7 @@ describe('useUserCoords', () => {
       TestRenderer.create(<Harness enabled onValue={(v) => { latest = v }} />)
     })
     expect(mockGetPosition).not.toHaveBeenCalled()
+    expect(mockGetLastKnown).not.toHaveBeenCalled()
     expect(latest).toBeNull()
   })
 })
