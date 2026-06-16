@@ -86,14 +86,14 @@ Report: "Already up to date (digest `<sha256 short>`). No restart needed." and s
 
 ## Step 4 — Restart container
 
+`docker run` MUST be `sudo` — `/etc/yum-api/.env` is mode 600 (root-owned), so a
+non-sudo `--env-file` read fails with `open /etc/yum-api/.env: permission denied`
+(the run aborts AFTER stop+rm, leaving the container DOWN → 502). Run it as a
+SINGLE line over ssh; multi-line `\` continuations get mangled through the ssh
+double-quoted string.
+
 ```bash
-ssh ubuntu@baobao.click "docker stop yum-api && docker rm yum-api && docker run -d \
-  --name yum-api \
-  --restart unless-stopped \
-  --network yon-net \
-  -p 127.0.0.1:3100:3000 \
-  --env-file /etc/yum-api/.env \
-  ghcr.io/zxcrf/yum-api:latest"
+ssh ubuntu@baobao.click "sudo docker stop yum-api && sudo docker rm yum-api && sudo docker run -d --name yum-api --restart unless-stopped --network yon-net -p 127.0.0.1:3100:3000 --env-file /etc/yum-api/.env ghcr.io/zxcrf/yum-api:latest"
 ```
 
 ## Step 5 — Verify health
@@ -136,7 +136,7 @@ Report final summary:
 - **docker pull unauthorized**: `docker login ghcr.io` token may have expired.
   Re-authenticate: `ssh ubuntu@baobao.click "echo '<PAT>' | docker login ghcr.io -u zxcrf --password-stdin"`
 - **health check fails**: run `ssh ubuntu@baobao.click "docker logs yum-api --tail=50"` to diagnose.
-  Roll back with: `ssh ubuntu@baobao.click "docker stop yum-api && docker rm yum-api && docker run -d --name yum-api --restart unless-stopped -p 127.0.0.1:3100:3000 --env-file /etc/yum-api/.env ghcr.io/zxcrf/yum-api:<previous-sha-tag>"`
+  Roll back with: `ssh ubuntu@baobao.click "sudo docker stop yum-api && sudo docker rm yum-api && sudo docker run -d --name yum-api --restart unless-stopped --network yon-net -p 127.0.0.1:3100:3000 --env-file /etc/yum-api/.env ghcr.io/zxcrf/yum-api:<previous-sha-tag>"`
 - **CI gate fails (no matching headSha)**: check `gh run list --workflow=docker-api.yml --limit=5` to see build status.
 - **API up but DB calls fail (`ENOTFOUND yon-pg`)**: yum-api not on `yon-net`, OR `DATABASE_URL` has literal quotes. See `docs/ops/infra.md`.
 
