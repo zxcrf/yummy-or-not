@@ -6,15 +6,16 @@
    ============================================================ */
 
 import { StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/theme'
 import ImportLanding from '@/components/app/ImportLanding'
 
 export default function ImportTokenRoute() {
-  const insets = useSafeAreaInsets()
+  // The EditActionHeader inside ImportLanding owns the top safe-area inset
+  // (variant='screen'), so the wrapper must NOT add paddingTop or the header
+  // would be double-inset.
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <ImportLanding />
     </View>
   )

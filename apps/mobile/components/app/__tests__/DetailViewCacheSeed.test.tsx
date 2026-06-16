@@ -87,6 +87,8 @@ jest.mock('@/components/ds', () => {
     Badge: stub('Badge'),
     Button: stub('Button'),
     Card: stub('Card'),
+    EditActionHeader: (props: Record<string, unknown>) =>
+      React.createElement('EditActionHeader', props),
     Icon: (props: Record<string, unknown>) => React.createElement('Icon', props),
     IconButton: stub('IconButton'),
     Input: (props: Record<string, unknown>) => React.createElement('Input', props),
@@ -148,6 +150,10 @@ function findButtons(renderer: TestRenderer.ReactTestRenderer) {
 function findInput(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return renderer.root.findAll((node) => (node.type as unknown) === 'Input')
     .find((node) => node.props.label === label)
+}
+
+function findEditHeader(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')[0]
 }
 
 function findHero(renderer: TestRenderer.ReactTestRenderer) {
@@ -296,12 +302,9 @@ describe('DetailView cache seeding', () => {
     await act(async () => {
       editBtn?.props.onPress()
     })
-    const saveBtn = findButtons(renderer).find((node) =>
-      node.children.includes('save_taste_web'),
-    )
     // Fire save but do NOT await — updateTaste stays pending on purpose.
     await act(async () => {
-      saveBtn?.props.onPress()
+      findEditHeader(renderer).props.onPrimary()
     })
 
     // Route swaps to B while the save for A is still pending.
@@ -419,9 +422,8 @@ describe('DetailView cache seeding', () => {
       nameInput?.props.onChangeText('Flat White')
     })
 
-    const saveButton = findButtons(renderer).find((node) => node.children.includes('save_taste_web'))
     await act(async () => {
-      await saveButton?.props.onPress()
+      await findEditHeader(renderer).props.onPrimary()
     })
 
     // Why this matters: detail edits must keep the shared list freshness contract and notify other screens.

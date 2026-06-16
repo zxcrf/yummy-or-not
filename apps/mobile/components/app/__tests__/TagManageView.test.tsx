@@ -26,6 +26,13 @@ jest.mock('react-native-keyboard-controller', () => {
   }
 })
 
+// EditActionHeader (now hosting the rename save/cancel) calls
+// useSafeAreaInsets(), which throws without a provider under jest-expo. Stub it
+// with zero insets — same pattern as the AddModalFooter / EditActionHeader tests.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 const mockRenameTag = jest.fn()
 const mockDeleteTag = jest.fn()
 const mockInvalidateTagsCache = jest.fn()
@@ -159,6 +166,34 @@ describe('TagManageView — rename sheet keyboard handling', () => {
     const sticky = renderer.root.findByProps({ testID: KEYBOARD_STICKY_TESTID })
     expect(sticky.findByProps({ testID: 'rename-tag-input' })).toBeTruthy()
     expect(sticky.findByProps({ testID: 'rename-confirm-btn' })).toBeTruthy()
+  })
+
+  // The save/cancel controls moved into the shared EditActionHeader at the TOP
+  // of the sheet (取消 left · title center · save right). The header must still
+  // live inside the KeyboardStickyView so the whole sheet floats above the
+  // keyboard, and the rename input must render BELOW it (later in the subtree).
+  it('renders the EditActionHeader (cancel + save) above the input, inside the sticky', () => {
+    const renderer = renderTagManageView()
+
+    act(() => {
+      renderer.root.findByProps({ testID: 'rename-tag-tag-1' }).props.onPress()
+    })
+
+    const sticky = renderer.root.findByProps({ testID: KEYBOARD_STICKY_TESTID })
+    // Header confirm button + the input are both sticky descendants.
+    const confirm = sticky.findByProps({ testID: 'rename-confirm-btn' })
+    const input = sticky.findByProps({ testID: 'rename-tag-input' })
+    expect(confirm).toBeTruthy()
+    expect(input).toBeTruthy()
+
+    // Top placement: the save control appears before the input in document order.
+    const order = sticky.findAll(
+      (n) =>
+        n.props?.testID === 'rename-confirm-btn' ||
+        n.props?.testID === 'rename-tag-input'
+    )
+    expect(order[0].props.testID).toBe('rename-confirm-btn')
+    expect(order[order.length - 1].props.testID).toBe('rename-tag-input')
   })
 })
 

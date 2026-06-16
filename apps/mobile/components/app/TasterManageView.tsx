@@ -32,7 +32,7 @@ import {
   type Taster,
 } from '@yon/shared'
 
-import { Avatar, Button, Card, Icon, Input } from '@/components/ds'
+import { Avatar, Button, Card, EditActionHeader, Icon, Input } from '@/components/ds'
 import { invalidateTasters, useTasters } from '@/app/(tabs)/_useTasters'
 import { useActiveTaster, setActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useAuth } from '@/providers/AuthProvider'
@@ -252,7 +252,21 @@ export default function TasterManageView() {
         <Pressable style={modalStyles.sheetOverlay} onPress={closeSheet}>
           <KeyboardStickyView>
             <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              <Text style={modalStyles.modalTitle}>{sheetTitle}</Text>
+              {/* Unified top action bar (ADR 0001): 取消 LEFT · title CENTER ·
+                  save RIGHT. Sits inside the KeyboardStickyView so the whole
+                  sheet keeps floating above the keyboard. */}
+              <EditActionHeader
+                variant="sheet"
+                onCancel={closeSheet}
+                cancelLabel={t('cancel')}
+                cancelTestID="taster-cancel-btn"
+                title={sheetTitle}
+                onPrimary={submitSheet}
+                primaryLabel={t('save')}
+                primaryDisabled={saving || !nameValue.trim()}
+                primaryLoading={saving}
+                primaryTestID="taster-save-btn"
+              />
               <Input
                 label={t('taster_name_label')}
                 value={nameValue}
@@ -274,19 +288,6 @@ export default function TasterManageView() {
                   {error}
                 </Text>
               ) : null}
-              <View style={modalStyles.buttonRow}>
-                <Button variant="ghost" onPress={closeSheet}>
-                  {t('cancel')}
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={saving || !nameValue.trim()}
-                  onPress={submitSheet}
-                  testID="taster-save-btn"
-                >
-                  {t('save')}
-                </Button>
-              </View>
             </Pressable>
           </KeyboardStickyView>
         </Pressable>
@@ -380,20 +381,9 @@ const modalStyles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
   },
-  modalTitle: {
-    color: colors.ink900,
-    fontWeight: '700',
-    fontSize: 18,
-    marginBottom: 16,
-  },
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,
     marginTop: 8,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: space[3],
-    marginTop: 20,
   },
 })

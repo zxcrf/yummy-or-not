@@ -54,6 +54,12 @@ jest.mock('@/app/(tabs)/_useTasters', () => ({
   useTasters: () => ({ tasters: [], loading: false }),
 }))
 
+// Self taster (null). Mocked so the real hook's async listener never fires a
+// setState after the suite tears down (act-warning leak → Linux CI exit-1).
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: [], loading: false }),
   invalidateTagsCache: jest.fn(),

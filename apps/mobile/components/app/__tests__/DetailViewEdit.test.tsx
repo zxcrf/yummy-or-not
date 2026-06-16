@@ -8,7 +8,6 @@
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
-import { StyleSheet } from 'react-native'
 import { getTaste, updateTaste, type Taste } from '@yon/shared'
 
 import DetailView from '../DetailView'
@@ -69,6 +68,8 @@ jest.mock('@/components/ds', () => {
       React.createElement('Button', props, children),
     Card: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('Card', props, children),
+    EditActionHeader: (props: Record<string, unknown>) =>
+      React.createElement('EditActionHeader', props),
     Icon: (props: Record<string, unknown>) => React.createElement('Icon', props),
     IconButton: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('IconButton', props, children),
@@ -127,6 +128,10 @@ function inputByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
     .find((node) => node.props.label === label)
 }
 
+function editHeader(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')[0]
+}
+
 describe('DetailView editing', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -168,9 +173,8 @@ describe('DetailView editing', () => {
       notes.props.onChangeText('Better now')
     })
 
-    const save = buttons(renderer).find((button) => button.children.includes('save_taste_web'))
     await act(async () => {
-      await save?.props.onPress()
+      await editHeader(renderer).props.onPrimary()
     })
 
     expect(mockedUpdateTaste).toHaveBeenCalledWith('taste-1', {
@@ -225,8 +229,7 @@ describe('DetailView editing', () => {
     const nameInput = inputByLabel(renderer, 'f_what')
     await act(async () => { nameInput?.props.onChangeText('Oat Latte') })
 
-    const save = buttons(renderer).find((button) => button.children.includes('save_taste_web'))
-    await act(async () => { await save?.props.onPress() })
+    await act(async () => { await editHeader(renderer).props.onPrimary() })
 
     expect(mockedUpdateTaste).toHaveBeenCalledTimes(1)
     const [, payload] = mockedUpdateTaste.mock.calls[0]
@@ -234,19 +237,62 @@ describe('DetailView editing', () => {
     expect(payload.name).toBe('Oat Latte')
   })
 
-  it('right-aligns the edit action footer (cancel/save on the right, like AddModal)', async () => {
+  it('renders the unified EditActionHeader: cancel→cancelEditing, primary→saveEdit, disabled when name empty', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    mockedUpdateTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    // The unified top action header replaced the old bottom right-aligned footer.
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'edit-actions-footer'),
+    ).toHaveLength(0)
+
+    const header = editHeader(renderer)
+    expect(header).toBeTruthy()
+    // It carries the save command on the right (primaryTestID kept for callers).
+    expect(header.props.primaryTestID).toBe('edit-save-btn')
+    expect(header.props.primaryLabel).toBe('save_taste_web')
+    expect(header.props.cancelLabel).toBe('cancel')
+    expect(header.props.title).toBe('edit_taste')
+    // Enabled because the loaded taste has a name.
+    expect(header.props.primaryDisabled).toBe(false)
+
+    // Primary fires saveEdit (calls updateTaste).
+    await act(async () => { await header.props.onPrimary() })
+    expect(mockedUpdateTaste).toHaveBeenCalledWith('taste-1', expect.objectContaining({ name: 'Espresso' }))
+
+    // After saving we are back in read mode (no header, edit fields gone).
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')).toHaveLength(0)
+    expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
+  })
+
+  it('cancel on the EditActionHeader leaves edit mode (cancelEditing)', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+    expect(inputByLabel(renderer, 'f_what')).toBeTruthy()
+
+    await act(async () => { editHeader(renderer).props.onCancel() })
+    // Back to read mode: header gone, edit fields gone.
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')).toHaveLength(0)
+    expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
+  })
+
+  it('disables the primary command when the name is cleared', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste())
     const renderer = await renderDetail()
 
     const edit = buttons(renderer).find((button) => button.children.includes('edit'))
     await act(async () => { edit?.props.onPress() })
 
-    const footer = renderer.root.findAll(
-      (node) => node.props.testID === 'edit-actions-footer',
-    )
-    expect(footer.length).toBeGreaterThanOrEqual(1)
-    const flat = StyleSheet.flatten(footer[0].props.style)
-    expect(flat.justifyContent).toBe('flex-end')
-    expect(flat.flexDirection).toBe('row')
+    expect(editHeader(renderer).props.primaryDisabled).toBe(false)
+    const nameInput = inputByLabel(renderer, 'f_what')
+    await act(async () => { nameInput?.props.onChangeText('') })
+    expect(editHeader(renderer).props.primaryDisabled).toBe(true)
   })
 })

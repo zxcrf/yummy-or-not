@@ -10,7 +10,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-nat
 import { KeyboardStickyView } from 'react-native-keyboard-controller'
 import { renameTag, deleteTag, type UserTag } from '@yon/shared'
 
-import { Button, Icon, Input } from '@/components/ds'
+import { EditActionHeader, Icon, Input } from '@/components/ds'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { colors, space, radius, Text } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
@@ -132,7 +132,19 @@ export default function TagManageView() {
               other input screens use (AddModal footer, AuthScreen). */}
           <KeyboardStickyView>
             <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              <Text style={modalStyles.modalTitle}>{t('tag_rename')}</Text>
+              {/* Save/cancel live in the shared top action bar: 取消 left ·
+                  title center · save right. It stays inside the sticky so the
+                  whole sheet floats above the keyboard. See ADR 0001. */}
+              <EditActionHeader
+                variant="sheet"
+                onCancel={closeRename}
+                cancelLabel={t('cancel')}
+                title={t('tag_manage')}
+                onPrimary={submitRename}
+                primaryLabel={t('save')}
+                primaryTestID="rename-confirm-btn"
+                primaryDisabled={renameSaving || !renameValue.trim()}
+              />
               <Input
                 label={t('tag_rename')}
                 value={renameValue}
@@ -147,19 +159,6 @@ export default function TagManageView() {
                   {renameError}
                 </Text>
               ) : null}
-              <View style={modalStyles.buttonRow}>
-                <Button variant="ghost" onPress={closeRename}>
-                  {t('cancel')}
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={renameSaving || !renameValue.trim()}
-                  onPress={submitRename}
-                  testID="rename-confirm-btn"
-                >
-                  {t('save')}
-                </Button>
-              </View>
             </Pressable>
           </KeyboardStickyView>
         </Pressable>
@@ -226,20 +225,9 @@ const modalStyles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
   },
-  modalTitle: {
-    color: colors.ink900,
-    fontWeight: '700',
-    fontSize: 18,
-    marginBottom: 16,
-  },
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,
     marginTop: 8,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: space[3],
-    marginTop: 20,
   },
 })

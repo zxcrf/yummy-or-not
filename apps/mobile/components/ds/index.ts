@@ -44,3 +44,6 @@ export type { FoodCardProps } from './FoodCard'
 
 export { LangSwitcher } from './LangSwitcher'
 export type { LangSwitcherProps, LangEntry } from './LangSwitcher'
+
+export { EditActionHeader } from './EditActionHeader'
+export type { EditActionHeaderProps } from './EditActionHeader'

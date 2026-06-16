@@ -60,6 +60,12 @@ jest.mock('@/app/(tabs)/_useTasters', () => ({
   useTasters: () => ({ tasters: [], loading: false }),
 }))
 
+// Self taster (null). Mocked so the real hook's async listener never fires a
+// setState after the suite tears down (act-warning leak → Linux CI exit-1).
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+
 jest.mock('@/app/(tabs)/_useTags', () => ({
   invalidateTagsCache: jest.fn(),
   useTags: () => ({ tags: [] }),
@@ -122,6 +128,16 @@ jest.mock('@/components/ds', () => ({
     children: React.ReactNode; onPress?: () => void; disabled?: boolean; testID?: string
   }) => (
     <button onClick={onPress} disabled={disabled} data-testid={testID}>{children}</button>
+  ),
+  EditActionHeader: ({ title, cancelLabel, onCancel, primaryLabel, onPrimary, primaryDisabled, primaryTestID }: {
+    title: string; cancelLabel: string; onCancel?: () => void; primaryLabel: string
+    onPrimary?: () => void; primaryDisabled?: boolean; primaryTestID?: string
+  }) => (
+    <>
+      <button onClick={onCancel}>{cancelLabel}</button>
+      <span>{title}</span>
+      <button onClick={onPrimary} disabled={primaryDisabled} data-testid={primaryTestID}>{primaryLabel}</button>
+    </>
   ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
   IconButton: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) => (

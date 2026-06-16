@@ -15,7 +15,7 @@ import { ActivityIndicator, Image, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 
 import { getSharePreview, importShare, type SharePreview } from '@yon/shared'
-import { Badge, Button, Card, Tag, VerdictStamp } from '@/components/ds'
+import { Badge, Button, Card, EditActionHeader, Tag, VerdictStamp } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { colors, radius, space, Text } from '@/theme'
 
@@ -72,30 +72,75 @@ export default function ImportLanding() {
     }
   }
 
+  // Exit affordance present on every branch so the user is never stranded.
+  // Falls back to the home tabs when there is no back stack (cold deep-link entry).
+  const handleCancel = () => {
+    if (router.canGoBack()) router.back()
+    else router.replace('/(tabs)')
+  }
+
   if (loading) {
     return (
-      <View style={styles.center} testID="import-loading">
-        <ActivityIndicator color={colors.ink900} />
+      <View style={styles.screen} testID="import-loading">
+        <EditActionHeader
+          variant="screen"
+          onCancel={handleCancel}
+          cancelLabel={t('cancel')}
+          cancelTestID="import-cancel-btn"
+          title={t('import_preview_title')}
+          onPrimary={handleSave}
+          primaryLabel={t('import_save_to_todo')}
+          primaryDisabled
+          primaryTestID="import-save-btn"
+        />
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.ink900} />
+        </View>
       </View>
     )
   }
 
   if (gone || !preview) {
     return (
-      <View style={styles.center} testID="import-unavailable">
-        <Text style={styles.unavailableTitle}>{t('share_unavailable')}</Text>
-        <Text style={styles.unavailableBody}>{t('share_unavailable_body')}</Text>
-        <Button variant="secondary" onPress={() => router.replace('/(tabs)')} testID="import-back-btn">
-          {t('import_back_home')}
-        </Button>
+      <View style={styles.screen} testID="import-unavailable">
+        <EditActionHeader
+          variant="screen"
+          onCancel={handleCancel}
+          cancelLabel={t('cancel')}
+          cancelTestID="import-cancel-btn"
+          title={t('share_unavailable')}
+          onPrimary={() => {}}
+          primaryLabel={t('import_save_to_todo')}
+          primaryDisabled
+          primaryIcon={null}
+        />
+        <View style={styles.center}>
+          <Text style={styles.unavailableTitle}>{t('share_unavailable')}</Text>
+          <Text style={styles.unavailableBody}>{t('share_unavailable_body')}</Text>
+          <Button variant="secondary" onPress={() => router.replace('/(tabs)')} testID="import-back-btn">
+            {t('import_back_home')}
+          </Button>
+        </View>
       </View>
     )
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>{t('import_preview_title')}</Text>
+    <View style={styles.screen}>
+      <EditActionHeader
+        variant="screen"
+        onCancel={handleCancel}
+        cancelLabel={t('cancel')}
+        cancelTestID="import-cancel-btn"
+        title={t('import_preview_title')}
+        onPrimary={handleSave}
+        primaryLabel={t('import_save_to_todo')}
+        primaryDisabled={saving}
+        primaryLoading={saving}
+        primaryTestID="import-save-btn"
+      />
 
+      <View style={styles.body}>
       <Card style={styles.card}>
         {preview.photoUrl ? (
           <Image source={{ uri: preview.photoUrl }} style={styles.photo} testID="import-photo" />
@@ -121,21 +166,16 @@ export default function ImportLanding() {
 
         {preview.notes ? <Text style={styles.notes}>{preview.notes}</Text> : null}
       </Card>
-
-      <Button
-        variant="primary"
-        disabled={saving}
-        onPress={handleSave}
-        testID="import-save-btn"
-      >
-        {t('import_save_to_todo')}
-      </Button>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
+    flex: 1,
+  },
+  body: {
     flex: 1,
     padding: space[4],
     gap: space[3],
@@ -146,11 +186,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: space[4],
     gap: space[2],
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.ink900,
   },
   card: {
     gap: space[2],

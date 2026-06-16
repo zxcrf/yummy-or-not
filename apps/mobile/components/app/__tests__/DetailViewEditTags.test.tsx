@@ -86,6 +86,8 @@ jest.mock('@/components/ds', () => {
       React.createElement('Button', props, children),
     Card: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('Card', props, children),
+    EditActionHeader: (props: Record<string, unknown>) =>
+      React.createElement('EditActionHeader', props),
     Icon: (props: Record<string, unknown>) => React.createElement('Icon', props),
     IconButton: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('IconButton', props, children),
