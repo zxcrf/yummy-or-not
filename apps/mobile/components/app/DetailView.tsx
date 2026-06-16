@@ -27,6 +27,7 @@ import {
   Badge,
   Button,
   Card,
+  EditActionHeader,
   Icon,
   IconButton,
   Input,
@@ -661,6 +662,23 @@ export default function DetailView() {
   }
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Edit mode: the unified top action bar (取消 left · title center · save
+          right). Pinned OUTSIDE the scroll view so it stays put while the form
+          scrolls / rides the keyboard, replacing the read-only photo/back block. */}
+      {editing ? (
+        <EditActionHeader
+          variant="screen"
+          onCancel={cancelEditing}
+          cancelLabel={t('cancel')}
+          title={t('edit_taste')}
+          onPrimary={saveEdit}
+          primaryLabel={t('save_taste_web')}
+          primaryDisabled={!editName || saving}
+          primaryLoading={saving}
+          primaryTestID="edit-save-btn"
+        />
+      ) : null}
     <KeyboardAwareScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ paddingBottom: 40 }}
@@ -668,7 +686,9 @@ export default function DetailView() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
     >
-      {/* photo + controls */}
+      {/* photo + controls — hidden in edit mode (the EditActionHeader above
+          takes its place as the pinned top chrome). */}
+      {editing ? null : (
       <View style={{ position: 'relative' }}>
         <View
           style={{
@@ -745,6 +765,7 @@ export default function DetailView() {
           </View>
         ) : null}
       </View>
+      )}
 
       {/* content */}
       <View style={{ padding: 22, paddingTop: 36, gap: space[3] }}>
@@ -811,23 +832,6 @@ export default function DetailView() {
                 {saveError}
               </Text>
             ) : null}
-
-            <View
-              testID="edit-actions-footer"
-              style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: space[3], marginTop: space[1] }}
-            >
-              <Button variant="ghost" onPress={cancelEditing}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={!editName || saving}
-                iconLeft={<Icon name="check" size={18} color="#fff" />}
-                onPress={saveEdit}
-              >
-                {t('save_taste_web')}
-              </Button>
-            </View>
           </>
         ) : (
           <>
@@ -1250,6 +1254,7 @@ export default function DetailView() {
         </Pressable>
       </Modal>
     </KeyboardAwareScrollView>
+    </View>
   )
 }
 

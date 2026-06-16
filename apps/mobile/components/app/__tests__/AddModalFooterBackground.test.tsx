@@ -1,13 +1,14 @@
 /* ============================================================
-   Regression test — AddModal sticky footer opaque background.
+   Regression test — AddModal header opaque background.
 
-   User feedback: the Cancel + Save action footer was transparent,
-   so it composited over scroll content beneath it when the keyboard
-   rose (KeyboardStickyView translates the footer up with the keyboard).
-   The "在哪里?" location row was visible through the footer.
+   History: the Cancel + Save action footer once needed a concrete
+   backgroundColor so it occluded scroll content as it rode the keyboard.
+   As of the unified EditActionHeader refactor (ADR 0001) that bottom
+   footer is deleted; the actions live in the TOP header instead.
 
-   This test pins the fix: the footer View (testID="add-actions-footer")
-   must declare a concrete backgroundColor so it occludes content below.
+   This test pins the new reality: the old "add-actions-footer" is gone,
+   and the top header (testID="add-modal-header") declares a concrete
+   backgroundColor so the scroll body never shows through it.
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
@@ -47,6 +48,10 @@ jest.mock('@yon/shared', () => ({
 jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: jest.fn(async () => []),
   useRefreshableTastes: () => ({ items: [], refresh: jest.fn() }),
+}))
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
 }))
 
 jest.mock('@/app/(tabs)/_useTasters', () => ({
@@ -94,7 +99,7 @@ jest.mock('@/providers/I18nProvider', () => ({
   }),
 }))
 
-describe('AddModal footer background regression', () => {
+describe('AddModal header background regression', () => {
   let currentRenderer: TestRenderer.ReactTestRenderer | null = null
 
   afterEach(() => {
@@ -104,19 +109,33 @@ describe('AddModal footer background regression', () => {
     currentRenderer = null
   })
 
-  it('footer View has a defined backgroundColor so it occludes content beneath it', () => {
+  it('the old sticky footer is gone (actions moved to the top header)', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
     })
     currentRenderer = renderer
 
-    const footer = renderer.root.findByProps({ testID: 'add-actions-footer' })
-    expect(footer).toBeTruthy()
+    expect(
+      renderer.root.findAllByProps({ testID: 'add-actions-footer' }),
+    ).toHaveLength(0)
+  })
 
-    // backgroundColor must be defined (not undefined/null/transparent).
-    // Post-Tamagui migration: layout is in style object, not flat props.
-    const st = footer.props.style as Record<string, unknown>
+  it('header View has a defined backgroundColor so the scroll body never shows through', () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
+    })
+    currentRenderer = renderer
+
+    // Both the composite EditActionHeader and its host View carry the testID;
+    // pick the host View that actually carries the style object.
+    const header = renderer.root.findAll(
+      (n) => n.props.testID === 'add-modal-header' && n.props.style != null,
+    )[0]
+    expect(header).toBeTruthy()
+
+    const st = header.props.style as Record<string, unknown>
     const bg = st?.backgroundColor
     expect(bg).toBeDefined()
     expect(bg).not.toBeNull()

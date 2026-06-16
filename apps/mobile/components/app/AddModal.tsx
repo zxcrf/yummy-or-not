@@ -25,10 +25,7 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react'
 import { Modal, Pressable, StyleSheet, View } from 'react-native'
-import {
-  KeyboardAwareScrollView,
-  KeyboardStickyView,
-} from 'react-native-keyboard-controller'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
@@ -53,8 +50,8 @@ import {
 
 import {
   Button,
+  EditActionHeader,
   Icon,
-  IconButton,
   Input,
   Tag,
   Textarea,
@@ -184,15 +181,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [clipUri, setClipUri] = useState<string | null>(null)
   const [clipDurationMs, setClipDurationMs] = useState<number | null>(null)
   const [clipContentType, setClipContentType] = useState<string | null>(null)
-
-  // Measured height of the sticky action footer. The footer floats up over the
-  // scroll viewport when the keyboard opens (KeyboardStickyView), so the scroll
-  // view's bottomOffset must reserve footer height + a 16dp margin — otherwise a
-  // focused bottom field (notes / custom tag) sits BEHIND the floating footer.
-  // Seed with an estimate (button row + paddings + safe-area inset) so the very
-  // first focus before onLayout fires still clears the footer; the real measured
-  // height replaces it on layout.
-  const [footerHeight, setFooterHeight] = useState(64 + insets.bottom)
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -739,47 +727,37 @@ export default function AddModal({ onClose, onSaved }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* sticky header */}
-      <View
+      {/* Unified top action bar (see ADR 0001): 取消 left · title center ·
+          save right. Replaces the old title-left / ✕-right header AND the
+          former keyboard-riding sticky save/cancel footer. The top bar never
+          overlaps the keyboard, so the viewport is no longer double-squeezed. */}
+      <EditActionHeader
         testID="add-modal-header"
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: space[5],
-          paddingTop: insets.top + 16,
-          paddingBottom: space[4],
-          borderBottomWidth: 3,
-          borderBottomColor: colors.ink900,
-        }}
-      >
-        <Text style={{ color: colors.ink900, fontWeight: '700', fontSize: 24 }}>
-          {t('log_taste')}
-        </Text>
-        <IconButton accessibilityLabel={t('cancel')} onPress={requestClose}>
-          <Icon name="close" size={18} />
-        </IconButton>
-      </View>
+        variant="screen"
+        onCancel={requestClose}
+        cancelLabel={t('cancel')}
+        title={t('log_taste')}
+        onPrimary={handleSave}
+        primaryLabel={t('save_taste_web')}
+        primaryDisabled={!ready || saving}
+        primaryTestID="add-save-btn"
+      />
 
       {/* scrollable body — KeyboardAwareScrollView keeps the focused input and
           its cursor visible above the keyboard with a frame-synced animation
           (no one-frame jump). It subsumes the old RN KeyboardAvoidingView +
           manual scrollToEnd-on-focus compensation.
 
-          The sticky footer floats up over the viewport with the keyboard
-          (KeyboardStickyView), so the scroll content must physically reserve
-          its height in TWO places or a focused bottom field sits behind it:
-            - contentContainerStyle.paddingBottom = footerHeight + 16 reserves
-              the resting inset so the last field can always scroll fully clear
-              of the floated footer (the bug was a hardcoded 24dp here);
-            - bottomOffset = footerHeight + 16 drives the focus auto-scroll so a
-              newly-focused bottom field lands above the footer, not behind it. */}
+          Save/cancel now live in the top EditActionHeader, not a keyboard-riding
+          sticky footer. With no footer floating over the viewport, the scroll no
+          longer reserves a footer height: bottomOffset is just the 16dp keyboard
+          margin, and the resting paddingBottom is the safe-area bottom + 16. */}
       <KeyboardAwareScrollView
-        bottomOffset={footerHeight + 16}
+        bottomOffset={16}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: footerHeight + 16 }}
+        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: insets.bottom + 16 }}
       >
         {/* mode selector — 吃过了 / 还没吃，先记下 */}
         <View
@@ -1159,42 +1137,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
         ) : null}
 
       </KeyboardAwareScrollView>
-
-      {/* sticky footer — actions row pinned outside the scroll. KeyboardStickyView
-          translates it up WITH the keyboard (frame-synced) so the save row stays
-          pinned just above the keyboard instead of being hidden behind it. The
-          footer's own paddingBottom (safe-area bottom inset + 16) is the resting
-          gap when the keyboard is closed; when it opens, the view rides the
-          keyboard top and that padding becomes the gap above the keys. */}
-      <KeyboardStickyView>
-        <View
-          testID="add-actions-footer"
-          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'flex-end',
-            gap: space[3],
-            backgroundColor: colors.background,
-            borderTopWidth: 3,
-            borderTopColor: colors.ink900,
-            paddingHorizontal: space[5],
-            paddingTop: space[4],
-            paddingBottom: insets.bottom + 16,
-          }}
-        >
-          <Button variant="ghost" onPress={requestClose}>
-            {t('cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!ready || saving}
-            iconLeft={<Icon name="check" size={18} color="#fff" />}
-            onPress={handleSave}
-          >
-            {t('save_taste_web')}
-          </Button>
-        </View>
-      </KeyboardStickyView>
 
       {/* Close confirmation — on Cancel/✕ with unsaved content, let the user
           choose to keep the entry as a draft or discard it (tapping outside

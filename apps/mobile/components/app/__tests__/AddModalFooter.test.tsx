@@ -1,15 +1,17 @@
 /* ============================================================
-   Regression test — AddModal sticky footer outside the scroll view.
+   Regression test — AddModal action placement.
 
-   User feedback: the Cancel + Save action row was inside the scrollable
-   body, so buttons scrolled away and were not always reachable.
+   History: the Cancel + Save row was once a sticky footer below the
+   scroll view (testID="add-actions-footer"). As of the unified
+   EditActionHeader refactor (ADR 0001) the save/cancel actions live in
+   the TOP header instead, and the bottom sticky footer is deleted.
 
-   This test pins the fix: the footer (testID="add-actions-footer") must
-   be a sibling of the ScrollView, NOT a descendant of it.
+   This test now pins that new reality: there is NO "add-actions-footer"
+   in the tree, and the cancel/save controls are reachable via the
+   shared header (testID="add-modal-header" / "add-save-btn").
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import { ScrollView } from 'react-native'
 import AddModal from '../AddModal'
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -44,6 +46,10 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { warningsEnabled: true } }),
+}))
+
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
 }))
 
 jest.mock('@/app/(tabs)/_useTasters', () => ({
@@ -86,7 +92,7 @@ jest.mock('expo-location', () => ({
   reverseGeocodeAsync: jest.fn(),
 }))
 
-describe('AddModal footer placement regression', () => {
+describe('AddModal action placement (header, no sticky footer)', () => {
   let currentRenderer: TestRenderer.ReactTestRenderer | null = null
 
   afterEach(() => {
@@ -96,25 +102,27 @@ describe('AddModal footer placement regression', () => {
     currentRenderer = null
   })
 
-  it('renders the actions footer outside the ScrollView (sticky, not scrollable)', () => {
+  it('no longer renders the old sticky actions footer', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
     })
     currentRenderer = renderer
 
-    // Footer must exist in the tree.
-    const footer = renderer.root.findByProps({ testID: 'add-actions-footer' })
-    expect(footer).toBeTruthy()
+    // The bottom sticky footer is deleted — actions moved to the top header.
+    expect(
+      renderer.root.findAllByProps({ testID: 'add-actions-footer' }),
+    ).toHaveLength(0)
+  })
 
-    // ScrollView must exist.
-    const scrollView = renderer.root.findByType(ScrollView)
-    expect(scrollView).toBeTruthy()
+  it('places save/cancel in the unified top header', () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
+    })
+    currentRenderer = renderer
 
-    // The footer must NOT be a descendant of the ScrollView.
-    const footerInScroll = scrollView.findAll(
-      (node) => node.props.testID === 'add-actions-footer',
-    )
-    expect(footerInScroll).toHaveLength(0)
+    expect(renderer.root.findByProps({ testID: 'add-modal-header' })).toBeTruthy()
+    expect(renderer.root.findByProps({ testID: 'add-save-btn' })).toBeTruthy()
   })
 })

@@ -150,6 +150,16 @@ jest.mock('@/components/ds', () => ({
   }) => (
     <button onClick={onPress} disabled={disabled} data-testid={testID}>{children}</button>
   ),
+  EditActionHeader: ({ title, cancelLabel, onCancel, primaryLabel, onPrimary, primaryDisabled, primaryTestID }: {
+    title: string; cancelLabel: string; onCancel?: () => void; primaryLabel: string
+    onPrimary?: () => void; primaryDisabled?: boolean; primaryTestID?: string
+  }) => (
+    <>
+      <button onClick={onCancel}>{cancelLabel}</button>
+      <span>{title}</span>
+      <button onClick={onPrimary} disabled={primaryDisabled} data-testid={primaryTestID}>{primaryLabel}</button>
+    </>
+  ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
   IconButton: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) => (
     <button onClick={onPress}>{children}</button>

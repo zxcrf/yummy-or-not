@@ -65,6 +65,12 @@ jest.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { warningsEnabled: true } }),
 }))
 
+// Self taster (null) — no persona switching in these tests. Mocked so the real
+// hook's async listener never fires a setState after the suite ends (act-leak).
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => null,
+}))
+
 let mockUserTags: Array<{ id: string; name: string; createdAt: string }> = []
 const mockInvalidateTagsCache = jest.fn()
 jest.mock('@/app/(tabs)/_useTasters', () => ({
@@ -153,17 +159,21 @@ describe('AddModal', () => {
     expect(textNodes(renderer, 'Add a photo')).toHaveLength(1)
   })
 
-  it('insets the sticky header below the status bar so the title is not overlapped', () => {
+  it('insets the unified header below the status bar so the title is not overlapped', () => {
     const renderer = renderAddModal()
 
-    // The sticky header now carries its layout in a style object (post-Tamagui migration).
-    const header = renderer.root.findByProps({ testID: 'add-modal-header' })
+    // The header is now the shared EditActionHeader (variant="screen"). Both the
+    // composite element and its rendered host View carry the testID; pick the
+    // host View — the one that actually carries the layout style object.
+    const header = renderer.root.findAll(
+      (n) => n.props.testID === 'add-modal-header' && n.props.style != null,
+    )[0]
     expect(header).toBeTruthy()
     // Regression: header top padding must clear the safe-area top inset
-    // (status bar). The old code used a fixed paddingVertical and overlapped.
+    // (status bar). variant="screen" uses insets.top + 12 and a 3px bottom border.
     const st = header.props.style as Record<string, unknown>
     expect(st.borderBottomWidth).toBe(3)
-    expect(st.paddingTop).toBe(mockSafeAreaTop + 16)
+    expect(st.paddingTop).toBe(mockSafeAreaTop + 12)
   })
 
   it('shows a real permission error instead of another Add a photo label', async () => {
@@ -180,35 +190,25 @@ describe('AddModal', () => {
     expect(mockLaunchImageLibraryAsync).not.toHaveBeenCalled()
   })
 
-  it('reserves the sticky footer height plus a 16dp margin in bottomOffset', () => {
-    // The form scrolls inside a KeyboardAwareScrollView, which keeps the
-    // focused input and its cursor visible above the keyboard with a
-    // frame-synced animation (replacing the old RN KeyboardAvoidingView +
-    // manual scrollToEnd-on-focus compensation). The sticky footer floats up
-    // over the viewport with the keyboard, so bottomOffset must clear the
-    // footer height too — not just the 16dp keyboard margin — or a focused
-    // bottom field would sit behind the footer.
+  it('uses a small constant bottomOffset (footer moved to the top header)', () => {
+    // The save/cancel actions now live in the top EditActionHeader, not a
+    // sticky footer riding the keyboard. The header never overlaps the keyboard,
+    // so bottomOffset no longer needs to reserve footer height — it is just the
+    // 16dp keyboard margin. Regression guard: it must NOT grow with a (now
+    // deleted) footer height.
     const renderer = renderAddModal()
     const scroll = renderer.root.findByType(KeyboardAwareScrollView)
-    // Strictly greater than the bare 16dp margin: footer height is included.
-    expect(scroll.props.bottomOffset).toBeGreaterThan(16)
+    expect(scroll.props.bottomOffset).toBe(16)
   })
 
-  it('reserves the footer height in the scroll content padding (not a hardcoded 24)', () => {
-    // Regression (Images 2&3): the sticky footer (KeyboardStickyView) floats up
-    // over the viewport with the keyboard. bottomOffset only drives the focus
-    // auto-scroll; the resting inset is contentContainerStyle.paddingBottom. The
-    // old code hardcoded paddingBottom:24, so the bottom fields (where? / 你的看法)
-    // could not scroll clear of the floated footer and sat behind it. The fix
-    // reserves the measured footer height + a 16dp margin instead.
+  it('uses a small constant scroll content paddingBottom (insets.bottom + 16)', () => {
+    // With the sticky footer gone, the resting bottom inset is just the
+    // safe-area bottom + a 16dp margin; there is no footer height to reserve.
+    // mockSafeAreaTop's companion bottom inset is 0 here, so paddingBottom = 16.
     const renderer = renderAddModal()
     const scroll = renderer.root.findByType(KeyboardAwareScrollView)
     const style = scroll.props.contentContainerStyle
-    // Must not be the old hardcoded value, and must match the reserved
-    // bottomOffset so the resting inset and the focus-scroll target agree.
-    expect(style.paddingBottom).not.toBe(24)
-    expect(style.paddingBottom).toBe(scroll.props.bottomOffset)
-    expect(style.paddingBottom).toBeGreaterThan(24)
+    expect(style.paddingBottom).toBe(16)
   })
 
   it('keeps the same KeyboardAwareScrollView construction on iOS (no Platform keyboard branch)', () => {
@@ -218,14 +218,56 @@ describe('AddModal', () => {
     expect(renderer.root.findAllByType(KeyboardAwareScrollView)).toHaveLength(1)
   })
 
-  it('renders the action footer (kept as a sticky footer outside the scroll)', () => {
-    // The save row stays a sticky footer; it now rides the keyboard via
-    // KeyboardStickyView. The jest mock collapses KeyboardStickyView to a bare
-    // RN View, so we pin the footer renders (its outside-the-scroll placement
-    // is guarded by AddModalFooter.test.tsx) rather than matching the wrapper
-    // by type.
+  it('no longer renders the old sticky action footer', () => {
+    // Save/cancel moved to the top EditActionHeader; the bottom action footer
+    // (testID="add-actions-footer") is deleted.
     const renderer = renderAddModal()
-    expect(renderer.root.findByProps({ testID: 'add-actions-footer' })).toBeTruthy()
+    expect(
+      renderer.root.findAllByProps({ testID: 'add-actions-footer' }),
+    ).toHaveLength(0)
+  })
+
+  it('saves via the header primary button (add-save-btn) when ready', async () => {
+    mockCreateTaste.mockResolvedValue({ id: 'taste-hdr' })
+    const onSaved = jest.fn()
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={onSaved} />)
+    })
+
+    const nameField = renderer.root.findByProps({ placeholder: 'Brown sugar boba' })
+    const yumOption = pressableByText(renderer, 'YUM')
+    act(() => {
+      nameField.props.onChangeText('Brown sugar boba')
+      yumOption.props.onPress()
+    })
+
+    const saveButton = renderer.root.findByProps({ testID: 'add-save-btn' })
+    await act(async () => {
+      await saveButton.props.onPress()
+    })
+
+    expect(mockCreateTaste).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Brown sugar boba', verdict: 'yum' }),
+      null,
+    )
+    expect(onSaved).toHaveBeenCalledWith('taste-hdr')
+  })
+
+  it('cancel in the header routes through the close handler', () => {
+    // An empty form closes immediately (no draft to keep), so onClose fires.
+    const onClose = jest.fn()
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddModal onClose={onClose} onSaved={() => {}} />)
+    })
+
+    const cancel = pressableByText(renderer, 'Cancel')
+    act(() => {
+      cancel.props.onPress()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('saves a newly added custom tag with the taste payload', async () => {

@@ -29,7 +29,7 @@ import {
   type Taste,
 } from '@yon/shared'
 
-import { Avatar, Button, Card, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
+import { Avatar, Button, Card, EditActionHeader, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
 import { compressAsset } from '@/lib/compressAsset'
 import { useAuth } from '@/providers/AuthProvider'
@@ -449,9 +449,19 @@ export default function YouView({ items }: Props) {
           {/* KeyboardStickyView rides the sheet up with the keyboard so the
               nickname input and the save/cancel row stay above it instead of
               being hidden behind it (matches AddModal / TagManageView). */}
-          <KeyboardStickyView>
+          <KeyboardStickyView testID="nickname-keyboard-sticky">
             <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              <Text style={modalStyles.modalTitle}>{t('edit_profile')}</Text>
+              <EditActionHeader
+                variant="sheet"
+                onCancel={closeEditName}
+                cancelLabel={t('cancel')}
+                title={t('edit_profile')}
+                onPrimary={submitEditName}
+                primaryLabel={t('save')}
+                primaryTestID="save-name-btn"
+                primaryDisabled={nameSaving || !nameInput.trim()}
+                primaryLoading={nameSaving}
+              />
               <Input
                 label={t('display_name_label')}
                 value={nameInput}
@@ -466,19 +476,6 @@ export default function YouView({ items }: Props) {
                   {nameError}
                 </Text>
               ) : null}
-              <View style={modalStyles.buttonRow}>
-                <Button variant="ghost" onPress={closeEditName}>
-                  {t('cancel')}
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={nameSaving || !nameInput.trim()}
-                  onPress={submitEditName}
-                  testID="save-name-btn"
-                >
-                  {t('save')}
-                </Button>
-              </View>
             </Pressable>
           </KeyboardStickyView>
         </Pressable>
@@ -670,20 +667,9 @@ const modalStyles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
   },
-  modalTitle: {
-    color: colors.ink900,
-    fontWeight: '700',
-    fontSize: 18,
-    marginBottom: 16,
-  },
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,
     marginTop: 8,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: space[3],
-    marginTop: 20,
   },
 })

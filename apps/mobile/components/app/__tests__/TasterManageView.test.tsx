@@ -18,6 +18,12 @@
 import TestRenderer, { act } from 'react-test-renderer'
 import { Alert } from 'react-native'
 
+// EditActionHeader (the sheet's unified top action bar) calls
+// useSafeAreaInsets(), which throws without a provider under jest-expo.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
+}))
+
 // Identifiable KeyboardStickyView wrapper (shared setup aliases it to a bare
 // View). Not asserted here but keeps the sheet structure intact.
 jest.mock('react-native-keyboard-controller', () => {
@@ -128,6 +134,31 @@ describe('TasterManageView — pro CRUD', () => {
     const saveBtn = renderer.root.findByProps({ testID: 'taster-save-btn' })
     expect(saveBtn.props.children).toBe('Save')
     expect(saveBtn.props.children).not.toBe('Save this taste')
+  })
+
+  // Unified header (ADR 0001): the sheet's save/cancel now live in a single
+  // top EditActionHeader (取消 LEFT · title CENTER · save RIGHT), not a bottom
+  // button row. The header renders inside the KeyboardStickyView so the whole
+  // sheet keeps floating above the keyboard. Cancel must still close the sheet.
+  it('sheet renders the unified EditActionHeader inside the sticky view with cancel that closes', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'add-taster-btn' }).props.onPress()
+    })
+
+    // The save command lives inside the sticky-view subtree (so it floats with
+    // the keyboard), not a detached bottom footer.
+    const sticky = renderer.root.findByProps({ testID: 'taster-keyboard-sticky' })
+    expect(
+      sticky.findAllByProps({ testID: 'taster-save-btn' }).length,
+    ).toBeGreaterThan(0)
+
+    // Cancel control closes the sheet → the name input is gone afterwards.
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' }).length).toBeGreaterThan(0)
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-cancel-btn' }).props.onPress()
+    })
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' })).toHaveLength(0)
   })
 
   it('create calls createTaster with the entered payload then invalidateTasters', async () => {

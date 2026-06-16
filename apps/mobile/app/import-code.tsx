@@ -6,15 +6,15 @@
    ============================================================ */
 
 import { StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/theme'
 import ImportCodeEntry from '@/components/app/ImportCodeEntry'
 
 export default function ImportCodeRoute() {
-  const insets = useSafeAreaInsets()
+  // EditActionHeader (variant="screen") owns the top safe-area inset now, so
+  // the wrapper must NOT add paddingTop (would double-pad the header).
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <ImportCodeEntry />
     </View>
   )

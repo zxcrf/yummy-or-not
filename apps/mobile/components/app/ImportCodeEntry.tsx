@@ -7,11 +7,11 @@
    ============================================================ */
 
 import { useState } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { parseShareToken, resolveImportCode } from '@yon/shared'
-import { Button, Input } from '@/components/ds'
+import { EditActionHeader, Input } from '@/components/ds'
 import { useI18n } from '@/providers/I18nProvider'
 import { colors, space, Text } from '@/theme'
 
@@ -40,45 +40,53 @@ export default function ImportCodeEntry() {
     }
   }
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>{t('import_code_entry')}</Text>
-      <Text style={styles.body}>{t('import_code_hint')}</Text>
+  const handleCancel = () => {
+    if (router.canGoBack()) router.back()
+    else router.replace('/(tabs)')
+  }
 
-      <Input
-        value={code}
-        onChangeText={(v) => setCode(v.toUpperCase())}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        placeholder={t('import_code_placeholder')}
-        error={error ?? undefined}
-        testID="import-code-input"
+  return (
+    <View style={styles.root}>
+      <EditActionHeader
+        variant="screen"
+        onCancel={handleCancel}
+        cancelLabel={t('cancel')}
+        cancelTestID="import-code-cancel"
+        title={t('import_code_entry')}
+        onPrimary={handleLookup}
+        primaryLabel={t('import_code_lookup')}
+        primaryDisabled={loading || !code.trim()}
+        primaryLoading={loading}
+        primaryTestID="import-code-submit"
       />
 
-      <Button
-        variant="primary"
-        disabled={loading || !code.trim()}
-        onPress={handleLookup}
-        testID="import-code-submit"
-      >
-        {loading ? <ActivityIndicator color={colors.background} /> : t('import_code_lookup')}
-      </Button>
+      <View style={styles.body}>
+        <Text style={styles.hint}>{t('import_code_hint')}</Text>
+
+        <Input
+          value={code}
+          onChangeText={(v) => setCode(v.toUpperCase())}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder={t('import_code_placeholder')}
+          error={error ?? undefined}
+          testID="import-code-input"
+        />
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
+    flex: 1,
+  },
+  body: {
     flex: 1,
     padding: space[4],
     gap: space[3],
   },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.ink900,
-  },
-  body: {
+  hint: {
     color: colors.ink700,
   },
 })

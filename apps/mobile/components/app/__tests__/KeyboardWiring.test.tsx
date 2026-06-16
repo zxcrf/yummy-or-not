@@ -58,6 +58,7 @@ jest.mock('@/providers/AuthProvider', () => ({
 
 jest.mock('@/components/ds', () => ({
   Button: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  EditActionHeader: () => null,
   Icon: () => null,
   IconButton: () => null,
   Input: () => null,
@@ -253,20 +254,15 @@ describe('AddModal keyboard wiring', () => {
     expect(behaviorNodes).toHaveLength(0)
   })
 
-  // The regression: bottomOffset={16} only cleared the keyboard itself.
-  // The sticky footer (KeyboardStickyView) floats up over the scroll viewport
-  // when the keyboard opens, so a focused bottom field (notes, custom tag)
-  // would sit BEHIND the footer. Fix: bottomOffset = footerHeight + 16.
+  // The save/cancel actions moved from a keyboard-riding sticky footer to the
+  // top EditActionHeader (see ADR 0001). The top header never overlaps the
+  // keyboard, so bottomOffset no longer reserves a footer height — it is a
+  // small constant (the bare 16dp keyboard margin). There is also no longer a
+  // footerHeight state nor an "add-actions-footer" onLayout target.
   //
-  // Two assertions:
-  // 1. Seed: before onLayout fires, bottomOffset is already > 16 (seeded with
-  //    an estimate so the very first focus clears the footer).
-  // 2. Post-layout: after a synthetic onLayout event with a specific footer
-  //    height, bottomOffset becomes exactly that height + 16.
-  //
-  // The test must fail against the old bottomOffset={16}: assertion 1 fails
-  // because 16 is not > 16, and assertion 2 fails because 16 ≠ measuredH + 16.
-  it('seeds bottomOffset above 16 before layout and updates it to footerHeight+16 after onLayout', () => {
+  // The test must fail against the old footerHeight-coupled code: that seeded
+  // bottomOffset > 16 and recomputed it from a footer onLayout.
+  it('uses a constant bottomOffset of 16 (footer moved to the top header)', () => {
     const { KeyboardAwareScrollView } = require('react-native-keyboard-controller')
 
     let renderer!: TestRenderer.ReactTestRenderer
@@ -274,21 +270,13 @@ describe('AddModal keyboard wiring', () => {
       renderer = TestRenderer.create(<AddModal onClose={() => {}} onSaved={() => {}} />)
     })
 
-    // 1. Seed check: before any layout event, bottomOffset must already exceed
-    //    the bare keyboard margin so the first focus still clears the footer.
     const scroll = renderer.root.findByType(KeyboardAwareScrollView)
-    expect(scroll.props.bottomOffset).toBeGreaterThan(16)
+    expect(scroll.props.bottomOffset).toBe(16)
 
-    // 2. Post-layout: fire a synthetic onLayout on the footer and assert the
-    //    scroll's bottomOffset updates to exactly measuredHeight + 16.
-    const measuredHeight = 88
-    const footer = renderer.root.findByProps({ testID: 'add-actions-footer' })
-    act(() => {
-      footer.props.onLayout({ nativeEvent: { layout: { height: measuredHeight } } })
-    })
-
-    const scrollAfter = renderer.root.findByType(KeyboardAwareScrollView)
-    expect(scrollAfter.props.bottomOffset).toBe(measuredHeight + 16)
+    // The deleted sticky footer must be gone entirely.
+    expect(
+      renderer.root.findAllByProps({ testID: 'add-actions-footer' }),
+    ).toHaveLength(0)
   })
 })
 

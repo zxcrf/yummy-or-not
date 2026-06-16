@@ -17,10 +17,22 @@ jest.mock('react-native-keyboard-controller', () => {
   const React = require('react')
   const { View } = require('react-native')
   return {
-    KeyboardStickyView: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(View, { testID: 'nickname-keyboard-sticky' }, children),
+    KeyboardStickyView: ({
+      children,
+      testID,
+    }: {
+      children: React.ReactNode
+      testID?: string
+    }) => React.createElement(View, { testID }, children),
   }
 })
+
+// EditActionHeader (inside the nickname sheet) calls useSafeAreaInsets(), which
+// throws without a SafeAreaProvider under jest-expo. Stub a zero inset — the
+// 'sheet' variant ignores insets anyway. Mirrors the EditActionHeader unit test.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
 
 const mockPush = jest.fn()
 const mockSetLang = jest.fn()
