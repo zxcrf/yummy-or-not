@@ -104,3 +104,17 @@ renders and that no raw `img` element appears in the tree.
 **⚠️ EXPO_PUBLIC_API_URL 烧入构建**：`eas.json` 所有 profile 已指向 `https://yon.baobao.click`。
 修改 API host → 必须重新构建 APK/AAB，否则旧包仍打旧地址。
 OAuth callback URL 也注册在 `yon.baobao.click`，换域名需同步改 provider 配置。
+
+## APK 构建策略（按用途，不要弄反）
+
+**日常 / nightly / dev 构建走 GitHub Actions；只有正式 release 才用 EAS。**
+
+- **GHA `.github/workflows/android-apk.yml` = 默认。** push 到 main 且改动 `apps/mobile/` 或
+  `packages/shared/` 时自动触发——所以**合并即已在构建 APK，无需手动再跑任何东西**。本地
+  Gradle 产出 `app-release.apk`，作为 workflow **artifact** 上传（不是 EAS URL）。取包：
+  `gh run download <run-id> -n app-release-<sha>`。免登录、无限流。
+  需要时手动触发：`gh workflow run android-apk.yml`。
+- **EAS cloud build 仅用于正式发版**（有限流、需 `eas-wynston` 交互登录）。**禁止**用 EAS 出
+  dev/nightly 包。发 release 前，EAS 构建必须与 GHA 构建**完全对齐**：同一套构建 env、提前烧入
+  内容（`EXPO_PUBLIC_API_URL` 等所有 baked 变量）、同一签名/keystore——EAS 产物须与 GHA 产物
+  功能完全一致，任何偏离都算发版 bug。
