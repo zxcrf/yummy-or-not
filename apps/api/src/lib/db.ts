@@ -471,13 +471,40 @@ export type UpdateTasteError =
   | 'invalid_status_transition'
   | 'verdict_required';
 
+export interface UpdateTasteOptions {
+  /** Server-generated storage key only. Never pass client JSON `image` here. */
+  imageKey?: string;
+}
+
+export type UpdateTasteResult =
+  | Taste
+  | UpdateTasteError
+  | null
+  | { taste: Taste; previousImage: string | null };
+export type UpdateTasteWithImageResult =
+  | UpdateTasteError
+  | null
+  | { taste: Taste; previousImage: string | null };
+
 /** Patch a taste owned by the user; returns the updated Taste, null if not
  *  found, or a machine-readable error when the promotion rules are violated. */
 export async function updateTaste(
   userId: string,
   id: string,
+  patch: UpdateTasteInput,
+  options: UpdateTasteOptions
+): Promise<UpdateTasteWithImageResult>;
+export async function updateTaste(
+  userId: string,
+  id: string,
   patch: UpdateTasteInput
-): Promise<Taste | UpdateTasteError | null> {
+): Promise<Taste | UpdateTasteError | null>;
+export async function updateTaste(
+  userId: string,
+  id: string,
+  patch: UpdateTasteInput,
+  options: UpdateTasteOptions = {}
+): Promise<UpdateTasteResult> {
   // ── Status / verdict invariant ─────────────────────────────────────────────
   // Status is promote-only: the sole accepted value is 'tasted'. The type already
   // narrows UpdateTasteInput.status to 'tasted', but the body is untrusted at
@@ -537,6 +564,11 @@ export async function updateTaste(
     }
   }
 
+  if (options.imageKey !== undefined) {
+    values.push(options.imageKey);
+    setClauses.push(`image = $${values.length}`);
+  }
+
   if (setClauses.length === 0) {
     // Nothing to change — just return existing row.
     return getTaste(userId, id);
@@ -546,12 +578,28 @@ export async function updateTaste(
   const idParam = values.length;
   values.push(userId);
   const userParam = values.length;
-  const sql = `UPDATE tastes SET ${setClauses.join(', ')} WHERE id = $${idParam} AND user_id = $${userParam} RETURNING *`;
+  const sql = `
+    WITH old AS (
+      SELECT image FROM tastes WHERE id = $${idParam} AND user_id = $${userParam}
+    ),
+    updated AS (
+      UPDATE tastes SET ${setClauses.join(', ')}
+      WHERE id = $${idParam} AND user_id = $${userParam}
+      RETURNING *
+    )
+    SELECT updated.*, old.image AS previous_image
+    FROM updated, old
+  `;
 
   const { rows } = await pool.query(sql, values);
   if (!rows.length) return null;
   // Re-fetch with purchases join so the returned Taste has correct derived fields.
-  return getTaste(userId, id);
+  const taste = await getTaste(userId, id);
+  if (!taste) return null;
+  if (options.imageKey !== undefined) {
+    return { taste, previousImage: rows[0].previous_image ?? null };
+  }
+  return taste;
 }
 
 /** Fetch the RAW stored `image` value (key or legacy URL) for a taste.

@@ -139,3 +139,48 @@ it('ignores a client-supplied image in PATCH (cannot repoint at another user\'s 
   ) as { image: string };
   expect(row.image).toBe(ownKey);
 });
+
+it('trusted server image option sets image and returns previous image', async () => {
+  const user = await createUser({ email: 'owner@example.com', displayName: 'owner' });
+  const created = await createTaste(user.id, { name: 'Snack', verdict: 'yum', notes: 'old' }, ownKey);
+  const newKey = 't/22222222-2222-2222-2222-222222222222/orig.jpg';
+
+  const result = await updateTaste(
+    user.id,
+    created.id,
+    { name: 'Snack edited' },
+    { imageKey: newKey },
+  );
+
+  expect(result).not.toBeNull();
+  if (result === null || typeof result === 'string' || !('previousImage' in result)) {
+    throw new Error(`expected image update result, got ${String(result)}`);
+  }
+  expect(result.previousImage).toBe(ownKey);
+  expect(result.taste.name).toBe('Snack edited');
+  expect(result.taste.notes).toBe('old');
+
+  const row = memdb().public.one(
+    `SELECT image, name, notes FROM tastes WHERE id = '${created.id}'`,
+  ) as { image: string; name: string; notes: string };
+  expect(row.image).toBe(newKey);
+  expect(row.name).toBe('Snack edited');
+  expect(row.notes).toBe('old');
+});
+
+it('trusted server image option returns null for non-owner and does not alter columns', async () => {
+  const owner = await createUser({ email: 'real-owner@example.com', displayName: 'owner' });
+  const stranger = await createUser({ email: 'stranger@example.com', displayName: 'stranger' });
+  const created = await createTaste(owner.id, { name: 'Snack', verdict: 'yum', notes: 'old' }, ownKey);
+  const newKey = 't/33333333-3333-3333-3333-333333333333/orig.jpg';
+
+  const result = await updateTaste(stranger.id, created.id, { name: 'Hacked' }, { imageKey: newKey });
+
+  expect(result).toBeNull();
+  const row = memdb().public.one(
+    `SELECT image, name, notes FROM tastes WHERE id = '${created.id}'`,
+  ) as { image: string; name: string; notes: string };
+  expect(row.image).toBe(ownKey);
+  expect(row.name).toBe('Snack');
+  expect(row.notes).toBe('old');
+});

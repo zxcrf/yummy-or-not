@@ -12,16 +12,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Image, Modal, Pressable, StyleSheet, View, View as RNView } from 'react-native'
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller'
 import { Image as ExpoImage } from 'expo-image'
+import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator } from 'react-native'
 import { colors, radius, space } from '@/theme'
 import { Text } from '@/theme'
-import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, encodeShareToken, ProRequiredError, publishTasteGeo, TAG_CHOICES, unpublishTaste, updateTaste, type Taste, type Verdict } from '@yon/shared'
+import { addPurchase, deleteTaste, getTaste, getOriginalPhotoUrl, mintShare, encodeShareToken, ProRequiredError, publishTasteGeo, TAG_CHOICES, unpublishTaste, updateTaste, type PhotoInput, type Taste, type Verdict } from '@yon/shared'
 import { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
 import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
+import { compressAsset } from '@/lib/compressAsset'
 import { VideoPlayerModal } from './VideoPlayerModal'
 import {
   Badge,
@@ -88,6 +90,9 @@ export default function DetailView() {
   const [editNotes, setEditNotes] = useState('')
   const [editVerdict, setEditVerdict] = useState<Verdict>('yum')
   const [editTags, setEditTags] = useState<string[]>([])
+  const [editPhoto, setEditPhoto] = useState<PhotoInput | null>(null)
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null)
+  const editPhotoPickInFlight = useRef(false)
 
   // Tag chip candidates: built-in choices first, then library extras, then the
   // item's own legacy tags not in either. Mirrors AddModal.tsx:153-157.
@@ -160,6 +165,9 @@ export default function DetailView() {
     setEditing(false)
     setSaving(false)
     setSaveError(null)
+    setEditPhoto(null)
+    setEditPhotoPreview(null)
+    editPhotoPickInFlight.current = false
     setOriginalUrl(null)
     setOriginalLoading(false)
     setSharing(false)
@@ -270,6 +278,8 @@ export default function DetailView() {
     setEditNotes(item.notes)
     setEditVerdict(item.verdict ?? 'yum')
     setEditTags(item.tags)
+    setEditPhoto(null)
+    setEditPhotoPreview(null)
     setSaveError(null)
     setEditing(true)
   }
@@ -312,6 +322,9 @@ export default function DetailView() {
   const cancelEditing = () => {
     setSaveError(null)
     setSaving(false)
+    setEditPhoto(null)
+    setEditPhotoPreview(null)
+    editPhotoPickInFlight.current = false
     setEditing(false)
   }
 
@@ -321,13 +334,37 @@ export default function DetailView() {
     )
   }
 
+  const pickEditPhoto = async () => {
+    if (editPhotoPickInFlight.current) return
+    editPhotoPickInFlight.current = true
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        setSaveError(t('photo_permission_denied'))
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      })
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0]
+        setEditPhotoPreview(asset.uri)
+        setEditPhoto(await compressAsset(asset))
+      }
+    } finally {
+      editPhotoPickInFlight.current = false
+    }
+  }
+
   const saveEdit = async () => {
     if (!item || !editName || saving) return
     const savingId = item.id
     setSaving(true)
     setSaveError(null)
     try {
-      const updated = await updateTaste(item.id, {
+      const patch = {
         name: editName,
         place: editPlace,
         price: editPrice,
@@ -336,13 +373,18 @@ export default function DetailView() {
         ...(item.status === 'todo' ? {} : { verdict: editVerdict }),
         tags: editTags,
         notes: editNotes,
-      })
+      }
+      const updated = editPhoto
+        ? await updateTaste(item.id, patch, editPhoto)
+        : await updateTaste(item.id, patch)
       // The server write to `savingId` happened — refresh the list regardless.
       void invalidateTastes()
       // But if the route moved to another taste mid-save, do NOT paint A's
       // updated record onto B (and don't touch B's edit/saving state).
       if (idRef.current !== savingId) return
       setItem(updated)
+      setEditPhoto(null)
+      setEditPhotoPreview(null)
       setEditing(false)
     } catch (err) {
       if (idRef.current !== savingId) return
@@ -771,6 +813,68 @@ export default function DetailView() {
       <View style={{ padding: 22, paddingTop: 36, gap: space[3] }}>
         {editing ? (
           <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={(item.imageThumb || item.image) ? t('change_photo') : t('add_photo')}
+              onPress={() => void pickEditPhoto()}
+              testID="edit-photo-picker"
+              style={{
+                height: 180,
+                borderWidth: 2,
+                borderColor: colors.ink900,
+                borderRadius: radius.sm,
+                backgroundColor: colors.paper2,
+                overflow: 'hidden',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {editPhotoPreview ? (
+                <Image
+                  source={{ uri: editPhotoPreview }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                  testID="edit-photo-preview"
+                />
+              ) : (item.imageThumb || item.image) ? (
+                <ExpoImage
+                  source={{
+                    uri: item.imageThumb || item.image,
+                    ...(item.imageKey ? { cacheKey: `${item.imageKey}:edit` } : {}),
+                  }}
+                  cachePolicy="disk"
+                  transition={150}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={{ alignItems: 'center', gap: space[2] }}>
+                  <Icon name="image" size={28} color={colors.ink500} />
+                  <Text style={{ color: colors.ink700, fontWeight: '700' }}>
+                    {t('add_photo')}
+                  </Text>
+                </View>
+              )}
+              {(item.imageThumb || item.image || editPhotoPreview) ? (
+                <View
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    bottom: 12,
+                    borderWidth: 2,
+                    borderColor: colors.ink900,
+                    borderRadius: radius.sm,
+                    backgroundColor: colors.paper,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <Text style={{ color: colors.ink900, fontWeight: '700' }}>
+                    {t('change_photo')}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
             <Input
               label={t('f_what')}
               value={editName}

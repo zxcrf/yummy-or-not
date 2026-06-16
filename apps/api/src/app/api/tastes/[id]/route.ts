@@ -7,9 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTaste, updateTaste, deleteTaste, getRawImage, getRawClipKey } from '@/lib/db';
 import { withCors, corsPreflight } from '@/lib/cors';
 import { getUserFromRequest } from '@/lib/auth';
-import { deletePhoto } from '@/lib/storage';
-import { variantKeys, isVariantKey } from '@/lib/image-variants';
-import type { UpdateTasteInput } from '@yon/shared';
+import { uploadPhoto, deletePhoto, assertMediaAllowed } from '@/lib/storage';
+import { getPhotoStorage } from '@/lib/env';
+import { origKey, variantKeys, makeVariants, safeExt, isVariantKey } from '@/lib/image-variants';
+import type { UpdateTasteInput, Verdict } from '@yon/shared';
 
 /** True when `image` is a bare storage key we own (not a legacy http/uploads URL). */
 function isOwnedKey(image: string | null | undefined): image is string {
@@ -42,12 +43,140 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   }
 }
 
+function parsePatchForm(form: FormData): UpdateTasteInput {
+  const patch: UpdateTasteInput = {};
+  const name = form.get('name');
+  const place = form.get('place');
+  const price = form.get('price');
+  const verdict = form.get('verdict');
+  const status = form.get('status');
+  const notes = form.get('notes');
+  const warnBeforeBuy = form.get('warnBeforeBuy');
+  if (typeof name === 'string') patch.name = name;
+  if (typeof place === 'string') patch.place = place;
+  if (typeof price === 'string') patch.price = price;
+  if (typeof verdict === 'string') patch.verdict = verdict as Verdict;
+  if (status === 'tasted') patch.status = status;
+  if (typeof notes === 'string') patch.notes = notes;
+  if (typeof warnBeforeBuy === 'string') patch.warnBeforeBuy = warnBeforeBuy === 'true';
+  const tags = form.getAll('tags').map(String);
+  if (tags.length) patch.tags = tags;
+  return patch;
+}
+
+async function validateDecodableImage(buffer: Buffer): Promise<boolean> {
+  const ALLOWED_IMAGE_FORMATS = new Set([
+    'jpeg', 'png', 'webp', 'gif', 'tiff', 'avif', 'heif', 'svg',
+  ]);
+  try {
+    const { default: sharp } = await import('sharp');
+    const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+    return ALLOWED_IMAGE_FORMATS.has(meta.format ?? '');
+  } catch {
+    return false;
+  }
+}
+
+async function deleteImageObjects(image: string | null | undefined): Promise<void> {
+  if (!isOwnedKey(image)) return;
+  if (isVariantKey(image)) {
+    const { orig, thumb, display } = variantKeys(image);
+    await Promise.allSettled([deletePhoto(orig), deletePhoto(thumb), deletePhoto(display)]);
+    return;
+  }
+  await deletePhoto(image).catch(() => {});
+}
+
+async function uploadTastePhoto(
+  photo: File,
+  origin: string | null,
+  user: { mediaEnabled: boolean },
+): Promise<
+  | { error: NextResponse }
+  | { ok: true; imageKey: string }
+> {
+  const blocked = assertMediaAllowed(user, photo.type || 'application/octet-stream', photo.name);
+  if (blocked) {
+    return { error: withCors(NextResponse.json({ error: blocked }, { status: 403 }), origin) };
+  }
+  if (photo.size > 25 * 1024 * 1024) {
+    return { error: withCors(NextResponse.json({ error: 'photo_too_large' }, { status: 413 }), origin) };
+  }
+
+  const buffer = Buffer.from(await photo.arrayBuffer());
+  const backend = getPhotoStorage();
+  if (backend === 'blob') {
+    const key = `${crypto.randomUUID()}.${safeExt(photo.name)}`;
+    const imageKey = await uploadPhoto(buffer, { key, contentType: photo.type || 'application/octet-stream' });
+    return { ok: true, imageKey };
+  }
+
+  const ok = origKey(crypto.randomUUID(), safeExt(photo.name));
+  const { thumb: thumbKey, display: displayKey } = variantKeys(ok);
+  try {
+    const { thumb, display } = await makeVariants(buffer);
+    const uploads = await Promise.allSettled([
+      uploadPhoto(buffer,  { key: ok,         contentType: photo.type || 'application/octet-stream' }),
+      uploadPhoto(thumb,   { key: thumbKey,   contentType: 'image/webp' }),
+      uploadPhoto(display, { key: displayKey, contentType: 'image/webp' }),
+    ]);
+    const failed = uploads.find((r) => r.status === 'rejected');
+    if (failed) throw (failed as PromiseRejectedResult).reason;
+    return { ok: true, imageKey: ok };
+  } catch (sharpErr) {
+    const isDecodableImage = await validateDecodableImage(buffer);
+    if (!isDecodableImage) {
+      await Promise.allSettled([deletePhoto(ok), deletePhoto(thumbKey), deletePhoto(displayKey)]);
+      return { error: withCors(NextResponse.json({ error: 'invalid_image' }, { status: 400 }), origin) };
+    }
+
+    console.error(`PATCH /api/tastes: variant generation failed, using legacy path:`, sharpErr);
+    await Promise.allSettled([deletePhoto(ok), deletePhoto(thumbKey), deletePhoto(displayKey)]);
+    const key = `${crypto.randomUUID()}.${safeExt(photo.name)}`;
+    const imageKey = await uploadPhoto(buffer, { key, contentType: photo.type || 'application/octet-stream' });
+    return { ok: true, imageKey };
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const origin = req.headers.get('origin');
   const user = await getUserFromRequest(req);
   if (!user) return withCors(NextResponse.json({ error: 'unauthorized' }, { status: 401 }), origin);
   const { id } = await params;
   try {
+    const contentType = req.headers.get('content-type') ?? '';
+    if (contentType.includes('multipart/form-data')) {
+      const existing = await getTaste(user.id, id);
+      if (!existing) return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
+
+      const form = await req.formData();
+      const patch = parsePatchForm(form);
+      const photo = form.get('photo') as File | null;
+      let imageKey: string | undefined;
+      if (photo && photo.size > 0) {
+        const uploaded = await uploadTastePhoto(photo, origin, user);
+        if ('error' in uploaded) return uploaded.error;
+        imageKey = uploaded.imageKey;
+      }
+
+      const result = imageKey
+        ? await updateTaste(user.id, id, patch, { imageKey })
+        : await updateTaste(user.id, id, patch);
+      if (result === 'invalid_status_transition' || result === 'verdict_required') {
+        if (imageKey) await deleteImageObjects(imageKey);
+        return withCors(NextResponse.json({ error: result }, { status: 400 }), origin);
+      }
+      if (!result) {
+        if (imageKey) await deleteImageObjects(imageKey);
+        return withCors(NextResponse.json({ error: 'Not found' }, { status: 404 }), origin);
+      }
+      if (typeof result === 'object' && 'previousImage' in result) {
+        await deleteImageObjects(result.previousImage);
+        return withCors(NextResponse.json(result.taste), origin);
+      }
+      return withCors(NextResponse.json(result), origin);
+    }
+
     const patch = (await req.json()) as UpdateTasteInput;
     const result = await updateTaste(user.id, id, patch);
     if (result === 'invalid_status_transition' || result === 'verdict_required') {
