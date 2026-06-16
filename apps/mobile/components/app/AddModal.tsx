@@ -196,8 +196,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
   // safety-net below always read the current values without re-subscribing.
   const draftRef = useRef<AddDraft>({
     mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview,
+    clipUri, clipDurationMs, clipContentType,
   })
-  draftRef.current = { mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview }
+  draftRef.current = {
+    mode, name, place, price, notes, verdict, picked, lat, lng, photo, photoPreview,
+    clipUri, clipDurationMs, clipContentType,
+  }
 
   // Hydration gate. A ref (not state) on purpose — when there is no stored draft
   // this effect completes without any setState, so it adds no work to the common
@@ -231,6 +235,13 @@ export default function AddModal({ onClose, onSaved }: Props) {
         setLng(d.lng)
         setPhoto(d.photo)
         setPhotoPreview(d.photoPreview)
+        // Restore a staged clip so a remount mid-add (Android activity
+        // recreation after the picker/crop) keeps the video instead of
+        // silently downgrading the saved record to its poster image.
+        // `?? null` tolerates older drafts persisted before clip fields existed.
+        setClipUri(d.clipUri ?? null)
+        setClipDurationMs(d.clipDurationMs ?? null)
+        setClipContentType(d.clipContentType ?? null)
       }
       hydratedRef.current = true
     })
