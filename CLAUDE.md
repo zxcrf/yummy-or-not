@@ -99,7 +99,7 @@ renders and that no raw `img` element appears in the tree.
 
 **更新 API 流程**：push main → GHA 构建推镜像 → 服务器 `docker pull ghcr.io/zxcrf/yum-api:latest && docker restart yum-api`。
 
-**生产安全边界**：公网入口应只有 Caddy HTTPS 和 SSH。Postgres 不公网暴露；`DATABASE_URL`、`pg.env`、R2 tokens、`AMAP_KEY`（逆地理高德 Web 服务 key）均在服务器 `/etc/yum-api/*`，mode 600，绝不进客户端包/代码仓库。SSH 是主要高风险入口，必须 key-only、禁用密码登录，并配合防火墙/fail2ban。逆地理细节见 `docs/ops/infra.md`。
+**生产安全边界**：公网入口应只有 Caddy HTTPS 和 SSH。Postgres 不公网暴露；`DATABASE_URL`、`pg.env`、R2 tokens、`AMAP_KEY`（逆地理高德 Web 服务 key）均在服务器 `/etc/yum-api/*`，绝不进客户端包/代码仓库。`/etc/yum-api/.env` 为 `640 root:ubuntu`（目录 `750 root:ubuntu`），让部署用户 `ubuntu` 能读，从而 `docker run --env-file` 无需 sudo；`ubuntu` 本就有免密 sudo，故有效安全边界不变。SSH 是主要高风险入口，必须 key-only、禁用密码登录，并配合防火墙/fail2ban。逆地理细节见 `docs/ops/infra.md`。
 
 **⚠️ EXPO_PUBLIC_API_URL 烧入构建**：`eas.json` 所有 profile 已指向 `https://yon.baobao.click`。
 修改 API host → 必须重新构建 APK/AAB，否则旧包仍打旧地址。
