@@ -21,7 +21,7 @@
  * stores appended values as-is and ignores append's third argument.
  */
 
-import { createTaste, setAuthToken } from '../api-client';
+import { createTaste, updateTaste, setAuthToken } from '../api-client';
 
 const RN_BLOB_ERROR =
   "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported";
@@ -178,4 +178,33 @@ it('passes a browser File straight through (web path)', async () => {
 
   const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
   expect(fd.get('photo')).toBe(file);
+});
+
+it('updateTaste uses JSON PATCH when no photo is supplied', async () => {
+  await updateTaste('taste-1', { name: 'Renamed' });
+
+  expect(lastFetchArgs).not.toBeNull();
+  expect(lastFetchArgs!.url).toBe('/api/tastes/taste-1');
+  expect(lastFetchArgs!.init?.method).toBe('PATCH');
+  expect(new Headers(lastFetchArgs!.init?.headers).get('Content-Type')).toBe('application/json');
+  expect(lastFetchArgs!.init?.body).toBe(JSON.stringify({ name: 'Renamed' }));
+});
+
+it('updateTaste uses multipart PATCH with a bytes()-shaped photo part', async () => {
+  await updateTaste('taste-1', { name: 'Photo Rename', tags: ['Coffee'] }, rnFile);
+
+  expect(lastFetchArgs).not.toBeNull();
+  expect(lastFetchArgs!.url).toBe('/api/tastes/taste-1');
+  expect(lastFetchArgs!.init?.method).toBe('PATCH');
+  expect(new Headers(lastFetchArgs!.init?.headers).get('Content-Type')).toBeNull();
+
+  const fd = lastFetchArgs!.init?.body as unknown as RNLikeFormData;
+  expect(fd).toBeInstanceOf(RNLikeFormData);
+  expect(fd.get('name')).toBe('Photo Rename');
+  expect(fd.getAll('tags')).toEqual(['Coffee']);
+  const photo = fd.get('photo') as { uri?: string; name: string; type: string; bytes: () => Uint8Array };
+  expect(photo.uri).toBeUndefined();
+  expect(photo.name).toBe('photo.jpg');
+  expect(photo.type).toBe('image/jpeg');
+  expect(new TextDecoder().decode(photo.bytes())).toBe('fake-image-bytes');
 });

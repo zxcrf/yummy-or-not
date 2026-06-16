@@ -73,6 +73,29 @@ function isRNFile(photo: PhotoInput): photo is RNFile {
   return typeof (photo as RNFile).uri === "string";
 }
 
+async function appendPhotoPart(fd: FormData, photo: PhotoInput): Promise<void> {
+  if (isRNFile(photo)) {
+    // Expo 56+ fetch serializes FormData parts that are strings, Blobs, or
+    // objects exposing bytes() (expo-file-system File / ExpoBlob); the
+    // legacy RN {uri,name,type} convention throws "Unsupported FormDataPart
+    // implementation" (#32). Response.blob() / new Blob([ArrayBuffer]) are
+    // also off-limits: RN's Blob constructor can't be built from
+    // ArrayBuffers and throws "Creating blobs from 'ArrayBuffer'..." on
+    // device. So read the file as an ArrayBuffer and append a bytes()-shaped
+    // part carrying the filename and content type expo's serializer reads.
+    const buffer = await fetch(photo.uri).then((r) => r.arrayBuffer());
+    const part = {
+      name: photo.name,
+      type: photo.type,
+      size: buffer.byteLength,
+      bytes: () => new Uint8Array(buffer),
+    };
+    fd.append("photo", part as unknown as Blob);
+  } else {
+    fd.append("photo", photo);
+  }
+}
+
 /** Merge the Authorization header into a request's headers when signed in. */
 function withAuth(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
@@ -139,26 +162,7 @@ export async function createTaste(
 ): Promise<Taste> {
   if (photo) {
     const fd = new FormData();
-    if (isRNFile(photo)) {
-      // Expo 56+ fetch serializes FormData parts that are strings, Blobs, or
-      // objects exposing bytes() (expo-file-system File / ExpoBlob); the
-      // legacy RN {uri,name,type} convention throws "Unsupported FormDataPart
-      // implementation" (#32). Response.blob() / new Blob([ArrayBuffer]) are
-      // also off-limits: RN's Blob constructor can't be built from
-      // ArrayBuffers and throws "Creating blobs from 'ArrayBuffer'..." on
-      // device. So read the file as an ArrayBuffer and append a bytes()-shaped
-      // part carrying the filename and content type expo's serializer reads.
-      const buffer = await fetch(photo.uri).then((r) => r.arrayBuffer());
-      const part = {
-        name: photo.name,
-        type: photo.type,
-        size: buffer.byteLength,
-        bytes: () => new Uint8Array(buffer),
-      };
-      fd.append("photo", part as unknown as Blob);
-    } else {
-      fd.append("photo", photo);
-    }
+    await appendPhotoPart(fd, photo);
     fd.append("name", input.name);
     // verdict is optional now (todo rows have none); only send when present.
     if (input.verdict) fd.append("verdict", input.verdict);
@@ -190,8 +194,22 @@ export async function createTaste(
 
 export async function updateTaste(
   id: string,
-  input: UpdateTasteInput
+  input: UpdateTasteInput,
+  photo?: PhotoInput | null
 ): Promise<Taste> {
+  if (photo) {
+    const fd = new FormData();
+    await appendPhotoPart(fd, photo);
+    if (input.name !== undefined) fd.append("name", input.name);
+    if (input.verdict !== undefined && input.verdict !== null) fd.append("verdict", input.verdict);
+    if (input.status !== undefined) fd.append("status", input.status);
+    if (input.place !== undefined) fd.append("place", input.place);
+    if (input.price !== undefined) fd.append("price", input.price);
+    if (input.notes !== undefined) fd.append("notes", input.notes);
+    if (input.warnBeforeBuy !== undefined) fd.append("warnBeforeBuy", String(input.warnBeforeBuy));
+    input.tags?.forEach((t) => fd.append("tags", t));
+    return apiFetch<Taste>(`/api/tastes/${id}`, { method: "PATCH", body: fd });
+  }
   return apiFetch<Taste>(`/api/tastes/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

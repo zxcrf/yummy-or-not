@@ -12,6 +12,7 @@
    ============================================================ */
 
 import React from 'react'
+import { Image } from 'react-native'
 import TestRenderer, { act } from 'react-test-renderer'
 import { getTaste, updateTaste, type Taste } from '@yon/shared'
 
@@ -22,6 +23,19 @@ jest.mock('@yon/shared', () => ({
   deleteTaste: jest.fn(),
   getTaste: jest.fn(),
   updateTaste: jest.fn(),
+}))
+
+const mockRequestMediaLibraryPermissionsAsync = jest.fn()
+const mockLaunchImageLibraryAsync = jest.fn()
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: (...args: unknown[]) =>
+    mockRequestMediaLibraryPermissionsAsync(...args),
+  launchImageLibraryAsync: (...args: unknown[]) => mockLaunchImageLibraryAsync(...args),
+}))
+
+const mockCompressAsset = jest.fn()
+jest.mock('@/lib/compressAsset', () => ({
+  compressAsset: (...args: unknown[]) => mockCompressAsset(...args),
 }))
 
 jest.mock('@/app/(tabs)/_useTastes', () => ({
@@ -87,6 +101,8 @@ jest.mock('@/components/ds', () => {
 })
 
 const mockedGetTaste = jest.mocked(getTaste)
+const mockedUpdateTaste = jest.mocked(updateTaste)
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
 
 function taste(overrides: Partial<Taste> = {}): Taste {
   return {
@@ -116,6 +132,7 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   await act(async () => {
     renderer = TestRenderer.create(<DetailView />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
 
@@ -123,9 +140,35 @@ function buttons(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll((node) => (node.type as unknown) === 'Button')
 }
 
+function editHeader(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')[0]
+}
+
 describe('DetailView edit-mode photo (issue #129)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRequestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true })
+    mockLaunchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{
+        uri: 'file:///tmp/picked.jpg',
+        fileName: 'picked.jpg',
+        mimeType: 'image/jpeg',
+        width: 100,
+        height: 100,
+      }],
+    })
+    mockCompressAsset.mockResolvedValue({
+      uri: 'file:///tmp/compressed.jpg',
+      name: 'picked.jpg',
+      type: 'image/jpeg',
+    })
+  })
+
+  afterEach(() => {
+    act(() => {
+      mountedRenderers.splice(0).forEach((renderer) => renderer.unmount())
+    })
   })
 
   it('renders an add-photo affordance in edit mode when the record has no image', async () => {
@@ -140,5 +183,70 @@ describe('DetailView edit-mode photo (issue #129)', () => {
     // The whole point of #129: a record with no photo must offer a way to add one.
     const picker = renderer.root.findAll((node) => node.props?.testID === 'edit-photo-picker')
     expect(picker.length).toBeGreaterThan(0)
+  })
+
+  it('renders change-photo affordance in edit mode when the record already has an image', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste({
+      image: 'https://example.test/display.jpg',
+      imageThumb: 'https://example.test/thumb.jpg',
+      imageDisplay: 'https://example.test/display.jpg',
+      imageKey: 't/11111111-1111-1111-1111-111111111111/orig.jpg',
+    }))
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((b) => b.children.includes('edit'))
+    await act(async () => {
+      edit?.props.onPress()
+    })
+
+    expect(renderer.root.findByProps({ testID: 'edit-photo-picker' }).props.accessibilityLabel).toBe('change_photo')
+  })
+
+  it('picking a photo shows a RN image preview and saves with the photo argument', async () => {
+    const photo = { uri: 'file:///tmp/compressed.jpg', name: 'picked.jpg', type: 'image/jpeg' }
+    mockedGetTaste.mockResolvedValueOnce(taste({ image: '', imageThumb: '' }))
+    mockedUpdateTaste.mockResolvedValueOnce(taste({
+      image: 'https://example.test/display.jpg',
+      imageThumb: 'https://example.test/thumb.jpg',
+      imageDisplay: 'https://example.test/display.jpg',
+      imageKey: 't/11111111-1111-1111-1111-111111111111/orig.jpg',
+    }))
+    mockCompressAsset.mockResolvedValueOnce(photo)
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((b) => b.children.includes('edit'))
+    await act(async () => {
+      edit?.props.onPress()
+    })
+
+    await act(async () => {
+      await renderer.root.findByProps({ testID: 'edit-photo-picker' }).props.onPress()
+    })
+
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledWith({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 1,
+    })
+    const preview = renderer.root.findByProps({ testID: 'edit-photo-preview' })
+    expect(preview.type).toBe(Image)
+    expect(renderer.root.findAll((node) => node.type === 'img')).toHaveLength(0)
+
+    await act(async () => {
+      await editHeader(renderer).props.onPrimary()
+    })
+
+    expect(mockedUpdateTaste).toHaveBeenCalledWith(
+      'taste-1',
+      {
+        name: 'Espresso',
+        place: 'Corner Cafe',
+        price: '4.00',
+        verdict: 'yum',
+        tags: ['Coffee'],
+        notes: 'Too bitter',
+      },
+      photo,
+    )
   })
 })
