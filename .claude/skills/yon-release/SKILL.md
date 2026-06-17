@@ -1,9 +1,9 @@
 ---
-name: release-apk
+name: yon-release
 description: "Cut an Android APK release: bump version + versionCode, tag v<x.y.z>, trigger the GHA build, and download the artifact. Use when: '打tag', '发apk', '出包', '发版', 'release apk', 'cut a release', 'build a release apk'. APK builds on `v*` tag push via android-apk.yml; day-to-day ad-hoc builds use `gh workflow run android-apk.yml` instead."
 ---
 
-# release-apk — Tag a version and ship the Android APK
+# yon-release — Tag a version and ship the Android APK
 
 Cuts a proper release: bumps the mobile version + `versionCode`, lands it on
 `main` via PR (main is protected — no direct commits), pushes a `v<x.y.z>` tag
