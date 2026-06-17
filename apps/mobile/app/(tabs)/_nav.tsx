@@ -8,8 +8,8 @@
 
    Routing is driven by the navigation state passed in by <Tabs>; tapping
    a nav item navigates to that route. The routes map to the shell
-   sections: index→Library, add (FAB), todo, you. (Recall is folded into
-   Library — searching inside 口味 surfaces past verdicts.)
+   sections: index→Library, add (FAB), recall, nearby, you. (想吃/To-Try
+   is folded into Library via the title dropdown — plan 2.)
 
    The matching screen content is rendered by <Tabs> above this chrome.
    On wide layouts the Sidebar is absolutely docked to the left; the
@@ -54,11 +54,11 @@ interface NavMeta {
 }
 
 // Ordered to match the shell. `add` is handled separately (FAB/CTA).
-// Recall folded into Library (search inside 口味). The bar is now
-// Library + To-Try left of the FAB, Nearby + You to its right.
+// 想吃 is folded into Library via the title dropdown (plan 2). The bar
+// is now Library + Recall left of the FAB, Nearby + You to its right.
 const NAV: NavMeta[] = [
   { route: 'index', icon: 'grid', labelKey: 'my_tastes' },
-  { route: 'todo', icon: 'bookmark', labelKey: 'nav_todo' },
+  { route: 'recall', icon: 'clock', labelKey: 'nav_recall' },
   { route: 'nearby', icon: 'map', labelKey: 'nav_nearby' },
   { route: 'you', icon: 'user', labelKey: 'nav_you' },
 ]

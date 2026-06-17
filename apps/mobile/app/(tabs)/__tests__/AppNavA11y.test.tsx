@@ -72,7 +72,7 @@ jest.mock('@/components/ds', () => {
 
 const routes = [
   { name: 'index', key: 'index-key' },
-  { name: 'todo', key: 'todo-key' },
+  { name: 'recall', key: 'recall-key' },
   { name: 'you', key: 'you-key' },
 ]
 
@@ -153,7 +153,7 @@ describe('AppNav tab bar — accessibilityState.selected (finding: TalkBack cann
   })
 
   it('exactly one tab has selected=true in the bottom bar', () => {
-    const renderer = renderNav('todo', 390)
+    const renderer = renderNav('recall', 390)
 
     const pressables = renderer.root.findAll(
       (n) =>

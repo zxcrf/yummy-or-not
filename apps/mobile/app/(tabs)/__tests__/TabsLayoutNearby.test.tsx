@@ -4,7 +4,7 @@
    "附近 · 热力" used to be a root-level pushed card (app/nearby.tsx), which
    is why Android back exited the app (nothing to pop to). It is now a tab in
    the (tabs) group. This test pins that the tabs layout registers a screen
-   named "nearby", in the 3rd position (index, todo, nearby, you), so the
+   named "nearby", in the 3rd position (index, recall, nearby, you), so the
    route is owned by the tab navigator (back returns to a tab, never exits).
    ============================================================ */
 
@@ -52,10 +52,10 @@ describe('(tabs) layout — nearby tab registration', () => {
     expect(registered).toContain('nearby')
   })
 
-  it('orders nearby 3rd: index → todo → nearby → you', () => {
+  it('orders nearby 3rd: index → recall → nearby → you', () => {
     act(() => {
       renderer = TestRenderer.create(React.createElement(TabsLayout))
     })
-    expect(registered).toEqual(['index', 'todo', 'nearby', 'you'])
+    expect(registered).toEqual(['index', 'recall', 'nearby', 'you'])
   })
 })

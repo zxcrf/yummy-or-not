@@ -1,7 +1,8 @@
 /* Yummy or Not — Spanish (es) translations.
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const es: Record<string, string> = {
-  nav_tastes: "Sabores", nav_recall: "Recordar", nav_saved: "Guardado", nav_you: "Tú", nav_stats: "Datos", nav_todo: "Probar", nav_nearby: "Cerca",
+  nav_tastes: "Sabores", nav_recall: "Recuerdos", nav_saved: "Guardado", nav_you: "Tú", nav_stats: "Datos", nav_todo: "Probar", nav_nearby: "Cerca",
+  recall_today: "Hoy", recall_yesterday: "Ayer", recall_repurchase_badge: "De nuevo", recall_empty: "Aún no hay recuerdos.",
   my_tastes: "Mis sabores", count_logged: "{n} registrados", search_log: "Busca en tu registro…",
   count_todo: "{n} por probar", search_todo: "Busca en tu lista por probar…",
   log_taste: "Anota un sabor", edit_taste: "Editar", recall_title: "¿Ya lo probaste?",
