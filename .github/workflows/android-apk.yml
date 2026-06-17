@@ -2,11 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/shared/**'
-      - 'pnpm-lock.yaml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 env:
