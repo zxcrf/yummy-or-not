@@ -30,6 +30,7 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
+import { View } from 'react-native'
 import LibraryView from '../LibraryView'
 import type { Taste } from '@yon/shared'
 
@@ -296,9 +297,15 @@ describe('Plan 3 — (A) single-line filter row layout', () => {
   })
 })
 
-// ── (B) Verdict icon buttons ──────────────────────────────────────────────────
+// ── (B) Verdict filtering lives in the ⌄ filter sheet, NOT inline ─────────────
+//
+// Bug fix (2026-06-17): the inline 😋😐🙅 verdict buttons crowded the single-line
+// filter row so the category tag scroll was unusable (only ~1 chip visible).
+// They were removed from the row; verdict filtering now happens only inside the
+// expand (⌄) filter sheet. These tests pin: (a) NO inline verdict buttons exist,
+// (b) the filter-row still exists, (c) verdict filtering still works via the sheet.
 
-describe('Plan 3 — (B) verdict icon buttons in filter-row', () => {
+describe('Plan 3 / bug-2026-06-17 — (B) verdict filtering via the filter sheet (no inline buttons)', () => {
   beforeEach(() => {
     seq = 0
     mockItems = []
@@ -306,73 +313,83 @@ describe('Plan 3 — (B) verdict icon buttons in filter-row', () => {
     jest.clearAllMocks()
   })
 
-  it('(B1) verdict icon buttons render for yum/meh/nah in tasted mode', () => {
+  /** Find pressables in the sheet whose label text equals `label` (e.g. "😋 yum"). */
+  function verdictTagInSheet(sheet: ReturnType<typeof findOne>, label: string) {
+    return sheet.findAll(
+      (n) =>
+        typeof n.props.onPress === 'function' &&
+        n.findAll(
+          (c) => typeof c.props.children === 'string' && c.props.children === label,
+        ).length > 0,
+    )
+  }
+
+  it('(B1) NO inline verdict icon buttons render anywhere (filter-row still exists)', () => {
     mockItems = [makeTaste({ name: 'Ramen', verdict: 'yum' })]
     const renderer = renderLibrary()
 
-    // FAILS: no testID="verdict-btn-yum/meh/nah" in current implementation.
-    expect(findByTestID(renderer, 'verdict-btn-yum').length).toBeGreaterThan(0)
-    expect(findByTestID(renderer, 'verdict-btn-meh').length).toBeGreaterThan(0)
-    expect(findByTestID(renderer, 'verdict-btn-nah').length).toBeGreaterThan(0)
+    expect(findByTestID(renderer, 'verdict-btn-yum')).toHaveLength(0)
+    expect(findByTestID(renderer, 'verdict-btn-meh')).toHaveLength(0)
+    expect(findByTestID(renderer, 'verdict-btn-nah')).toHaveLength(0)
+
+    // …but the single-line filter-row itself is unchanged (tags + expand + sort).
+    expect(findByTestID(renderer, 'filter-row').length).toBeGreaterThan(0)
   })
 
-  it('(B2) tapping verdict-btn-yum filters items to yum only', () => {
+  it('(B2) selecting a verdict in the filter sheet filters items to that verdict only', () => {
     mockItems = [
       makeTaste({ name: 'YumFood', verdict: 'yum' }),
       makeTaste({ name: 'NahFood', verdict: 'nah' }),
     ]
     const renderer = renderLibrary()
 
-    // FAILS: no verdict-btn-yum exists.
-    const btn = findOne(renderer, 'verdict-btn-yum')
-    expect(btn).toBeDefined()
+    act(() => { findOne(renderer, 'filter-expand-btn').props.onPress() })
+    const yum = verdictTagInSheet(findOne(renderer, 'filter-sheet'), '😋 yum')
+    expect(yum.length).toBeGreaterThan(0)
+    act(() => { yum[0].props.onPress() })
 
-    act(() => { btn.props.onPress() })
-
-    const yumCards = findByTestID(renderer, 'card-YumFood')
-    const nahCards = findByTestID(renderer, 'card-NahFood')
-    expect(yumCards.length).toBeGreaterThan(0)
-    expect(nahCards).toHaveLength(0)
+    expect(findByTestID(renderer, 'card-YumFood').length).toBeGreaterThan(0)
+    expect(findByTestID(renderer, 'card-NahFood')).toHaveLength(0)
   })
 
-  it('(B3) re-tapping the active verdict button clears the filter (toggle-off)', () => {
+  it('(B3) re-selecting the active verdict in the sheet clears the filter (toggle-off)', () => {
     mockItems = [
       makeTaste({ name: 'YumFood', verdict: 'yum' }),
       makeTaste({ name: 'NahFood', verdict: 'nah' }),
     ]
     const renderer = renderLibrary()
 
-    // FAILS: no verdict-btn-nah exists.
-    const btn = findOne(renderer, 'verdict-btn-nah')
-    expect(btn).toBeDefined()
+    act(() => { findOne(renderer, 'filter-expand-btn').props.onPress() })
+    const nahFirst = verdictTagInSheet(findOne(renderer, 'filter-sheet'), '🙅 nah')
+    expect(nahFirst.length).toBeGreaterThan(0)
+    act(() => { nahFirst[0].props.onPress() })
 
-    // First tap: activate nah filter
-    act(() => { btn.props.onPress() })
     expect(findByTestID(renderer, 'card-NahFood').length).toBeGreaterThan(0)
     expect(findByTestID(renderer, 'card-YumFood')).toHaveLength(0)
 
-    // Second tap on same button: toggle OFF, both items visible again
-    act(() => { btn.props.onPress() })
+    // Re-tap the same verdict in the (still-open) sheet → toggle OFF.
+    const nahAgain = verdictTagInSheet(findOne(renderer, 'filter-sheet'), '🙅 nah')
+    act(() => { nahAgain[0].props.onPress() })
+
     expect(findByTestID(renderer, 'card-NahFood').length).toBeGreaterThan(0)
     expect(findByTestID(renderer, 'card-YumFood').length).toBeGreaterThan(0)
   })
 
-  it('(B4) verdict icon buttons are HIDDEN in todo mode', () => {
+  it('(B4) the filter sheet has NO verdict section in todo mode', () => {
     mockItems = [
       makeTaste({ name: 'Ramen', status: 'tasted', verdict: 'yum' }),
       makeTaste({ name: 'Wish', status: 'todo', verdict: null }),
     ]
     const renderer = renderLibrary()
-
-    // Switch to todo mode
     switchToTodo(renderer)
 
-    // FAILS: no verdict-btn-* exist at all in current impl; but the key
-    // assertion here is that they must be absent in todo mode.
-    // (They would exist post-implementation only in tasted mode.)
+    act(() => { findOne(renderer, 'filter-expand-btn').props.onPress() })
+    const sheets = findByTestID(renderer, 'filter-sheet')
+    if (sheets.length > 0) {
+      expect(verdictTagInSheet(sheets[0], '😋 yum')).toHaveLength(0)
+    }
+    // …and definitely no inline verdict buttons.
     expect(findByTestID(renderer, 'verdict-btn-yum')).toHaveLength(0)
-    expect(findByTestID(renderer, 'verdict-btn-meh')).toHaveLength(0)
-    expect(findByTestID(renderer, 'verdict-btn-nah')).toHaveLength(0)
   })
 })
 
@@ -607,5 +624,68 @@ describe('Plan 3 — regression: plan-2 title dropdown unaffected', () => {
     expect(findByTestID(renderer, 'verdict-btn-yum')).toHaveLength(0)
     expect(findByTestID(renderer, 'verdict-btn-meh')).toHaveLength(0)
     expect(findByTestID(renderer, 'verdict-btn-nah')).toHaveLength(0)
+  })
+})
+
+// ── (D) Header: CENTERED title-dropdown + top-right avatar, NO banner ─────────
+//
+// Bug fix (2026-06-17): the 我的口味 header was "炸裂" — the route rendered an
+// empty avatar-only row ABOVE a left-aligned title, and the "正在查看 X 的口味"
+// banner rendered twice (route + TasterSwitcher). The fix: LibraryView owns ONE
+// PageHeader with the title-dropdown CENTERED and the avatar injected via
+// `headerRight`; there is NO banner anywhere (the avatar confirms the taster).
+describe('bug-2026-06-17 — (D) centered title-dropdown + top-right avatar, no banner', () => {
+  beforeEach(() => {
+    seq = 0
+    mockItems = []
+    mockTagList = []
+    jest.clearAllMocks()
+  })
+
+  function renderWithAvatar() {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(
+        <LibraryView headerRight={<View testID="my-avatar" />} />,
+      )
+    })
+    return renderer
+  }
+
+  it('(D1) renders the avatar passed via headerRight', () => {
+    mockItems = [makeTaste({ name: 'Ramen', verdict: 'yum' })]
+    const renderer = renderWithAvatar()
+    expect(findByTestID(renderer, 'my-avatar').length).toBeGreaterThan(0)
+  })
+
+  it('(D2) the title-dropdown is centered inside the PageHeader (alignItems center, no flex-end row)', () => {
+    mockItems = [makeTaste({ name: 'Ramen', verdict: 'yum' })]
+    const renderer = renderWithAvatar()
+
+    // The title-dropdown still exists and is the viewMode switcher…
+    const dropdown = findOne(renderer, 'title-dropdown')
+    expect(dropdown).toBeDefined()
+
+    // …and it sits inside a horizontally-centering wrapper (PageHeader's center
+    // slot uses alignItems:'center'); no ancestor pins it to the right.
+    let centered = false
+    let node = dropdown.parent
+    while (node) {
+      const style = node.props.style
+      const flat = Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : style
+      if (flat?.alignItems === 'center') centered = true
+      if (flat?.justifyContent === 'flex-end') {
+        throw new Error('title-dropdown must not live in a flex-end (right-aligned) row')
+      }
+      node = node.parent
+    }
+    expect(centered).toBe(true)
+  })
+
+  it('(D3) renders NO viewing-banner / header-viewing-banner (banner removed entirely)', () => {
+    mockItems = [makeTaste({ name: 'Ramen', verdict: 'yum' })]
+    const renderer = renderWithAvatar()
+    expect(findByTestID(renderer, 'viewing-banner')).toHaveLength(0)
+    expect(findByTestID(renderer, 'header-viewing-banner')).toHaveLength(0)
   })
 })

@@ -11,12 +11,13 @@
    are shown (null = self default).
    ============================================================ */
 
-import { useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import type { Taste } from '@yon/shared'
 import { colors, space, Text } from '@/theme'
+import { PageHeader } from '@/components/app/PageHeader'
 import { useI18n } from '@/providers/I18nProvider'
 import { filterTastesByTaster, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
@@ -338,7 +339,12 @@ function RecallRow({ event, repurchaseLabel, isLast, onPress }: RowProps) {
 // Main component
 // ----------------------------------------------------------------
 
-export default function RecallView() {
+interface RecallViewProps {
+  /** Pinned to the top-right of the page header (the taster avatar). */
+  headerRight?: ReactNode
+}
+
+export default function RecallView({ headerRight }: RecallViewProps = {}) {
   const { t } = useI18n()
   const router = useRouter()
   const { items: allItems, loading: _loading, refresh } = useRefreshableTastes()
@@ -380,63 +386,63 @@ export default function RecallView() {
   const isEmpty = groups.length === 0
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-      keyboardDismissMode="on-drag"
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.ink900}
-          colors={[colors.ink900]}
-        />
-      }
-    >
-      {/* page title */}
-      <Text style={{ fontWeight: '700', fontSize: 28, marginBottom: space[3] }}>
-        {t('nav_recall')}
-      </Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* ── Top bar: CENTERED 回忆 title + top-right avatar (headerRight) ── */}
+      <PageHeader title={t('nav_recall')} right={headerRight} />
 
-      {isEmpty ? (
-        <View
-          data-testid="recall-empty"
-          style={{ alignItems: 'center', paddingVertical: 48 }}
-        >
-          <Text style={{ color: colors.colorMuted }}>{t('recall_empty')}</Text>
-        </View>
-      ) : (
-        groups.map((group) => (
-          <View key={group.label} style={{ marginBottom: space[3] }}>
-            {/* day header */}
-            <Text
-              data-group={group.label}
-              style={{
-                fontWeight: '700',
-                fontSize: 13,
-                color: colors.colorMuted,
-                marginBottom: space[2],
-                marginTop: space[1],
-              }}
-            >
-              {group.label}
-            </Text>
-
-            {/* rows with rail */}
-            <View>
-              {group.events.map((ev, idx) => (
-                <RecallRow
-                  key={ev.key}
-                  event={ev}
-                  repurchaseLabel={t('recall_repurchase_badge')}
-                  isLast={idx === group.events.length - 1}
-                  onPress={() => router.push(`/taste/${ev.tasteId}`)}
-                />
-              ))}
-            </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.ink900}
+            colors={[colors.ink900]}
+          />
+        }
+      >
+        {isEmpty ? (
+          <View
+            data-testid="recall-empty"
+            style={{ alignItems: 'center', paddingVertical: 48 }}
+          >
+            <Text style={{ color: colors.colorMuted }}>{t('recall_empty')}</Text>
           </View>
-        ))
-      )}
-    </ScrollView>
+        ) : (
+          groups.map((group) => (
+            <View key={group.label} style={{ marginBottom: space[3] }}>
+              {/* day header */}
+              <Text
+                data-group={group.label}
+                style={{
+                  fontWeight: '700',
+                  fontSize: 13,
+                  color: colors.colorMuted,
+                  marginBottom: space[2],
+                  marginTop: space[1],
+                }}
+              >
+                {group.label}
+              </Text>
+
+              {/* rows with rail */}
+              <View>
+                {group.events.map((ev, idx) => (
+                  <RecallRow
+                    key={ev.key}
+                    event={ev}
+                    repurchaseLabel={t('recall_repurchase_badge')}
+                    isLast={idx === group.events.length - 1}
+                    onPress={() => router.push(`/taste/${ev.tasteId}`)}
+                  />
+                ))}
+              </View>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
   )
 }

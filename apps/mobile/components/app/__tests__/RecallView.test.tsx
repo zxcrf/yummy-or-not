@@ -85,6 +85,13 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }))
 
+// ---- mock react-native-safe-area-context -----------------------------------
+// PageHeader (rendered by RecallView) calls useSafeAreaInsets(), which throws
+// without a provider under jest-expo. Stub with zero insets.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 // ---- mock I18nProvider -----------------------------------------------------
 
 jest.mock('@/providers/I18nProvider', () => ({
@@ -460,5 +467,56 @@ describe('RecallView — 回忆 timeline', () => {
     expect(thumbs.length).toBeGreaterThan(0)
     // The image source URI should be set
     expect(thumbs[0].props['data-uri'] ?? thumbs[0].props.source?.uri).toBeTruthy()
+  })
+})
+
+// ---- header: CENTERED 回忆 title + top-right avatar -------------------------
+//
+// Bug fix (2026-06-17): 回忆 was left-aligned and the recall tab had no taster
+// avatar at all. The fix: RecallView renders a shared PageHeader with the title
+// CENTERED and the avatar injected via `headerRight` (same treatment as 我的口味).
+describe('RecallView — centered title + top-right avatar', () => {
+  async function renderWithAvatar() {
+    const { default: RecallView } = require('../RecallView') as {
+      default: React.ComponentType<{ headerRight?: React.ReactNode }>
+    }
+    const { View } = require('react-native')
+    let renderer!: TestRenderer.ReactTestRenderer
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <RecallView headerRight={<View testID="my-avatar" />} />,
+      )
+    })
+    mountedRenderers.push(renderer)
+    return renderer
+  }
+
+  it('renders the 回忆 title and the avatar passed via headerRight', async () => {
+    mockItems = []
+    const renderer = await renderWithAvatar()
+
+    const titleNodes = renderer.root.findAll(
+      (n) => typeof n.props.children === 'string' && n.props.children === '回忆',
+    )
+    expect(titleNodes.length).toBeGreaterThan(0)
+    expect(renderer.root.findAll((n) => n.props.testID === 'my-avatar').length).toBeGreaterThan(0)
+  })
+
+  it('the 回忆 title sits inside a horizontally-centering wrapper (PageHeader center slot)', async () => {
+    mockItems = []
+    const renderer = await renderWithAvatar()
+
+    const title = renderer.root.find(
+      (n) => typeof n.props.children === 'string' && n.props.children === '回忆',
+    )
+    let centered = false
+    let node = title.parent
+    while (node) {
+      const style = node.props.style
+      const flat = Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : style
+      if (flat?.alignItems === 'center') centered = true
+      node = node.parent
+    }
+    expect(centered).toBe(true)
   })
 })
