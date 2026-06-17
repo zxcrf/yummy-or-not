@@ -7,10 +7,17 @@
    ============================================================ */
 
 import React from 'react'
+import { StyleSheet } from 'react-native'
 import TestRenderer, { act } from 'react-test-renderer'
 import { getTaste, updateTaste, type Taste } from '@yon/shared'
 
 import DetailView from '../DetailView'
+
+// Mock safe-area insets with a nonzero top so the inset-doubling regression is
+// detectable (top=0 would make doubling invisible).
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 47, bottom: 0, left: 0, right: 0 }),
+}))
 
 jest.mock('@yon/shared', () => ({
   TAG_CHOICES: ['Coffee', 'Dessert'],
@@ -352,5 +359,38 @@ describe('DetailView editing', () => {
     const nameInput = inputByLabel(renderer, 'f_what')
     await act(async () => { nameInput?.props.onChangeText('') })
     expect(editHeader(renderer).props.primaryDisabled).toBe(true)
+  })
+
+  // Regression: double top safe-area inset in edit mode.
+  // Before the fix the route container applied paddingTop:insets.top AND
+  // EditActionHeader applied insets.top+12, yielding 2×inset+12 of dead space
+  // above the header. The fix moves ALL inset responsibility into DetailView
+  // itself: read mode applies it once on the OUTER (non-positioned) photo
+  // wrapper, edit mode relies entirely on EditActionHeader (no extra padding
+  // from the route or DetailView). StyleSheet.flatten() is used so the
+  // assertion works whether style is an object or an array.
+  it('read mode applies paddingTop:insets.top on the photo wrapper; edit mode does not', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    // READ MODE: the outer photo wrapper must carry exactly insets.top (47).
+    const photoWrapper = renderer.root.findByProps({ testID: 'detail-read-photo-wrapper' })
+    expect(StyleSheet.flatten(photoWrapper.props.style).paddingTop).toBe(47)
+
+    // Switch to EDIT MODE.
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    // EDIT MODE: the photo wrapper is gone (hidden) — EditActionHeader self-insets.
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'detail-read-photo-wrapper'),
+    ).toHaveLength(0)
+
+    // The edit content wrapper must NOT carry a paddingTop equal to insets.top;
+    // that would re-introduce the double-inset above the EditActionHeader.
+    const editContent = renderer.root.findByProps({ testID: 'detail-content' })
+    const editContentPadTop = StyleSheet.flatten(editContent.props.style).paddingTop
+    expect(editContentPadTop).not.toBe(47)
+    expect(editContentPadTop).not.toBe(47 + 12)
   })
 })

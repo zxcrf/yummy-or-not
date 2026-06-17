@@ -12,3 +12,11 @@ jest.mock(
 jest.mock('react-native-keyboard-controller', () =>
   require('react-native-keyboard-controller/jest'),
 )
+
+// Provide a zero-insets fallback for all suites so components that call
+// useSafeAreaInsets() don't throw "No safe area value available". Suites
+// that need non-zero insets (e.g. DetailViewEdit double-inset regression)
+// override this mock inline with jest.mock('react-native-safe-area-context', …).
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+)
