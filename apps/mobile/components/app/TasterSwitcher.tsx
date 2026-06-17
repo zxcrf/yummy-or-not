@@ -6,11 +6,10 @@
    the header when viewing a non-self taster's tastes.
 
    Gating (§S3b 权限):
-   - All users see their own avatar (so there's always a visible right-top
-     element, even free/single-taster).
-   - The chevron + bottom sheet only appear when there are multiple tasters
-     (i.e. the user can actually switch). Free users with only one persona
-     never see the sheet trigger.
+   - All users see their own avatar (always a visible right-top element).
+   - The chevron + bottom sheet only appear when the user is PRO AND has
+     multiple tasters. Free users or single-taster PRO accounts never
+     see the sheet trigger.
    - The banner only appears when a non-self taster is currently active.
    ============================================================ */
 
@@ -19,11 +18,13 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native'
 import { Text, colors, space, radius } from '@/theme'
 import { useActiveTaster, setActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useTasters } from '@/app/(tabs)/_useTasters'
+import { useAuth } from '@/providers/AuthProvider'
 import { Icon } from '@/components/ds/Icon'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function TasterSwitcher() {
   const { t } = useI18n()
+  const { user } = useAuth()
   const active = useActiveTaster()
   const { tasters } = useTasters()
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -37,36 +38,43 @@ export default function TasterSwitcher() {
 
   const selfTaster = tasters.find((t) => t.isSelf) ?? tasters[0]
 
-  // Display the active taster's initial; fall back to self.
+  // Display the active taster's initial; fall back to self, then '?'.
   const displayTaster = activeTaster ?? selfTaster
   const initial = displayTaster?.displayName?.[0]?.toUpperCase() ?? '?'
 
-  // Multi-taster: chevron and sheet are available.
-  const isMultiTaster = tasters.length > 1
+  // Chevron and sheet only appear for PRO users with multiple tasters.
+  const isMultiTaster = user?.plan === 'pro' && tasters.length > 1
 
   // Non-self taster active → show banner.
   const nonSelfActive = active !== null && activeTaster != null && !activeTaster.isSelf
 
   return (
-    <View>
-      {/* Avatar bubble (+ chevron if multi-taster) — the sheet trigger */}
-      <Pressable
-        testID="taster-sheet-open"
-        accessibilityRole="button"
-        onPress={() => {
-          if (isMultiTaster) setSheetOpen(true)
-        }}
-        style={styles.avatarRow}
-      >
-        <View testID="taster-avatar" style={styles.avatarCircle}>
-          <Text style={styles.avatarInitial}>{initial}</Text>
-        </View>
-        {isMultiTaster && (
+    <>
+      {/* Avatar bubble + optional chevron — the sheet trigger */}
+      {isMultiTaster ? (
+        <Pressable
+          testID="taster-sheet-open"
+          accessibilityRole="button"
+          onPress={() => setSheetOpen(true)}
+          style={styles.avatarRow}
+        >
+          <View testID="taster-avatar" style={styles.avatarCircle}>
+            <Text style={styles.avatarInitial}>{initial}</Text>
+          </View>
           <View testID="taster-chevron">
             <Icon name="chevron-down" size={16} color={colors.ink900} />
           </View>
-        )}
-      </Pressable>
+        </Pressable>
+      ) : (
+        <View
+          testID="taster-sheet-open"
+          style={styles.avatarRow}
+        >
+          <View testID="taster-avatar" style={styles.avatarCircle}>
+            <Text style={styles.avatarInitial}>{initial}</Text>
+          </View>
+        </View>
+      )}
 
       {/* Banner: shown when a non-self taster is active */}
       {nonSelfActive && activeTaster != null && (
@@ -77,8 +85,13 @@ export default function TasterSwitcher() {
         </View>
       )}
 
-      {/* Bottom sheet: list of all tasters */}
-      {sheetOpen && (
+      {/* Bottom sheet: full-screen Modal so the backdrop covers the viewport */}
+      <Modal
+        transparent
+        visible={sheetOpen}
+        animationType="slide"
+        onRequestClose={() => setSheetOpen(false)}
+      >
         <Pressable
           testID="taster-sheet-overlay"
           style={[StyleSheet.absoluteFill, styles.overlay]}
@@ -122,10 +135,12 @@ export default function TasterSwitcher() {
             })}
           </Pressable>
         </Pressable>
-      )}
-    </View>
+      </Modal>
+    </>
   )
 }
+
+export { TasterSwitcher }
 
 const AVATAR_SIZE = 32
 

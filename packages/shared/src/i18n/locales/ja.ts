@@ -112,4 +112,8 @@ export const ja: Record<string, string> = {
   upgrade_to_pro: "Pro にアップグレード",
   retry: "再試行",
   discard_changes_title: "変更を破棄しますか？", discard_changes_body: "保存していない変更は失われます。", discard_confirm: "破棄",
+  // Plan 5 — taster switcher top-right
+  taster_sheet_title: "テイスターを切り替え",
+  taster_self_label: "（自分）",
+  viewing_taster: "{name} の味覚を表示中",
 };

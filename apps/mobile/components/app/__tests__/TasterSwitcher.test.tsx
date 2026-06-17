@@ -149,7 +149,9 @@ describe('TasterSwitcher — banner for non-self active taster', () => {
       (node) => node.props.testID === 'viewing-banner',
     )
     expect(banner).toBeTruthy()
-    expect(JSON.stringify(banner.toJSON())).toContain(PARTNER.displayName)
+    // Check the full renderer tree for the taster name — avoids per-node
+    // .toJSON() which is non-standard and required an unauthorized prototype patch.
+    expect(JSON.stringify(renderer.toJSON())).toContain(PARTNER.displayName)
   })
 
   it('does NOT show the viewing-banner when self is active (active === null)', () => {

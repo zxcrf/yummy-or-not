@@ -112,4 +112,8 @@ export const ko: Record<string, string> = {
   upgrade_to_pro: "Pro로 업그레이드",
   retry: "다시 시도",
   discard_changes_title: "변경 사항을 버릴까요?", discard_changes_body: "저장하지 않은 변경 사항이 사라집니다.", discard_confirm: "버리기",
+  // Plan 5 — taster switcher top-right
+  taster_sheet_title: "테이스터 전환",
+  taster_self_label: "(나)",
+  viewing_taster: "{name}의 입맛 보는 중",
 };

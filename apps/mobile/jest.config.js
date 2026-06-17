@@ -34,11 +34,6 @@ module.exports = {
     // Map workspace package to its TypeScript source — no build step needed.
     '^@yon/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@yon/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1.ts',
-    // Wrap react-test-renderer to add ReactTestInstance.prototype.toJSON.
-    // v19 only puts toJSON() on the root renderer; per-node .find().toJSON()
-    // calls used in tests need it patched onto the prototype.
-    '^react-test-renderer$': '<rootDir>/__mocks__/react-test-renderer.js',
   },
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.afterEnv.js'],
 }
