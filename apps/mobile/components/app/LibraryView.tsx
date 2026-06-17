@@ -29,6 +29,16 @@ import { RecallResults } from '@/components/app/RecallResults'
 type VerdictFilter = 'yum' | 'meh' | 'nah'
 type SortMode = 'recent' | 'nearby'
 
+/** Returns the numeric ms timestamp of the last user activity on a taste.
+ *  Mirrors the API's lastActivityMs = max(createdAt, newest purchase.createdAt).
+ *  Uses numeric Date.getTime() to match the API exactly, avoiding edge-cases
+ *  with ISO strings that have offsets or missing milliseconds fields. */
+export function lastActivityMs(t: { createdAt?: string | null; purchases: Array<{ createdAt?: string | null }> }): number {
+  const base = t.createdAt ? new Date(t.createdAt).getTime() : 0
+  const latestPurchase = t.purchases[0]?.createdAt ? new Date(t.purchases[0].createdAt).getTime() : 0
+  return Math.max(base, latestPurchase)
+}
+
 function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictFilter | null {
   const value = Array.isArray(verdict) ? verdict[0] : verdict
   return value === 'yum' || value === 'meh' || value === 'nah' ? value : null
@@ -116,7 +126,12 @@ export default function LibraryView() {
   const rows = useMemo(() => {
     if (sortMode === 'nearby' && coords) return sortByNearest(pool, coords)
     return [...pool]
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+      .sort((a, b) => {
+        const diff = lastActivityMs(b) - lastActivityMs(a)
+        if (diff !== 0) return diff
+        // Tiebreak: createdAt desc (mirrors API's ORDER BY created_at DESC)
+        return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+      })
       .map((item) => ({ item, distance: null as number | null }))
   }, [pool, sortMode, coords])
 
@@ -137,14 +152,9 @@ export default function LibraryView() {
     >
       {/* header */}
       <View style={{ gap: space[3] }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
-          <Text style={{ fontWeight: '700', fontSize: 28 }}>
-            {t('my_tastes')}
-          </Text>
-          <Text style={{ color: colors.colorMuted, fontSize: 13 }}>
-            {t('count_logged', { n: items.length })}
-          </Text>
-        </View>
+        <Text style={{ fontWeight: '700', fontSize: 28 }}>
+          {t('my_tastes')}
+        </Text>
 
         {/* search box */}
         <View style={{ position: 'relative', justifyContent: 'center' }}>
