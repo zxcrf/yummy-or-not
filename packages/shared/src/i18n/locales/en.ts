@@ -164,4 +164,8 @@ export const en: Record<string, string> = {
   video_play: "Play video",
   video_load_failed: "Couldn't play this video. Please try again later.",
   discard_changes_title: "Discard changes?", discard_changes_body: "Your unsaved changes will be lost.", discard_confirm: "Discard",
+  // Plan 5 — right-top taster switcher
+  taster_sheet_title: "Switch taster",
+  taster_self_label: "(me)",
+  viewing_taster: "Viewing {name}'s tastes",
 };

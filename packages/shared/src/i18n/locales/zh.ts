@@ -165,4 +165,8 @@ export const zh: Record<string, string> = {
   video_play: "播放视频",
   video_load_failed: "暂时无法播放该视频，请稍后再试。",
   discard_changes_title: "放弃更改？", discard_changes_body: "未保存的修改将丢失。", discard_confirm: "放弃更改",
+  // 计划 5 — 右上 taster 切换器
+  taster_sheet_title: "切换口味主人",
+  taster_self_label: "（我）",
+  viewing_taster: "正在查看 {name} 的口味",
 };
