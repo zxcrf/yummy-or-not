@@ -164,4 +164,4 @@ jobs:
         with:
           name: app-release-${{ github.sha }}
           path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 14
+          retention-days: 1
