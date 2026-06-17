@@ -1,18 +1,18 @@
 /* ============================================================
    YUMMY OR NOT — LibraryView (plain RN + theme)
    The single 口味 surface. Two modes share one search box:
-   - browse (no query): a grid of tasted FoodCards, filtered by the
+   - browse (no query): a grid of FoodCards, filtered by the
      verdict + tag chips and sorted "Recent" (newest first) or "Nearby"
      (by distance, opt-in). This is the "what have I eaten?" library.
    - recall (query present): delegates to <RecallResults> for the
      "before you spend" answer — top verdict card, repurchase warning,
      and other matches. This replaces the old separate Recall tab.
-   todo (想吃) records never appear here; they live in the To-Try tab.
+   viewMode dropdown in the title switches between tasted and todo.
    Tapping a card routes to /taste/[id].
    ============================================================ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, RefreshControl, ScrollView, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TouchableOpacity, View, useWindowDimensions } from 'react-native'
 import * as ExpoRouter from 'expo-router'
 import { colors, space, Text } from '@/theme'
 import { formatDistance } from '@yon/shared'
@@ -28,6 +28,7 @@ import { RecallResults } from '@/components/app/RecallResults'
 
 type VerdictFilter = 'yum' | 'meh' | 'nah'
 type SortMode = 'recent' | 'nearby'
+type ViewMode = 'tasted' | 'todo'
 
 /** Returns the numeric ms timestamp of the last user activity on a taste.
  *  Mirrors the API's lastActivityMs = max(createdAt, newest purchase.createdAt).
@@ -74,6 +75,8 @@ export default function LibraryView() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<string>('All')
   const [sortMode, setSortMode] = useState<SortMode>('recent')
+  const [viewMode, setViewMode] = useState<ViewMode>('tasted')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const routeVerdict = useMemo(() => normalizeVerdictParam(params.verdict), [params.verdict])
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter | null>(routeVerdict)
 
@@ -100,9 +103,18 @@ export default function LibraryView() {
     [tags],
   )
 
-  // The tasted-only pool after the tag + verdict chips. Both modes search/sort
-  // this same set, so a chip narrows the recall results too.
+  // Todo count: items in the current taster scope that are status==='todo'.
+  const todoCount = useMemo(
+    () => items.filter((it) => (it.status ?? 'tasted') === 'todo').length,
+    [items],
+  )
+
+  // The pool after the tag + verdict chips. In tasted mode: tasted items only.
+  // In todo mode: todo items only (verdict filter hidden/cleared).
   const pool = useMemo(() => {
+    if (viewMode === 'todo') {
+      return items.filter((it) => (it.status ?? 'tasted') === 'todo')
+    }
     const tasted = items.filter((it) => (it.status ?? 'tasted') === 'tasted')
     const filteredByTag =
       filter === 'All'
@@ -115,7 +127,7 @@ export default function LibraryView() {
     return verdictFilter == null
       ? filteredByTag
       : filteredByTag.filter((it) => it.verdict === verdictFilter)
-  }, [items, filter, verdictFilter])
+  }, [items, filter, verdictFilter, viewMode])
 
   // searchTastes returns [] for empty/1-char queries; treat those as browse.
   const isSearching = !!query && query.trim().length > 1
@@ -135,6 +147,10 @@ export default function LibraryView() {
       .map((item) => ({ item, distance: null as number | null }))
   }, [pool, sortMode, coords])
 
+  // Dropdown title label for the current viewMode.
+  const titleLabel =
+    viewMode === 'tasted' ? t('lib_tab_tasted') : t('nav_todo')
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -150,11 +166,68 @@ export default function LibraryView() {
         />
       }
     >
-      {/* header */}
+      {/* header — dropdown title */}
       <View style={{ gap: space[3] }}>
-        <Text style={{ fontWeight: '700', fontSize: 28 }}>
-          {t('my_tastes')}
-        </Text>
+        <TouchableOpacity
+          testID="title-dropdown"
+          onPress={() => setDropdownOpen((o) => !o)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontWeight: '700', fontSize: 28 }}>{titleLabel}</Text>
+          <Text style={{ fontWeight: '700', fontSize: 20, color: colors.ink500 }}>▾</Text>
+        </TouchableOpacity>
+
+        {/* dropdown menu */}
+        {dropdownOpen && (
+          <View
+            testID="title-dropdown-menu"
+            style={{
+              position: 'absolute',
+              top: 40,
+              left: 0,
+              backgroundColor: colors.background,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.ink100,
+              zIndex: 100,
+              minWidth: 160,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.12,
+              shadowRadius: 4,
+              elevation: 4,
+            }}
+          >
+            <Pressable
+              testID="dropdown-item-tasted"
+              onPress={() => {
+                setViewMode('tasted')
+                setDropdownOpen(false)
+              }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
+            >
+              {viewMode === 'tasted' && (
+                <Text style={{ color: colors.ink900 }}>✓</Text>
+              )}
+              <Text style={{ color: colors.ink900 }}>{t('lib_tab_tasted')}</Text>
+            </Pressable>
+            <Pressable
+              testID="dropdown-item-todo"
+              onPress={() => {
+                setViewMode('todo')
+                setDropdownOpen(false)
+              }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
+            >
+              {viewMode === 'todo' && (
+                <Text style={{ color: colors.ink900 }}>✓</Text>
+              )}
+              <Text style={{ color: colors.ink900 }}>{t('nav_todo')}</Text>
+              <Text style={{ color: colors.colorMuted }}>{todoCount}</Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* search box */}
         <View style={{ position: 'relative', justifyContent: 'center' }}>
@@ -171,40 +244,42 @@ export default function LibraryView() {
         </View>
       </View>
 
-      {/* filter chips — sourced from user's tag candidate set */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
-        <Tag
-          active={filter === 'All' && verdictFilter == null}
-          onPress={() => {
-            setFilter('All')
-            if (verdictFilter != null) router.setParams({ verdict: undefined })
-            setVerdictFilter(null)
-          }}
-        >
-          {t('all')}
-        </Tag>
-        {(['yum', 'meh', 'nah'] as const).map((verdict) => (
+      {/* filter chips — verdict + tag; hidden in todo mode (todo items have no verdict) */}
+      {viewMode === 'tasted' && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
           <Tag
-            key={verdict}
-            active={verdictFilter === verdict}
+            active={filter === 'All' && verdictFilter == null}
             onPress={() => {
-              if (verdictFilter === verdict) {
-                router.setParams({ verdict: undefined })
-                setVerdictFilter(null)
-                return
-              }
-              setVerdictFilter(verdict)
+              setFilter('All')
+              if (verdictFilter != null) router.setParams({ verdict: undefined })
+              setVerdictFilter(null)
             }}
           >
-            {t(verdict)}
+            {t('all')}
           </Tag>
-        ))}
-        {filterChips.map((f) => (
-          <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
-            {f}
-          </Tag>
-        ))}
-      </View>
+          {(['yum', 'meh', 'nah'] as const).map((verdict) => (
+            <Tag
+              key={verdict}
+              active={verdictFilter === verdict}
+              onPress={() => {
+                if (verdictFilter === verdict) {
+                  router.setParams({ verdict: undefined })
+                  setVerdictFilter(null)
+                  return
+                }
+                setVerdictFilter(verdict)
+              }}
+            >
+              {t(verdict)}
+            </Tag>
+          ))}
+          {filterChips.map((f) => (
+            <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
+              {f}
+            </Tag>
+          ))}
+        </View>
+      )}
 
       {/* sort toggle — browse mode only (recall results are ranked by relevance) */}
       {!isSearching ? (
@@ -226,10 +301,17 @@ export default function LibraryView() {
           <ActivityIndicator color={colors.ink900} />
         </View>
       ) : rows.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
-          <Icon name="reciept" size={40} color={colors.ink300} />
-          <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
-        </View>
+        viewMode === 'todo' ? (
+          <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+            <Icon name="bookmark" size={40} color={colors.ink300} />
+            <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+          </View>
+        ) : (
+          <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+            <Icon name="reciept" size={40} color={colors.ink300} />
+            <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+          </View>
+        )
       ) : (
         <View
           style={{

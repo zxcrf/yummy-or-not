@@ -199,13 +199,14 @@ describe('LibraryView — tasted-only (segment toggle removed)', () => {
     mockItems = [tastedTaste(), todoTaste()]
     const renderer = render()
 
-    // Toggle container + both tab nodes are gone.
+    // Toggle container + both old tab nodes are gone.
     expect(findTabNode(renderer, 'lib-status-tabs')).toHaveLength(0)
     expect(findTabNode(renderer, 'lib-tab-tasted')).toHaveLength(0)
     expect(findTabNode(renderer, 'lib-tab-todo')).toHaveLength(0)
 
-    // The toggle's labels are no longer rendered as standalone tab text.
-    expect(findTextNodes(renderer, 'Tasted')).toHaveLength(0)
+    // The old segment toggle is gone; the title-dropdown that replaced it
+    // may legitimately render the "Tasted" label inside the dropdown menu,
+    // so we only assert the old tab node IDs are absent (checked above).
   })
 
   it('tasted item with null verdict renders without a todo badge', () => {
