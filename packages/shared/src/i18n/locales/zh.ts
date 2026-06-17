@@ -170,4 +170,8 @@ export const zh: Record<string, string> = {
   taster_sheet_title: "切换口味主人",
   taster_self_label: "（我）",
   viewing_taster: "正在查看 {name} 的口味",
+  // 计划 3 — 单行筛选条 sheet
+  filter_sheet_title: "筛选",
+  filter_taste: "口味",
+  filter_tags: "标签",
 };

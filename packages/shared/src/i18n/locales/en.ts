@@ -169,4 +169,8 @@ export const en: Record<string, string> = {
   taster_sheet_title: "Switch taster",
   taster_self_label: "(me)",
   viewing_taster: "Viewing {name}'s tastes",
+  // Plan 3 — single-line filter sheet
+  filter_sheet_title: "Filter",
+  filter_taste: "Verdict",
+  filter_tags: "Tags",
 };

@@ -116,4 +116,8 @@ export const es: Record<string, string> = {
   taster_sheet_title: "Cambiar catador",
   taster_self_label: "(yo)",
   viewing_taster: "Viendo gustos de {name}",
+  // Plan 3 — single-line filter bar
+  filter_sheet_title: "Filtrar",
+  filter_taste: "Valoración",
+  filter_tags: "Etiquetas",
 };

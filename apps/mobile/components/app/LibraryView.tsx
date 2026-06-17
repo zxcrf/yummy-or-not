@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ExpoRouter from 'expo-router'
 import { colors, space, Text } from '@/theme'
 import { formatDistance } from '@yon/shared'
@@ -49,6 +50,7 @@ function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictF
 export default function LibraryView() {
   const { t, formatMoney } = useI18n()
   const router = ExpoRouter.useRouter()
+  const insets = useSafeAreaInsets()
   const params =
     typeof ExpoRouter.useLocalSearchParams === 'function'
       ? ExpoRouter.useLocalSearchParams<{ verdict?: string | string[] }>()
@@ -78,6 +80,7 @@ export default function LibraryView() {
   const [sortMode, setSortMode] = useState<SortMode>('recent')
   const [viewMode, setViewMode] = useState<ViewMode>('tasted')
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
   const routeVerdict = useMemo(() => normalizeVerdictParam(params.verdict), [params.verdict])
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter | null>(routeVerdict)
 
@@ -268,54 +271,103 @@ export default function LibraryView() {
           />
         }
       >
-        {/* filter chips — verdict + tag; hidden in todo mode (todo items have no verdict) */}
-        {viewMode === 'tasted' && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
+        {/* ── Single-line filter-row ─────────────────────────────────────────
+            Left:  verdict icon buttons (tasted mode only) + horizontal
+                   scrolling category tag chips + ⌄ expand button
+            Right: sort segment (Recent / Nearby), pinned, browse-only
+            The outer View is NOT a ScrollView and must NOT flexWrap — one line.
+            ──────────────────────────────────────────────────────────────────── */}
+        <View
+          testID="filter-row"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space[2],
+            // No flexWrap — enforces single-line layout
+          }}
+        >
+          {/* Verdict icon buttons — left anchor, tasted mode only */}
+          {viewMode === 'tasted' && (
+            <View style={{ flexDirection: 'row', gap: 2 }}>
+              {(['yum', 'meh', 'nah'] as const).map((verdict) => {
+                const emoji = verdict === 'yum' ? '😋' : verdict === 'meh' ? '😐' : '🙅'
+                return (
+                  <TouchableOpacity
+                    key={verdict}
+                    testID={`verdict-btn-${verdict}`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (verdictFilter === verdict) {
+                        router.setParams({ verdict: undefined })
+                        setVerdictFilter(null)
+                      } else {
+                        setVerdictFilter(verdict)
+                      }
+                    }}
+                    style={[
+                      styles.verdictBtn,
+                      verdictFilter === verdict && styles.verdictBtnActive,
+                    ]}
+                    accessibilityState={{ selected: verdictFilter === verdict }}
+                  >
+                    <Text style={{ fontSize: 16 }}>{emoji}</Text>
+                    {/* Screen-reader label — also used by findPressableWithLabel in tests */}
+                    <Text style={styles.srOnly}>{t(verdict)}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          )}
+
+          {/* Horizontal scrolling category tag chips — fills remaining space */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ gap: space[2], alignItems: 'center' }}
+            keyboardShouldPersistTaps="handled"
+          >
             <Tag
               active={filter === 'All' && verdictFilter == null}
               onPress={() => {
                 setFilter('All')
-                if (verdictFilter != null) router.setParams({ verdict: undefined })
-                setVerdictFilter(null)
+                if (verdictFilter != null) {
+                  router.setParams({ verdict: undefined })
+                  setVerdictFilter(null)
+                }
               }}
             >
               {t('all')}
             </Tag>
-            {(['yum', 'meh', 'nah'] as const).map((verdict) => (
-              <Tag
-                key={verdict}
-                active={verdictFilter === verdict}
-                onPress={() => {
-                  if (verdictFilter === verdict) {
-                    router.setParams({ verdict: undefined })
-                    setVerdictFilter(null)
-                    return
-                  }
-                  setVerdictFilter(verdict)
-                }}
-              >
-                {t(verdict)}
-              </Tag>
-            ))}
             {filterChips.map((f) => (
               <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
                 {f}
               </Tag>
             ))}
-          </View>
-        )}
+          </ScrollView>
 
-        {/* sort toggle — browse mode only (recall results are ranked by relevance) */}
-        {!isSearching ? (
-          <View style={{ flexDirection: 'row', gap: space[2] }}>
-            <Tag active={sortMode === 'recent'} onPress={() => setSortMode('recent')}>
-              {t('sort_recent')}
-            </Tag>
-            <Tag active={sortMode === 'nearby'} onPress={() => setSortMode('nearby')}>
-              {t('sort_nearby')}
-            </Tag>
-          </View>
-        ) : null}
+          {/* ⌄ expand button — opens filter sheet */}
+          <TouchableOpacity
+            testID="filter-expand-btn"
+            onPress={() => setFilterSheetOpen(true)}
+            style={styles.expandBtn}
+            accessibilityLabel={t('filter_sheet_title')}
+          >
+            <Text style={{ fontSize: 16, color: colors.ink500 }}>⌄</Text>
+          </TouchableOpacity>
+
+          {/* Sort segment — pinned right, browse mode only */}
+          {!isSearching && (
+            <View testID="sort-segment" style={{ flexDirection: 'row', gap: 2 }}>
+              <Tag active={sortMode === 'recent'} onPress={() => setSortMode('recent')}>
+                {t('sort_recent')}
+              </Tag>
+              <Tag active={sortMode === 'nearby'} onPress={() => setSortMode('nearby')}>
+                {t('sort_nearby')}
+              </Tag>
+            </View>
+          )}
+        </View>
 
         {/* body */}
         {isSearching && viewMode === 'tasted' ? (
@@ -368,6 +420,146 @@ export default function LibraryView() {
           </View>
         )}
       </ScrollView>
+
+      {/* ── Filter sheet — absoluteFill sibling (no Modal portal, matches plan-2 dropdown pattern) ── */}
+      {filterSheetOpen && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Transparent backdrop — catches taps outside the sheet */}
+          <Pressable
+            testID="filter-sheet-backdrop"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setFilterSheetOpen(false)}
+          />
+          {/* Sheet panel — slides up from bottom */}
+          <View
+            testID="filter-sheet"
+            style={[styles.filterSheet, { paddingBottom: insets.bottom + 16 }]}
+          >
+            {/* Sheet header */}
+            <View style={styles.filterSheetHeader}>
+              <Text style={styles.filterSheetTitle}>{t('filter_sheet_title')}</Text>
+              <TouchableOpacity
+                testID="filter-sheet-close"
+                onPress={() => setFilterSheetOpen(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ fontSize: 18, color: colors.ink500 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Verdict section — tasted mode only */}
+            {viewMode === 'tasted' && (
+              <View style={styles.filterSheetSection}>
+                <Text style={styles.filterSheetSectionLabel}>{t('filter_taste')}</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
+                  {(['yum', 'meh', 'nah'] as const).map((verdict) => {
+                    const emoji = verdict === 'yum' ? '😋' : verdict === 'meh' ? '😐' : '🙅'
+                    return (
+                      <Tag
+                        key={verdict}
+                        active={verdictFilter === verdict}
+                        onPress={() => {
+                          if (verdictFilter === verdict) {
+                            router.setParams({ verdict: undefined })
+                            setVerdictFilter(null)
+                          } else {
+                            setVerdictFilter(verdict)
+                          }
+                        }}
+                      >
+                        {`${emoji} ${t(verdict)}`}
+                      </Tag>
+                    )
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Tags section */}
+            <View style={styles.filterSheetSection}>
+              <Text style={styles.filterSheetSectionLabel}>{t('filter_tags')}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
+                <Tag
+                  active={filter === 'All' && verdictFilter == null}
+                  onPress={() => setFilter('All')}
+                >
+                  {t('all')}
+                </Tag>
+                {filterChips.map((f) => (
+                  <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
+                    {f}
+                  </Tag>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  verdictBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  /** Visually hidden but present in the render tree for a11y + test finders. */
+  srOnly: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+  },
+  verdictBtnActive: {
+    backgroundColor: '#f0eaee',
+  },
+  expandBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.backgroundStrong,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    // paddingBottom is set dynamically (insets.bottom + 16) on the View itself
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  filterSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  filterSheetTitle: {
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  filterSheetSection: {
+    marginBottom: 16,
+    gap: 8,
+  },
+  filterSheetSectionLabel: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#857a82',
+    marginBottom: 4,
+  },
+})
