@@ -29,13 +29,14 @@ import { RecallResults } from '@/components/app/RecallResults'
 type VerdictFilter = 'yum' | 'meh' | 'nah'
 type SortMode = 'recent' | 'nearby'
 
-/** Returns the ISO string representing the last user activity on a taste.
+/** Returns the numeric ms timestamp of the last user activity on a taste.
  *  Mirrors the API's lastActivityMs = max(createdAt, newest purchase.createdAt).
- *  Used as a string sort key (ISO strings compare correctly lexicographically). */
-export function lastActivityKey(t: { createdAt?: string | null; purchases: Array<{ createdAt?: string | null }> }): string {
-  const base = t.createdAt ?? ''
-  const latestPurchase = t.purchases[0]?.createdAt ?? ''
-  return base > latestPurchase ? base : latestPurchase
+ *  Uses numeric Date.getTime() to match the API exactly, avoiding edge-cases
+ *  with ISO strings that have offsets or missing milliseconds fields. */
+export function lastActivityMs(t: { createdAt?: string | null; purchases: Array<{ createdAt?: string | null }> }): number {
+  const base = t.createdAt ? new Date(t.createdAt).getTime() : 0
+  const latestPurchase = t.purchases[0]?.createdAt ? new Date(t.purchases[0].createdAt).getTime() : 0
+  return Math.max(base, latestPurchase)
 }
 
 function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictFilter | null {
@@ -125,7 +126,12 @@ export default function LibraryView() {
   const rows = useMemo(() => {
     if (sortMode === 'nearby' && coords) return sortByNearest(pool, coords)
     return [...pool]
-      .sort((a, b) => lastActivityKey(b).localeCompare(lastActivityKey(a)))
+      .sort((a, b) => {
+        const diff = lastActivityMs(b) - lastActivityMs(a)
+        if (diff !== 0) return diff
+        // Tiebreak: createdAt desc (mirrors API's ORDER BY created_at DESC)
+        return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+      })
       .map((item) => ({ item, distance: null as number | null }))
   }, [pool, sortMode, coords])
 

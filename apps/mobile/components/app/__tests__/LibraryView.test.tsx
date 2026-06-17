@@ -467,6 +467,32 @@ describe('LibraryView verdict jump + filter reset composition', () => {
   })
 })
 
+describe('LibraryView count_logged removal (plan 1 regression)', () => {
+  beforeEach(() => {
+    mockItems.length = 0
+    mockTagList = []
+    mockCoords = null
+    mockLocationEnabled = false
+    jest.clearAllMocks()
+  })
+
+  // Guards that the "N 条记录" / count_logged text is never rendered.
+  // The i18n mock still defines count_logged so a regression (re-adding it)
+  // would produce the string "1 logged" and cause this test to fail.
+  it('does not render a count_logged text node when items are present', () => {
+    mockItems.push(taste({ name: 'Ramen' }))
+    const renderer = renderLibrary()
+    // The mock maps count_logged to "{n} logged"
+    const loggedNodes = renderer.root.findAll(
+      (n) =>
+        String(n.type) === 'Text' &&
+        typeof n.props.children === 'string' &&
+        (n.props.children as string).endsWith(' logged'),
+    )
+    expect(loggedNodes).toHaveLength(0)
+  })
+})
+
 describe('LibraryView persona filter (issue #104)', () => {
   beforeEach(() => {
     mockItems.length = 0
