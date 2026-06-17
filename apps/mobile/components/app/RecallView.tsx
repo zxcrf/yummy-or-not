@@ -6,15 +6,21 @@
    Events are sorted desc by `at`, then bucketed under day
    headers (今天 / 昨天 / MM-DD).  Repurchase events carry a
    "再买" badge.  Tapping any row routes to /taste/[id].
+   Active-taster filtering mirrors LibraryView: the shared cache
+   holds all personas' records; only the active taster's records
+   are shown (null = self default).
    ============================================================ */
 
 import { useCallback, useMemo, useState } from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import type { Taste } from '@yon/shared'
 import { colors, space, Text } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
-import { useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+import { filterTastesByTaster, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
+import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
+import { useTasters } from '@/app/(tabs)/_useTasters'
 
 // ----------------------------------------------------------------
 // Data model
@@ -27,13 +33,14 @@ interface RecallEvent {
   place: string
   price: string
   imageThumb: string
+  imageKey: string
   verdict: Taste['verdict']
   kind: 'first' | 'repurchase'
   at: string // ISO string
 }
 
 /** Flatten one taste into its constituent timeline events. */
-function flattenTaste(taste: Taste): RecallEvent[] {
+export function flattenTaste(taste: Taste): RecallEvent[] {
   // Only 'tasted' entries belong in the recall timeline.
   if ((taste.status ?? 'tasted') !== 'tasted') return []
 
@@ -44,6 +51,7 @@ function flattenTaste(taste: Taste): RecallEvent[] {
     place: taste.place ?? '',
     price: taste.price ?? '',
     imageThumb: taste.imageThumb ?? '',
+    imageKey: taste.imageKey ?? '',
     verdict: taste.verdict,
     kind: 'first',
     at: taste.createdAt ?? '',
@@ -56,6 +64,7 @@ function flattenTaste(taste: Taste): RecallEvent[] {
     place: p.place ?? taste.place ?? '',
     price: p.price ?? taste.price ?? '',
     imageThumb: taste.imageThumb ?? '',
+    imageKey: taste.imageKey ?? '',
     verdict: taste.verdict,
     kind: 'repurchase',
     at: p.createdAt ?? '',
@@ -103,7 +112,7 @@ interface DayGroup {
   events: RecallEvent[]
 }
 
-function groupByDay(
+export function groupByDay(
   events: RecallEvent[],
   todayLabel: string,
   yesterdayLabel: string,
@@ -197,18 +206,67 @@ function RepurchaseBadge({ children }: BadgeProps) {
 // Row component
 // ----------------------------------------------------------------
 
+// Width of the left rail column: dot (8px) + some padding on each side.
+const RAIL_WIDTH = 28
+
 interface RowProps {
   event: RecallEvent
   repurchaseLabel: string
+  isLast: boolean
   onPress: () => void
 }
 
-function RecallRow({ event, repurchaseLabel, onPress }: RowProps) {
+function RecallRow({ event, repurchaseLabel, isLast, onPress }: RowProps) {
   const { formatMoney } = useI18n()
+  const hasImage = !!(event.imageThumb || event.imageKey)
 
   return (
     <RecallRowAnchor data-taste-id={event.tasteId} onPress={onPress}>
-      {/* thumbnail */}
+      {/* ── left rail: dot + connector line ── */}
+      <View
+        style={{
+          width: RAIL_WIDTH,
+          alignItems: 'center',
+          paddingTop: 4, // align dot with first line of content
+        }}
+      >
+        {/* dot */}
+        <View
+          testID="recall-rail-dot"
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.accent,
+          }}
+        />
+        {/* connector line — hidden on the last event in a group */}
+        {!isLast && (
+          <View
+            style={{
+              flex: 1,
+              width: 2,
+              backgroundColor: colors.ink100,
+              marginTop: 4,
+              minHeight: 32,
+            }}
+          />
+        )}
+      </View>
+
+      {/* ── time label ── */}
+      <Text
+        style={{
+          fontSize: 11,
+          color: colors.colorFaint,
+          paddingTop: 5,
+          width: 36,
+        }}
+      >
+        {timeLabel(event.at)}
+      </Text>
+
+      {/* ── thumbnail ── */}
       <View
         style={{
           width: 48,
@@ -217,12 +275,29 @@ function RecallRow({ event, repurchaseLabel, onPress }: RowProps) {
           backgroundColor: colors.ink100,
           overflow: 'hidden',
         }}
-      />
+      >
+        {hasImage && (
+          <Image
+            testID="recall-thumb"
+            source={{
+              uri: event.imageThumb,
+              ...(event.imageKey ? { cacheKey: `${event.imageKey}:thumb` } : {}),
+            }}
+            cachePolicy="disk"
+            transition={150}
+            style={{ width: 48, height: 48 }}
+            contentFit="cover"
+          />
+        )}
+      </View>
 
-      {/* content */}
+      {/* ── content ── */}
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-          <Text style={{ fontWeight: '600', fontSize: 14, color: colors.color }}>
+          <Text
+            numberOfLines={1}
+            style={{ fontWeight: '600', fontSize: 14, color: colors.color, flexShrink: 1 }}
+          >
             {event.name}
           </Text>
           {event.kind === 'repurchase' && (
@@ -232,9 +307,18 @@ function RecallRow({ event, repurchaseLabel, onPress }: RowProps) {
           )}
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space[2],
+            flexWrap: 'wrap',
+          }}
+        >
           {!!event.place && (
-            <Text style={{ fontSize: 12, color: colors.colorMuted }}>{event.place}</Text>
+            <Text numberOfLines={1} style={{ fontSize: 12, color: colors.colorMuted, flexShrink: 1 }}>
+              {event.place}
+            </Text>
           )}
           {!!event.price && (
             <Text style={{ fontSize: 12, color: colors.colorMuted }}>
@@ -245,10 +329,6 @@ function RecallRow({ event, repurchaseLabel, onPress }: RowProps) {
             <Text style={{ fontSize: 12, color: colors.colorFaint }}>{event.verdict}</Text>
           )}
         </View>
-
-        <Text style={{ fontSize: 11, color: colors.colorFaint }}>
-          {timeLabel(event.at)}
-        </Text>
       </View>
     </RecallRowAnchor>
   )
@@ -261,8 +341,22 @@ function RecallRow({ event, repurchaseLabel, onPress }: RowProps) {
 export default function RecallView() {
   const { t } = useI18n()
   const router = useRouter()
-  const { items, loading: _loading, refresh } = useRefreshableTastes()
+  const { items: allItems, loading: _loading, refresh } = useRefreshableTastes()
   const [refreshing, setRefreshing] = useState(false)
+
+  // S3b: scope to the active persona, mirroring LibraryView.
+  // The shared cache holds every persona's records; switching the
+  // TasterSwitcher chip must re-filter here too.
+  const activeTaster = useActiveTaster()
+  const { tasters } = useTasters()
+  const selfTasterId = useMemo(
+    () => tasters.find((ts) => ts.isSelf)?.id ?? null,
+    [tasters],
+  )
+  const items = useMemo(
+    () => filterTastesByTaster(allItems, activeTaster, selfTasterId),
+    [allItems, activeTaster, selfTasterId],
+  )
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -328,13 +422,14 @@ export default function RecallView() {
               {group.label}
             </Text>
 
-            {/* rail + rows */}
-            <View style={{ paddingLeft: space[2] }}>
-              {group.events.map((ev) => (
+            {/* rows with rail */}
+            <View>
+              {group.events.map((ev, idx) => (
                 <RecallRow
                   key={ev.key}
                   event={ev}
                   repurchaseLabel={t('recall_repurchase_badge')}
+                  isLast={idx === group.events.length - 1}
                   onPress={() => router.push(`/taste/${ev.tasteId}`)}
                 />
               ))}

@@ -10,10 +10,14 @@
    5. Only tasted: status='todo' items are NOT included in the timeline.
    6. Empty state: shown when there are no tasted items.
    7. Row tap: router.push('/taste/<id>') is called on row press.
+   8. Active-taster filtering: only the active taster's records are shown;
+      another taster's record is excluded when a different taster is active.
+   9. Timeline rail: each row renders a dot element (testID='recall-rail-dot').
+   10. Thumbnail: rows with imageThumb render an expo-image (testID='recall-thumb').
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
-import type { Taste, TastePurchase } from '@yon/shared'
+import type { Taste, TastePurchase, Taster } from '@yon/shared'
 
 // ---- mock react-native ----------------------------------------------------
 
@@ -36,8 +40,42 @@ jest.mock('@yon/shared', () => ({}))
 // ---- mock _useTastes -------------------------------------------------------
 
 let mockItems: Taste[] = []
+// filterTastesByTaster: real implementation — include item if activeTaster is
+// null (self) or item.tasterId matches selfTasterId (null/missing = self) when
+// activeTaster is null, or item.tasterId === activeTaster otherwise.
 jest.mock('@/app/(tabs)/_useTastes', () => ({
   useRefreshableTastes: () => ({ items: mockItems, loading: false, refresh: jest.fn() }),
+  // Mirror actual filterTastesByTaster: null activeTaster = show self (no tasterId or matches
+  // selfTasterId); non-null = show only records whose tasterId matches activeTaster.
+  filterTastesByTaster: (
+    items: Taste[],
+    activeTaster: string | null,
+    selfTasterId: string | null,
+  ): Taste[] => {
+    if (activeTaster === null) {
+      return items.filter((it) => {
+        const tid = (it as Taste & { tasterId?: string }).tasterId
+        return !tid || tid === selfTasterId
+      })
+    }
+    return items.filter(
+      (it) => (it as Taste & { tasterId?: string }).tasterId === activeTaster,
+    )
+  },
+}))
+
+// ---- mock _useActiveTaster -------------------------------------------------
+
+let mockActiveTaster: string | null = null
+jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
+  useActiveTaster: () => mockActiveTaster,
+}))
+
+// ---- mock _useTasters ------------------------------------------------------
+
+let mockTasters: Taster[] = []
+jest.mock('@/app/(tabs)/_useTasters', () => ({
+  useTasters: () => ({ tasters: mockTasters, loading: false }),
 }))
 
 // ---- mock expo-router ------------------------------------------------------
@@ -68,7 +106,9 @@ jest.mock('@/providers/I18nProvider', () => ({
 // ---- mock expo-image -------------------------------------------------------
 
 jest.mock('expo-image', () => ({
-  Image: ({ testID }: { testID?: string }) => <div data-testid={testID ?? 'expo-image'} />,
+  Image: ({ testID, source }: { testID?: string; source?: { uri?: string } }) => (
+    <div data-testid={testID ?? 'expo-image'} data-uri={source?.uri} />
+  ),
 }))
 
 // ---- mock ds components ----------------------------------------------------
@@ -91,7 +131,7 @@ function makePurchase(overrides: Partial<TastePurchase> = {}): TastePurchase {
   }
 }
 
-function makeTaste(overrides: Partial<Taste> = {}): Taste {
+function makeTaste(overrides: Partial<Taste> & { tasterId?: string } = {}): Taste {
   return {
     id: 'taste-1',
     name: '一点点 芒番了',
@@ -111,6 +151,19 @@ function makeTaste(overrides: Partial<Taste> = {}): Taste {
     imageKey: 'key-1',
     createdAt: '2026-06-16T12:00:00.000Z', // yesterday
     ...overrides,
+  } as Taste & { tasterId?: string }
+}
+
+function makeTaster(overrides: Partial<Taster> = {}): Taster {
+  return {
+    id: 'taster-self',
+    displayName: 'Self',
+    avatar: '',
+    ownerAccountId: 'account-1',
+    familyId: null,
+    isSelf: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
   }
 }
 
@@ -125,6 +178,8 @@ afterEach(() => {
   mountedRenderers.length = 0
   jest.clearAllMocks()
   mockItems = []
+  mockActiveTaster = null
+  mockTasters = []
 })
 
 async function render() {
@@ -344,5 +399,66 @@ describe('RecallView — 回忆 timeline', () => {
     })
 
     expect(mockPush).toHaveBeenCalledWith('/taste/tap-taste')
+  })
+
+  // ---------- 8. Active-taster filtering -----------------------------------
+
+  it('excludes another taster\'s records when a non-self taster is active', async () => {
+    // selfTaster: isSelf=true, id='taster-self'
+    // otherTaster: isSelf=false, id='taster-other'
+    // mockActiveTaster = 'taster-other' → only 'taster-other' items shown
+    mockTasters = [
+      makeTaster({ id: 'taster-self', displayName: 'Me', isSelf: true }),
+      makeTaster({ id: 'taster-other', displayName: 'Partner', isSelf: false }),
+    ]
+    mockActiveTaster = 'taster-other'
+    mockItems = [
+      makeTaste({ id: 'my-taste', name: 'My Food', tasterId: 'taster-self' } as Taste & { tasterId: string }),
+      makeTaste({ id: 'their-taste', name: 'Their Food', tasterId: 'taster-other' } as Taste & { tasterId: string }),
+    ]
+    const renderer = await render()
+
+    // Only 'their-taste' (taster-other) should appear
+    const myRows = renderer.root.findAll((n) => n.props['data-taste-id'] === 'my-taste')
+    expect(myRows).toHaveLength(0)
+
+    const theirRows = renderer.root.findAll((n) => n.props['data-taste-id'] === 'their-taste')
+    expect(theirRows.length).toBeGreaterThan(0)
+  })
+
+  // ---------- 9. Timeline rail dot -----------------------------------------
+
+  it('renders a rail dot for each event row', async () => {
+    mockItems = [
+      makeTaste({
+        id: 'taste-rail',
+        createdAt: '2026-06-17T10:00:00.000Z',
+        purchases: [],
+      }),
+    ]
+    const renderer = await render()
+
+    const dots = renderer.root.findAll((n) => n.props.testID === 'recall-rail-dot')
+    expect(dots.length).toBeGreaterThan(0)
+  })
+
+  // ---------- 10. Thumbnail rendered for rows with imageThumb --------------
+
+  it('renders an expo-image thumbnail when the event has imageThumb', async () => {
+    mockItems = [
+      makeTaste({
+        id: 'taste-img',
+        imageThumb: 'https://example.com/thumb.jpg',
+        imageKey: 'key-img',
+        createdAt: '2026-06-17T10:00:00.000Z',
+        purchases: [],
+      }),
+    ]
+    const renderer = await render()
+
+    const thumbs = renderer.root.findAll((n) => n.props.testID === 'recall-thumb')
+    expect(thumbs.length).toBeGreaterThan(0)
+    // The image source URI should be set
+    expect(thumbs[0].props['data-uri'] ?? thumbs[0].props.source?.uri).toBeTruthy()
   })
 })
