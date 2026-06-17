@@ -199,7 +199,7 @@ describe('ImportLanding (S3a)', () => {
     expect(allText(r)).toContain('Brown Sugar Boba')
   })
 
-  it('header "save" (import-save-btn) calls importShare(token) once, then navigates to the todo tab', async () => {
+  it('header "save" (import-save-btn) calls importShare(token) once, then navigates to the Library tab', async () => {
     mockGetSharePreview.mockResolvedValueOnce(preview())
     mockImportShare.mockResolvedValueOnce({ id: 'copy-1', status: 'todo', verdict: null })
     const r = await renderLanding()
@@ -215,12 +215,15 @@ describe('ImportLanding (S3a)', () => {
     expect(mockImportShare).toHaveBeenCalledTimes(1)
     expect(mockImportShare).toHaveBeenCalledWith('tok-share-1')
 
-    // Routed to the Library todo tab after a successful import.
+    // Routed to /(tabs) — the Library tab — after a successful import.
+    // 想吃 is now the title-dropdown inside LibraryView; there is no /todo tab.
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)')
+    // Must NOT still route to the deleted /todo tab.
     const navTargets = [
       ...mockReplace.mock.calls.map((c) => String(c[0])),
       ...mockPush.mock.calls.map((c) => String(c[0])),
     ].join(' ')
-    expect(navTargets).toMatch(/todo/)
+    expect(navTargets).not.toMatch(/\/todo/)
   })
 
   it('a revoked/expired share (410) shows the unavailable state and offers no save button', async () => {

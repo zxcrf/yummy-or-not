@@ -62,8 +62,9 @@ export default function ImportLanding() {
     setSaving(true)
     try {
       await importShare(token)
-      // Land in the Library todo (想吃) tab where the new copy appears.
-      router.replace('/(tabs)/todo')
+      // Land on the Library tab (index); 想吃 is now the title-dropdown view
+      // inside LibraryView — there is no standalone /todo tab any more.
+      router.replace('/(tabs)')
     } catch {
       // Source revoked between preview and save — surface the unavailable state.
       setGone(true)
