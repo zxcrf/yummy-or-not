@@ -828,8 +828,11 @@ export default function DetailView() {
       </View>
       )}
 
-      {/* content */}
-      <View style={{ padding: 22, paddingTop: 36, gap: space[3] }}>
+      {/* content. paddingTop is 36 in READ mode to clear the verdict stamp that
+          hangs bottom:-22 below the hero image; in EDIT mode the hero block (and
+          its stamp) is hidden, so use the standard 20 top pad to match AddModal /
+          the other editors instead of leaving dead whitespace above the form. */}
+      <View testID="detail-content" style={{ padding: 22, paddingTop: editing ? 20 : 36, gap: space[3] }}>
         {editing ? (
           <>
             <Pressable

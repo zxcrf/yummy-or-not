@@ -155,6 +155,29 @@ describe('DetailView editing', () => {
     expect(nameInput?.props.value).toBe('Espresso')
   })
 
+  // Regression: editing a taste showed a large dead gap above the form because
+  // the content wrapper kept the read-mode paddingTop:36 (which exists to clear
+  // the verdict stamp hanging below the hero image). In edit mode the hero block
+  // + stamp are hidden, so the top pad must drop to the standard 20 to match
+  // AddModal / the other editors.
+  it('uses the standard top padding in edit mode (no dead whitespace above the form)', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    // Read mode keeps 36 to clear the verdict stamp.
+    const readContent = renderer.root.findByProps({ testID: 'detail-content' })
+    expect((readContent.props.style as { paddingTop: number }).paddingTop).toBe(36)
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => {
+      edit?.props.onPress()
+    })
+
+    // Edit mode drops to 20 (hero + stamp gone) — fails against the old always-36.
+    const editContent = renderer.root.findByProps({ testID: 'detail-content' })
+    expect((editContent.props.style as { paddingTop: number }).paddingTop).toBe(20)
+  })
+
   it('saves edited detail fields through updateTaste and returns to read mode', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste())
     mockedUpdateTaste.mockResolvedValueOnce(taste({ name: 'Cortado', notes: 'Better now' }))
