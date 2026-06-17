@@ -833,6 +833,38 @@ export default function DetailView() {
             />
           </View>
         ) : null}
+
+        {(item.imageThumb || item.image) ? (
+          <Pressable
+            onPress={
+              user?.plan === 'pro'
+                ? openOriginal
+                : () => Alert.alert(t('pro_plan'), t('taste_limit_reached'))
+            }
+            disabled={user?.plan === 'pro' ? originalLoading : false}
+            accessibilityState={{ disabled: user?.plan === 'pro' ? originalLoading : false }}
+            accessibilityRole="button"
+            accessibilityLabel={user?.plan === 'pro' ? t('view_original') : t('view_original_pro')}
+            testID="view-original-overlay"
+            style={{
+              position: 'absolute',
+              right: 12,
+              bottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: 'rgba(25,16,23,0.55)',
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 999,
+            }}
+          >
+            <Icon name="image" size={16} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+              {user?.plan === 'pro' ? t('view_original') : t('view_original_pro')}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       </View>
       )}
@@ -1180,27 +1212,6 @@ export default function DetailView() {
               </RNView>
             ) : null}
 
-            {/* Pro original viewer */}
-            {(item.imageThumb || item.image) ? (
-              user?.plan === 'pro' ? (
-                <Button
-                  variant="secondary"
-                  iconLeft={<Icon name="image" size={18} />}
-                  disabled={originalLoading}
-                  onPress={openOriginal}
-                >
-                  {t('view_original')}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  iconLeft={<Icon name="image" size={18} />}
-                  onPress={() => Alert.alert(t('pro_plan'), t('taste_limit_reached'))}
-                >
-                  {t('view_original_pro')}
-                </Button>
-              )
-            ) : null}
           </>
         )}
       </View>

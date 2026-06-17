@@ -149,6 +149,17 @@ function findButtons(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll((node) => (node.type as unknown) === 'Button')
 }
 
+/* issue #149: the "view original" control is a pill OVERLAY in the hero (a
+   Pressable with an accessibilityLabel + onPress), not a content-area Button.
+   Filtering on onPress picks the pressable itself, not the forwarded host. */
+function findOverlay(renderer: TestRenderer.ReactTestRenderer, label: string) {
+  return renderer.root.find(
+    (node) =>
+      node.props?.accessibilityLabel === label &&
+      typeof node.props?.onPress === 'function',
+  )
+}
+
 function findInput(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return renderer.root.findAll((node) => (node.type as unknown) === 'Input')
     .find((node) => node.props.label === label)
@@ -340,9 +351,7 @@ describe('DetailView cache seeding', () => {
     )
 
     const renderer = await renderDetail()
-    const viewBtn = findButtons(renderer).find((node) =>
-      node.children.includes('view_original'),
-    )
+    const viewBtn = findOverlay(renderer, 'view_original')
     await act(async () => {
       viewBtn?.props.onPress()
     })
@@ -396,7 +405,7 @@ describe('DetailView cache seeding', () => {
     // Why this matters: opening the detail page should not trigger a paid original-photo fetch by itself.
     expect(mockedGetOriginalPhotoUrl).not.toHaveBeenCalled()
 
-    const button = findButtons(renderer).find((node) => node.children.includes('view_original'))
+    const button = findOverlay(renderer, 'view_original')
     await act(async () => {
       await button?.props.onPress()
     })
