@@ -137,29 +137,28 @@ describe('TasterSwitcher — pro plan: avatar + chevron + sheet switching', () =
   })
 })
 
-describe('TasterSwitcher — banner for non-self active taster', () => {
+// Bug fix (2026-06-17): the "正在查看 X 的口味" banner was removed from
+// TasterSwitcher. The top-right avatar already tells the user which taster
+// they're viewing, and rendering a banner here ALSO duplicated the one the
+// route/page header rendered. TasterSwitcher must now render NO banner.
+describe('TasterSwitcher — renders no viewing-banner (moved out of the component)', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
   })
 
-  it('shows a viewing-banner when a non-self taster is active', () => {
+  it('does NOT render a viewing-banner when a non-self taster is active', () => {
     mockUseActiveTaster.mockReturnValue(PARTNER.id)
     const renderer = render()
-    const banner = renderer.root.find(
-      (node) => node.props.testID === 'viewing-banner',
-    )
-    expect(banner).toBeTruthy()
-    // Check the full renderer tree for the taster name — avoids per-node
-    // .toJSON() which is non-standard and required an unauthorized prototype patch.
-    expect(JSON.stringify(renderer.toJSON())).toContain(PARTNER.displayName)
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'viewing-banner'),
+    ).toHaveLength(0)
   })
 
-  it('does NOT show the viewing-banner when self is active (active === null)', () => {
+  it('does NOT render a viewing-banner when self is active (active === null)', () => {
     mockUseActiveTaster.mockReturnValue(null)
     const renderer = render()
-    const banners = renderer.root.findAll(
-      (node) => node.props.testID === 'viewing-banner',
-    )
-    expect(banners.length).toBe(0)
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'viewing-banner'),
+    ).toHaveLength(0)
   })
 })

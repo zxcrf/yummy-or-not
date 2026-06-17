@@ -169,39 +169,28 @@ describe('TasterSwitcher redesign — PRO multi-taster: avatar + chevron in top-
 
 // ── 2. Banner: appears for non-self active taster, absent for self ──────────
 
-describe('TasterSwitcher redesign — banner for non-self active taster', () => {
+// Bug fix (2026-06-17): the "正在查看 X 的口味" banner was removed from
+// TasterSwitcher. The top-right avatar already signals the active taster, and a
+// banner here duplicated the route/page-header one. TasterSwitcher renders none.
+describe('TasterSwitcher redesign — renders no viewing-banner (moved out)', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: { id: 'u1', plan: 'pro' } })
   })
 
-  it('shows a viewing-banner with the taster name when a non-self taster is active', () => {
+  it('does NOT render a viewing-banner when a non-self taster is active', () => {
     mockUseActiveTaster.mockReturnValue(PARTNER.id)
     const renderer = render()
-
-    // New design renders testID="viewing-banner" when a non-self taster is active.
-    // FAILS today: old code has no such element.
-    const banner = renderer.root.find(
-      (node) => node.props.testID === 'viewing-banner',
-    )
-    expect(banner).toBeTruthy()
-
-    // The banner must contain the active taster's displayName somewhere in its
-    // rendered tree. We stringify the full renderer output and check for the
-    // name — avoids per-node .toJSON() which is non-standard and required an
-    // unauthorized prototype patch.
-    const fullJson = JSON.stringify(renderer.toJSON())
-    expect(fullJson).toContain(PARTNER.displayName)
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'viewing-banner'),
+    ).toHaveLength(0)
   })
 
-  it('does NOT show the viewing-banner when self is active (active === null)', () => {
+  it('does NOT render a viewing-banner when self is active (active === null)', () => {
     mockUseActiveTaster.mockReturnValue(null) // self
     const renderer = render()
-
-    const banners = renderer.root.findAll(
-      (node) => node.props.testID === 'viewing-banner',
-    )
-    // No banner when viewing own tastes.
-    expect(banners.length).toBe(0)
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'viewing-banner'),
+    ).toHaveLength(0)
   })
 })
 

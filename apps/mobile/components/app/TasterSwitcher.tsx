@@ -2,15 +2,15 @@
    YUMMY OR NOT — TasterSwitcher (plan 5 redesign)
 
    Right-top avatar bubble + chevron. Tapping opens a bottom sheet
-   listing all tasters (current one checked). A banner appears below
-   the header when viewing a non-self taster's tastes.
+   listing all tasters (current one checked). The avatar itself signals
+   which taster is active — there is no "正在查看 X 的口味" banner (it used
+   to render here AND in the route, duplicating; removed 2026-06-17).
 
    Gating (§S3b 权限):
    - All users see their own avatar (always a visible right-top element).
    - The chevron + bottom sheet only appear when the user is PRO AND has
      multiple tasters. Free users or single-taster PRO accounts never
      see the sheet trigger.
-   - The banner only appears when a non-self taster is currently active.
    ============================================================ */
 
 import { useState } from 'react'
@@ -45,9 +45,6 @@ export default function TasterSwitcher() {
   // Chevron and sheet only appear for PRO users with multiple tasters.
   const isMultiTaster = user?.plan === 'pro' && tasters.length > 1
 
-  // Non-self taster active → show banner.
-  const nonSelfActive = active !== null && activeTaster != null && !activeTaster.isSelf
-
   return (
     <>
       {/* Avatar bubble + optional chevron — the sheet trigger */}
@@ -76,14 +73,9 @@ export default function TasterSwitcher() {
         </View>
       )}
 
-      {/* Banner: shown when a non-self taster is active */}
-      {nonSelfActive && activeTaster != null && (
-        <View testID="viewing-banner" style={styles.banner}>
-          <Text style={styles.bannerText}>
-            {t('viewing_taster', { name: activeTaster.displayName })}
-          </Text>
-        </View>
-      )}
+      {/* No "正在查看 X 的口味" banner here: the avatar above already tells the
+          user which taster they're viewing, and the page header owns top-level
+          chrome. (Rendering a banner here ALSO duplicated it with the route.) */}
 
       {/* Bottom sheet: full-screen Modal so the backdrop covers the viewport */}
       <Modal
@@ -162,16 +154,6 @@ const styles = StyleSheet.create({
     color: colors.onBrand,
     fontSize: 14,
     fontWeight: '700',
-  },
-  banner: {
-    paddingHorizontal: space[4],
-    paddingVertical: space[1],
-    backgroundColor: colors.ink100,
-  },
-  bannerText: {
-    fontSize: 12,
-    color: colors.ink500,
-    textAlign: 'center',
   },
   overlay: {
     backgroundColor: 'rgba(0,0,0,0.45)',

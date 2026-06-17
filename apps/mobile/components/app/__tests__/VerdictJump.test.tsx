@@ -334,7 +334,7 @@ describe('LibraryView verdict param', () => {
     mockTagList = []
   })
 
-  it('filters to the route verdict and clears when the active verdict chip is pressed', () => {
+  it('filters to the route verdict and clears when the active verdict is toggled off in the filter sheet', () => {
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(<LibraryView />)
@@ -344,11 +344,23 @@ describe('LibraryView verdict param', () => {
     expect(findCards(renderer, 'Yum item')).toHaveLength(0)
     expect(findCards(renderer, 'Meh item')).toHaveLength(0)
 
-    const verdictChip = findPressableWithLabel(renderer, 'nah')
-    expect(verdictChip.props.accessibilityState.selected).toBe(true)
-
+    // Verdict filtering moved out of the inline row into the ⌄ filter sheet
+    // (bug 2026-06-17). Open the sheet and toggle the active "🙅 nah" verdict
+    // OFF → clears the route param and shows every verdict again.
+    const expandBtn = renderer.root.find((n) => n.props.testID === 'filter-expand-btn')
     act(() => {
-      verdictChip.props.onPress()
+      expandBtn.props.onPress()
+    })
+
+    const nahVerdictTag = renderer.root.find(
+      (n) =>
+        typeof n.props.onPress === 'function' &&
+        n.findAll(
+          (c) => typeof c.props.children === 'string' && c.props.children === '🙅 nah',
+        ).length > 0,
+    )
+    act(() => {
+      nahVerdictTag.props.onPress()
     })
 
     expect(mockSetParams).toHaveBeenCalledWith({ verdict: undefined })

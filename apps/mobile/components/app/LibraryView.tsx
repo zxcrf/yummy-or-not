@@ -12,13 +12,14 @@
    Tapping a card routes to /taste/[id].
    ============================================================ */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ExpoRouter from 'expo-router'
 import { colors, space, Text } from '@/theme'
 import { formatDistance } from '@yon/shared'
 import { FoodCard, Icon, Input, Tag } from '@/components/ds'
+import { PageHeader } from '@/components/app/PageHeader'
 import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
 import { filterTastesByTaster, useRefreshableTastes } from '@/app/(tabs)/_useTastes'
@@ -47,7 +48,12 @@ function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictF
   return value === 'yum' || value === 'meh' || value === 'nah' ? value : null
 }
 
-export default function LibraryView() {
+interface LibraryViewProps {
+  /** Pinned to the top-right of the page header (the taster avatar). */
+  headerRight?: ReactNode
+}
+
+export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
   const { t, formatMoney } = useI18n()
   const router = ExpoRouter.useRouter()
   const insets = useSafeAreaInsets()
@@ -167,18 +173,24 @@ export default function LibraryView() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ── Non-scrollable header: dropdown trigger + search box ── */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: space[3] }}>
-        <TouchableOpacity
-          testID="title-dropdown"
-          onPress={() => setDropdownOpen((o) => !o)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-          activeOpacity={0.7}
-        >
-          <Text style={{ fontWeight: '700', fontSize: 28 }}>{titleLabel}</Text>
-          <Text style={{ fontWeight: '700', fontSize: 20, color: colors.ink500 }}>▾</Text>
-        </TouchableOpacity>
+      {/* ── Top bar: CENTERED title-dropdown + top-right avatar (headerRight) ── */}
+      <PageHeader
+        title={
+          <TouchableOpacity
+            testID="title-dropdown"
+            onPress={() => setDropdownOpen((o) => !o)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontWeight: '700', fontSize: 28 }}>{titleLabel}</Text>
+            <Text style={{ fontWeight: '700', fontSize: 20, color: colors.ink500 }}>▾</Text>
+          </TouchableOpacity>
+        }
+        right={headerRight}
+      />
 
+      {/* ── Non-scrollable search box ── */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: space[3] }}>
         {/* search box */}
         <View style={{ position: 'relative', justifyContent: 'center' }}>
           <View style={{ position: 'absolute', left: 12, zIndex: 1 }}>
@@ -206,18 +218,18 @@ export default function LibraryView() {
             style={StyleSheet.absoluteFill}
             onPress={() => setDropdownOpen(false)}
           />
-          {/* Floating menu — positioned below the title trigger (~88 px from top) */}
+          {/* Floating menu — dropped from the centered title (just below the bar).
+              alignSelf:center keeps it under the now-centered title; marginTop
+              clears the ~52px header bar. */}
           <View
             testID="title-dropdown-menu"
             style={{
-              position: 'absolute',
-              top: 88,
-              left: 16,
+              alignSelf: 'center',
+              marginTop: 56,
               backgroundColor: colors.background,
               borderRadius: 8,
               borderWidth: 1,
               borderColor: colors.ink100,
-              zIndex: 200,
               minWidth: 180,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
@@ -286,38 +298,10 @@ export default function LibraryView() {
             // No flexWrap — enforces single-line layout
           }}
         >
-          {/* Verdict icon buttons — left anchor, tasted mode only */}
-          {viewMode === 'tasted' && (
-            <View style={{ flexDirection: 'row', gap: 2 }}>
-              {(['yum', 'meh', 'nah'] as const).map((verdict) => {
-                const emoji = verdict === 'yum' ? '😋' : verdict === 'meh' ? '😐' : '🙅'
-                return (
-                  <TouchableOpacity
-                    key={verdict}
-                    testID={`verdict-btn-${verdict}`}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      if (verdictFilter === verdict) {
-                        router.setParams({ verdict: undefined })
-                        setVerdictFilter(null)
-                      } else {
-                        setVerdictFilter(verdict)
-                      }
-                    }}
-                    style={[
-                      styles.verdictBtn,
-                      verdictFilter === verdict && styles.verdictBtnActive,
-                    ]}
-                    accessibilityState={{ selected: verdictFilter === verdict }}
-                  >
-                    <Text style={{ fontSize: 16 }}>{emoji}</Text>
-                    {/* Screen-reader label — also used by findPressableWithLabel in tests */}
-                    <Text style={styles.srOnly}>{t(verdict)}</Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          )}
+          {/* Verdict filtering lives in the ⌄ filter sheet (below), NOT inline:
+              the inline 😋😐🙅 buttons crowded this single-line row and starved
+              the category tag scroll of width (bug 2026-06-17). The tag scroll
+              now owns the full row. */}
 
           {/* Horizontal scrolling category tag chips — fills remaining space */}
           <ScrollView
@@ -500,25 +484,6 @@ export default function LibraryView() {
 }
 
 const styles = StyleSheet.create({
-  verdictBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  /** Visually hidden but present in the render tree for a11y + test finders. */
-  srOnly: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    overflow: 'hidden',
-    opacity: 0,
-  },
-  verdictBtnActive: {
-    backgroundColor: '#f0eaee',
-  },
   expandBtn: {
     width: 32,
     height: 32,
