@@ -189,8 +189,16 @@ function findExpoImages(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAllByType(ExpoImage)
 }
 
-function findButtons(renderer: TestRenderer.ReactTestRenderer) {
-  return renderer.root.findAll((n) => (n.type as unknown) === 'Button')
+/* issue #149: the "view original" control is now a pill OVERLAY in the hero
+   (a Pressable carrying an accessibilityLabel + onPress), not a content-area
+   DS Button. Locate it by its accessibility label; filtering on onPress picks
+   the pressable itself, not the host clone Pressable forwards the label to. */
+function findOverlay(renderer: TestRenderer.ReactTestRenderer, label: string) {
+  return renderer.root.find(
+    (n) =>
+      n.props?.accessibilityLabel === label &&
+      typeof n.props?.onPress === 'function',
+  )
 }
 
 const mockedGetTaste = jest.mocked(getTaste)
@@ -351,13 +359,11 @@ describe('DetailView original — pro user', () => {
     mockPlan = 'pro'
   })
 
-  it('shows "view_original" button for a pro user', async () => {
+  it('shows the "view_original" overlay for a pro user', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste())
     const renderer = await renderDetail()
 
-    const btn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original'),
-    )
+    const btn = findOverlay(renderer, 'view_original')
     expect(btn).toBeTruthy()
   })
 
@@ -369,9 +375,7 @@ describe('DetailView original — pro user', () => {
     })
     const renderer = await renderDetail()
 
-    const btn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original'),
-    )
+    const btn = findOverlay(renderer, 'view_original')
     await act(async () => {
       await btn?.props.onPress()
     })
@@ -385,9 +389,7 @@ describe('DetailView original — pro user', () => {
     mockedGetOriginalPhotoUrl.mockResolvedValueOnce({ url: signedUrl, expiresIn: 3600 })
     const renderer = await renderDetail()
 
-    const btn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original'),
-    )
+    const btn = findOverlay(renderer, 'view_original')
     await act(async () => {
       await btn?.props.onPress()
     })
@@ -405,21 +407,21 @@ describe('DetailView original — free user', () => {
     mockPlan = 'free'
   })
 
-  it('shows upgrade CTA (view_original_pro) instead of the plain view_original button', async () => {
-    /* Regression: free users must NOT see the pro-only "view_original" button.
-       They must see a ghost button with "view_original_pro" label that triggers
-       the upgrade alert, not a direct photo fetch. */
+  it('shows upgrade CTA (view_original_pro) instead of the plain view_original overlay', async () => {
+    /* Regression: free users must NOT see the pro-only "view_original" overlay.
+       They must see the "view_original_pro" overlay that triggers the upgrade
+       alert, not a direct photo fetch. */
     mockedGetTaste.mockResolvedValueOnce(taste())
     const renderer = await renderDetail()
 
-    const proBtn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original'),
+    const proBtn = renderer.root.findAll(
+      (b) =>
+        b.props?.accessibilityLabel === 'view_original' &&
+        typeof b.props?.onPress === 'function',
     )
-    expect(proBtn).toBeUndefined()
+    expect(proBtn).toHaveLength(0)
 
-    const upgradeBtn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original_pro'),
-    )
+    const upgradeBtn = findOverlay(renderer, 'view_original_pro')
     expect(upgradeBtn).toBeTruthy()
   })
 
@@ -428,9 +430,7 @@ describe('DetailView original — free user', () => {
     jest.spyOn(Alert, 'alert').mockImplementationOnce(() => undefined)
     const renderer = await renderDetail()
 
-    const upgradeBtn = findButtons(renderer).find((b) =>
-      b.children.includes('view_original_pro'),
-    )
+    const upgradeBtn = findOverlay(renderer, 'view_original_pro')
     await act(async () => {
       upgradeBtn?.props.onPress()
     })
