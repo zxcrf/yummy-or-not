@@ -112,4 +112,8 @@ export const es: Record<string, string> = {
   upgrade_to_pro: "Actualizar a Pro",
   retry: "Reintentar",
   discard_changes_title: "¿Descartar cambios?", discard_changes_body: "Se perderán los cambios sin guardar.", discard_confirm: "Descartar",
+  // Plan 5 — taster switcher top-right
+  taster_sheet_title: "Cambiar catador",
+  taster_self_label: "(yo)",
+  viewing_taster: "Viendo gustos de {name}",
 };
