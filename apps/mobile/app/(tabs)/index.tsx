@@ -1,18 +1,18 @@
 /* Library tab — thin route wrapper around components/app/LibraryView.
 
-   Header layout (plan 5):
-   ┌─────────────────────────────────────────────┐
-   │  [centered title — plan 2 will make dropdown] │  [avatar ▾]  │
-   └─────────────────────────────────────────────┘
+   Header layout (plan 2 update):
+   ┌───────────────────────────────────────────────────────────────┐
+   │  [left spacer]                                  [avatar ▾]   │
+   └───────────────────────────────────────────────────────────────┘
+   The centered title is now owned by LibraryView as a dropdown trigger
+   (plan 2). This route only hosts the right-side taster avatar and the
+   non-self-taster banner below the header row.
    Banner (if viewing a non-self taster's tastes) sits below the header row.
-   LibraryView fills the remaining space.
-
-   Coordination note: plan 2 will convert the centered title into a dropdown.
-   That title element is intentionally left as a plain <Text> here; plan 2 only
-   needs to replace it. The right-side avatar + banner are owned by this plan. */
+   LibraryView fills the remaining space and renders its own title/dropdown. */
 
 import { StyleSheet, View } from 'react-native'
-import { Text, colors, space } from '@/theme'
+import { colors, space } from '@/theme'
+import { Text } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
 import LibraryView from '@/components/app/LibraryView'
 import TasterSwitcher from '@/components/app/TasterSwitcher'
@@ -31,25 +31,17 @@ export default function LibraryRoute() {
   const isMultiTaster = user?.plan === 'pro' && tasters.length > 1
   const activeTaster =
     active === null
-      ? tasters.find((t) => t.isSelf) ?? tasters[0]
-      : tasters.find((t) => t.id === active)
+      ? tasters.find((ts) => ts.isSelf) ?? tasters[0]
+      : tasters.find((ts) => ts.id === active)
   const nonSelfActive =
     isMultiTaster && active !== null && activeTaster != null && !activeTaster.isSelf
 
   return (
     <Screen>
-      {/* ── Header row ──────────────────────────────────────────────────── */}
+      {/* ── Header row: right-side avatar only (title is in LibraryView) ── */}
       <View style={styles.header}>
-        {/* Left spacer mirrors the right avatar width so the title stays centered */}
-        <View style={styles.headerSide} />
-
-        {/* Centered title — plan 2 will replace this with a dropdown */}
-        <Text style={styles.headerTitle} accessibilityRole="header">
-          {t('lib_tab_tasted')}
-        </Text>
-
         {/* Right slot: taster avatar + optional chevron */}
-        <View style={styles.headerSide}>
+        <View style={styles.headerRight}>
           <TasterSwitcher />
         </View>
       </View>
@@ -63,33 +55,25 @@ export default function LibraryRoute() {
         </View>
       )}
 
-      {/* ── Library content ─────────────────────────────────────────────── */}
+      {/* ── Library content (owns its own title dropdown) ───────────────── */}
       <LibraryView />
     </Screen>
   )
 }
 
 const HEADER_HEIGHT = 48
-const SIDE_WIDTH = 56 // enough room for a 32 px avatar + chevron
 
 const styles = StyleSheet.create({
   header: {
     height: HEADER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingHorizontal: space[4],
     backgroundColor: colors.background,
   },
-  headerSide: {
-    width: SIDE_WIDTH,
+  headerRight: {
     alignItems: 'flex-end',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.ink900,
   },
   banner: {
     paddingHorizontal: space[4],

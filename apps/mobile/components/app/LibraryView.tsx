@@ -7,12 +7,13 @@
    - recall (query present): delegates to <RecallResults> for the
      "before you spend" answer — top verdict card, repurchase warning,
      and other matches. This replaces the old separate Recall tab.
+     In todo mode, search filters the todo grid directly (no RecallResults).
    viewMode dropdown in the title switches between tasted and todo.
    Tapping a card routes to /taste/[id].
    ============================================================ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TouchableOpacity, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native'
 import * as ExpoRouter from 'expo-router'
 import { colors, space, Text } from '@/theme'
 import { formatDistance } from '@yon/shared'
@@ -132,12 +133,21 @@ export default function LibraryView() {
   // searchTastes returns [] for empty/1-char queries; treat those as browse.
   const isSearching = !!query && query.trim().length > 1
 
+  // In todo mode, search filters the todo grid by name — RecallResults is
+  // tuned for tasted/recall UX and must not appear in todo mode.
+  const todoSearchPool = useMemo(() => {
+    if (!isSearching || viewMode !== 'todo') return pool
+    const q = query.trim().toLowerCase()
+    return pool.filter((it) => it.name.toLowerCase().includes(q))
+  }, [pool, isSearching, viewMode, query])
+
   // Browse rows: Nearby (distance asc, no-coords last) once we have a fix,
   // otherwise Recent (newest first) — so picking Nearby before/without a
   // location fix degrades to a sensible order instead of raw API order.
   const rows = useMemo(() => {
-    if (sortMode === 'nearby' && coords) return sortByNearest(pool, coords)
-    return [...pool]
+    const activePool = viewMode === 'todo' ? todoSearchPool : pool
+    if (sortMode === 'nearby' && coords) return sortByNearest(activePool, coords)
+    return [...activePool]
       .sort((a, b) => {
         const diff = lastActivityMs(b) - lastActivityMs(a)
         if (diff !== 0) return diff
@@ -145,29 +155,17 @@ export default function LibraryView() {
         return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
       })
       .map((item) => ({ item, distance: null as number | null }))
-  }, [pool, sortMode, coords])
+  }, [pool, todoSearchPool, viewMode, sortMode, coords])
 
   // Dropdown title label for the current viewMode.
+  // Use my_tastes ('我的口味') for tasted mode — the screen identity label.
   const titleLabel =
-    viewMode === 'tasted' ? t('lib_tab_tasted') : t('nav_todo')
+    viewMode === 'tasted' ? t('my_tastes') : t('nav_todo')
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
-      keyboardDismissMode="on-drag"
-      keyboardShouldPersistTaps="handled"
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.ink900}
-          colors={[colors.ink900]}
-        />
-      }
-    >
-      {/* header — dropdown title */}
-      <View style={{ gap: space[3] }}>
+    <View style={{ flex: 1 }}>
+      {/* ── Non-scrollable header: dropdown trigger + search box ── */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: space[3] }}>
         <TouchableOpacity
           testID="title-dropdown"
           onPress={() => setDropdownOpen((o) => !o)}
@@ -178,20 +176,46 @@ export default function LibraryView() {
           <Text style={{ fontWeight: '700', fontSize: 20, color: colors.ink500 }}>▾</Text>
         </TouchableOpacity>
 
-        {/* dropdown menu */}
-        {dropdownOpen && (
+        {/* search box */}
+        <View style={{ position: 'relative', justifyContent: 'center' }}>
+          <View style={{ position: 'absolute', left: 12, zIndex: 1 }}>
+            <Icon name="search" size={18} color="#857a82" />
+          </View>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t('search_log')}
+            accessibilityLabel={t('search_log')}
+            style={{ paddingLeft: 38 }}
+          />
+        </View>
+      </View>
+
+      {/* ── Dropdown: transparent full-screen backdrop + floating menu ──────
+          Rendered as siblings after the header so the menu overlays the
+          ScrollView but stays in the same test-renderer tree (no Modal portal).
+          The backdrop catches outside-taps on all platforms. */}
+      {dropdownOpen && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Transparent backdrop — catches taps outside the menu */}
+          <Pressable
+            testID="dropdown-backdrop"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setDropdownOpen(false)}
+          />
+          {/* Floating menu — positioned below the title trigger (~88 px from top) */}
           <View
             testID="title-dropdown-menu"
             style={{
               position: 'absolute',
-              top: 40,
-              left: 0,
+              top: 88,
+              left: 16,
               backgroundColor: colors.background,
               borderRadius: 8,
               borderWidth: 1,
               borderColor: colors.ink100,
-              zIndex: 100,
-              minWidth: 160,
+              zIndex: 200,
+              minWidth: 180,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.12,
@@ -210,7 +234,7 @@ export default function LibraryView() {
               {viewMode === 'tasted' && (
                 <Text style={{ color: colors.ink900 }}>✓</Text>
               )}
-              <Text style={{ color: colors.ink900 }}>{t('lib_tab_tasted')}</Text>
+              <Text style={{ color: colors.ink900 }}>{t('my_tastes')}</Text>
             </Pressable>
             <Pressable
               testID="dropdown-item-todo"
@@ -227,122 +251,123 @@ export default function LibraryView() {
               <Text style={{ color: colors.colorMuted }}>{todoCount}</Text>
             </Pressable>
           </View>
-        )}
-
-        {/* search box */}
-        <View style={{ position: 'relative', justifyContent: 'center' }}>
-          <View style={{ position: 'absolute', left: 12, zIndex: 1 }}>
-            <Icon name="search" size={18} color="#857a82" />
-          </View>
-          <Input
-            value={query}
-            onChangeText={setQuery}
-            placeholder={t('search_log')}
-            accessibilityLabel={t('search_log')}
-            style={{ paddingLeft: 38 }}
-          />
         </View>
-      </View>
+      )}
 
-      {/* filter chips — verdict + tag; hidden in todo mode (todo items have no verdict) */}
-      {viewMode === 'tasted' && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
-          <Tag
-            active={filter === 'All' && verdictFilter == null}
-            onPress={() => {
-              setFilter('All')
-              if (verdictFilter != null) router.setParams({ verdict: undefined })
-              setVerdictFilter(null)
-            }}
-          >
-            {t('all')}
-          </Tag>
-          {(['yum', 'meh', 'nah'] as const).map((verdict) => (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.ink900}
+            colors={[colors.ink900]}
+          />
+        }
+      >
+        {/* filter chips — verdict + tag; hidden in todo mode (todo items have no verdict) */}
+        {viewMode === 'tasted' && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
             <Tag
-              key={verdict}
-              active={verdictFilter === verdict}
+              active={filter === 'All' && verdictFilter == null}
               onPress={() => {
-                if (verdictFilter === verdict) {
-                  router.setParams({ verdict: undefined })
-                  setVerdictFilter(null)
-                  return
-                }
-                setVerdictFilter(verdict)
+                setFilter('All')
+                if (verdictFilter != null) router.setParams({ verdict: undefined })
+                setVerdictFilter(null)
               }}
             >
-              {t(verdict)}
+              {t('all')}
             </Tag>
-          ))}
-          {filterChips.map((f) => (
-            <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
-              {f}
+            {(['yum', 'meh', 'nah'] as const).map((verdict) => (
+              <Tag
+                key={verdict}
+                active={verdictFilter === verdict}
+                onPress={() => {
+                  if (verdictFilter === verdict) {
+                    router.setParams({ verdict: undefined })
+                    setVerdictFilter(null)
+                    return
+                  }
+                  setVerdictFilter(verdict)
+                }}
+              >
+                {t(verdict)}
+              </Tag>
+            ))}
+            {filterChips.map((f) => (
+              <Tag key={f} active={filter === f} onPress={() => setFilter(f)}>
+                {f}
+              </Tag>
+            ))}
+          </View>
+        )}
+
+        {/* sort toggle — browse mode only (recall results are ranked by relevance) */}
+        {!isSearching ? (
+          <View style={{ flexDirection: 'row', gap: space[2] }}>
+            <Tag active={sortMode === 'recent'} onPress={() => setSortMode('recent')}>
+              {t('sort_recent')}
             </Tag>
-          ))}
-        </View>
-      )}
-
-      {/* sort toggle — browse mode only (recall results are ranked by relevance) */}
-      {!isSearching ? (
-        <View style={{ flexDirection: 'row', gap: space[2] }}>
-          <Tag active={sortMode === 'recent'} onPress={() => setSortMode('recent')}>
-            {t('sort_recent')}
-          </Tag>
-          <Tag active={sortMode === 'nearby'} onPress={() => setSortMode('nearby')}>
-            {t('sort_nearby')}
-          </Tag>
-        </View>
-      ) : null}
-
-      {/* body */}
-      {isSearching ? (
-        <RecallResults pool={pool} query={query} />
-      ) : loading ? (
-        <View style={{ alignItems: 'center', paddingVertical: 48 }}>
-          <ActivityIndicator color={colors.ink900} />
-        </View>
-      ) : rows.length === 0 ? (
-        viewMode === 'todo' ? (
-          <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
-            <Icon name="bookmark" size={40} color={colors.ink300} />
-            <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+            <Tag active={sortMode === 'nearby'} onPress={() => setSortMode('nearby')}>
+              {t('sort_nearby')}
+            </Tag>
           </View>
-        ) : (
-          <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
-            <Icon name="reciept" size={40} color={colors.ink300} />
-            <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+        ) : null}
+
+        {/* body */}
+        {isSearching && viewMode === 'tasted' ? (
+          <RecallResults pool={pool} query={query} />
+        ) : loading ? (
+          <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+            <ActivityIndicator color={colors.ink900} />
           </View>
-        )
-      ) : (
-        <View
-          style={{
-            flexDirection: isWide ? 'row' : 'column',
-            flexWrap: isWide ? 'wrap' : 'nowrap',
-            gap: space[3],
-          }}
-        >
-          {rows.map(({ item: it, distance }) => (
-            <View key={it.id} style={isWide ? { width: '48%' } : undefined}>
-              <FoodCard
-                imageThumb={it.imageThumb || undefined}
-                image={it.image || undefined}
-                imageKey={it.imageKey || undefined}
-                name={it.name}
-                place={it.place}
-                distanceLabel={distance != null ? formatDistance(distance) : undefined}
-                price={formatMoney(it.price)}
-                status={it.status}
-                verdict={it.verdict}
-                mediaType={it.mediaType}
-                tags={it.tags}
-                boughtCount={it.boughtCount}
-                boughtLabel={t('bought_n', { n: it.boughtCount })}
-                verdictLabel={it.verdict ? t('v_' + it.verdict) : undefined}
-                onPress={() => router.push(`/taste/${it.id}`)}
-              />
+        ) : rows.length === 0 ? (
+          viewMode === 'todo' ? (
+            <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+              <Icon name="bookmark" size={40} color={colors.ink300} />
+              <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
             </View>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+          ) : (
+            <View style={{ alignItems: 'center', paddingVertical: 48, gap: space[2] }}>
+              <Icon name="reciept" size={40} color={colors.ink300} />
+              <Text style={{ color: colors.colorMuted }}>{t('nothing_here')}</Text>
+            </View>
+          )
+        ) : (
+          <View
+            style={{
+              flexDirection: isWide ? 'row' : 'column',
+              flexWrap: isWide ? 'wrap' : 'nowrap',
+              gap: space[3],
+            }}
+          >
+            {rows.map(({ item: it, distance }) => (
+              <View key={it.id} style={isWide ? { width: '48%' } : undefined}>
+                <FoodCard
+                  imageThumb={it.imageThumb || undefined}
+                  image={it.image || undefined}
+                  imageKey={it.imageKey || undefined}
+                  name={it.name}
+                  place={it.place}
+                  distanceLabel={distance != null ? formatDistance(distance) : undefined}
+                  price={formatMoney(it.price)}
+                  status={it.status}
+                  verdict={it.verdict}
+                  mediaType={it.mediaType}
+                  tags={it.tags}
+                  boughtCount={it.boughtCount}
+                  boughtLabel={t('bought_n', { n: it.boughtCount })}
+                  verdictLabel={it.verdict ? t('v_' + it.verdict) : undefined}
+                  onPress={() => router.push(`/taste/${it.id}`)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   )
 }
