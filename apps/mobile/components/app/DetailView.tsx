@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Image, Modal, Pressable, StyleSheet, View, View as RNView } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller'
 import { Image as ExpoImage } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
@@ -55,6 +56,7 @@ function landingUrlForCode(importCode: string): string {
 }
 
 export default function DetailView() {
+  const insets = useSafeAreaInsets()
   const { t, formatMoney } = useI18n()
   const { user } = useAuth()
   const router = useRouter()
@@ -748,8 +750,14 @@ export default function DetailView() {
       keyboardDismissMode="interactive"
     >
       {/* photo + controls — hidden in edit mode (the EditActionHeader above
-          takes its place as the pinned top chrome). */}
+          takes its place as the pinned top chrome). In read mode the OUTER
+          wrapper applies the top safe-area inset so the whole relative block
+          (photo box + absolute back button / stamp / play overlay) shifts down
+          uniformly — identical to the route's old paddingTop. Keeping the inset
+          on a non-positioned ancestor avoids any Yoga absolute-vs-padding
+          interaction. Edit mode gets the inset exactly once via EditActionHeader. */}
       {editing ? null : (
+      <View testID="detail-read-photo-wrapper" style={{ paddingTop: insets.top }}>
       <View style={{ position: 'relative' }}>
         <View
           style={{
@@ -825,6 +833,7 @@ export default function DetailView() {
             />
           </View>
         ) : null}
+      </View>
       </View>
       )}
 
