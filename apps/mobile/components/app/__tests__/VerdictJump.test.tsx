@@ -12,6 +12,10 @@ const mockItems: Taste[] = []
 let mockTagList: Array<{ id: string; name: string; createdAt: string }> = []
 const mockUpdateUser = jest.fn()
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockRouteParams,
   useRouter: () => ({
@@ -133,6 +137,7 @@ jest.mock('@/components/app/AnimatedNumber', () => ({
 }))
 
 jest.mock('@/components/ds', () => ({
+  ConfirmSheet: () => null,
   Avatar: ({ name }: { name: string }) => {
     const { Text } = require('react-native')
     return <Text>{name}</Text>

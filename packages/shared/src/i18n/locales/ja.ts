@@ -111,4 +111,5 @@ export const ja: Record<string, string> = {
   family_feed_error: "読み込めませんでした。再試行してください。",
   upgrade_to_pro: "Pro にアップグレード",
   retry: "再試行",
+  discard_changes_title: "変更を破棄しますか？", discard_changes_body: "保存していない変更は失われます。", discard_confirm: "破棄",
 };

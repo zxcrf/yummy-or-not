@@ -111,4 +111,5 @@ export const ko: Record<string, string> = {
   family_feed_error: "불러올 수 없습니다. 다시 시도해 주세요.",
   upgrade_to_pro: "Pro로 업그레이드",
   retry: "다시 시도",
+  discard_changes_title: "변경 사항을 버릴까요?", discard_changes_body: "저장하지 않은 변경 사항이 사라집니다.", discard_confirm: "버리기",
 };

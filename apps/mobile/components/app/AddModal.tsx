@@ -744,7 +744,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
           overlaps the keyboard, so the viewport is no longer double-squeezed. */}
       <EditActionHeader
         testID="add-modal-header"
-        variant="screen"
         onCancel={requestClose}
         cancelLabel={t('cancel')}
         title={t('log_taste')}

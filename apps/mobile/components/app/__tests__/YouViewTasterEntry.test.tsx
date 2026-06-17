@@ -16,6 +16,10 @@ import TestRenderer, { act } from 'react-test-renderer'
 const mockPush = jest.fn()
 const mockUseAuth = jest.fn()
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock('@yon/shared', () => ({
   LANGS: [{ code: 'zh', label: 'Chinese', native: '中文' }],
   updateUser: jest.fn(),

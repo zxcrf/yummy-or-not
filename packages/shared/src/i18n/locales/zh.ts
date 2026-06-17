@@ -164,4 +164,5 @@ export const zh: Record<string, string> = {
   video_too_large: "视频太大了（最大 20 MB），请选择更小的片段。",
   video_play: "播放视频",
   video_load_failed: "暂时无法播放该视频，请稍后再试。",
+  discard_changes_title: "放弃更改？", discard_changes_body: "未保存的修改将丢失。", discard_confirm: "放弃更改",
 };

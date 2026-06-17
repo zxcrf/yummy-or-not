@@ -29,6 +29,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmSheet,
   EditActionHeader,
   Icon,
   IconButton,
@@ -108,6 +109,9 @@ export default function DetailView() {
 
   // Delete confirm sheet state
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+
+  // Edit cancel guard state
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
 
   // Promote sheet state (todo → tasted 转正)
   const [promoteSheetOpen, setPromoteSheetOpen] = useState(false)
@@ -325,7 +329,23 @@ export default function DetailView() {
     setEditPhoto(null)
     setEditPhotoPreview(null)
     editPhotoPickInFlight.current = false
+    setConfirmCancelOpen(false)
     setEditing(false)
+  }
+
+  const isEditDirty = !!item && (
+    editName !== item.name ||
+    editPlace !== item.place ||
+    editPrice !== item.price.replace(/[^0-9.]/g, '') ||
+    editNotes !== item.notes ||
+    (item.status !== 'todo' && editVerdict !== item.verdict) ||
+    JSON.stringify(editTags) !== JSON.stringify(item.tags) ||
+    editPhoto !== null
+  )
+
+  const requestCancelEdit = () => {
+    if (isEditDirty) setConfirmCancelOpen(true)
+    else cancelEditing()
   }
 
   const toggleEditTag = (tag: string) => {
@@ -710,8 +730,7 @@ export default function DetailView() {
           scrolls / rides the keyboard, replacing the read-only photo/back block. */}
       {editing ? (
         <EditActionHeader
-          variant="screen"
-          onCancel={cancelEditing}
+          onCancel={requestCancelEdit}
           cancelLabel={t('cancel')}
           title={t('edit_taste')}
           onPrimary={saveEdit}
@@ -1358,6 +1377,19 @@ export default function DetailView() {
         </Pressable>
       </Modal>
     </KeyboardAwareScrollView>
+      {/* Cancel-when-dirty guard. Rendered AFTER the scroll view so this
+          absolute overlay paints on top of it (RN siblings paint in order; the
+          scroll view has an opaque background). */}
+      <ConfirmSheet
+        visible={confirmCancelOpen}
+        title={t('discard_changes_title')}
+        body={t('discard_changes_body')}
+        confirmLabel={t('discard_confirm')}
+        destructive
+        onConfirm={() => { setConfirmCancelOpen(false); cancelEditing() }}
+        onDismiss={() => setConfirmCancelOpen(false)}
+        testID="detail-cancel-confirm"
+      />
     </View>
   )
 }

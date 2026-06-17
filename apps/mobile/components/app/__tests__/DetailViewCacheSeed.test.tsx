@@ -84,6 +84,8 @@ jest.mock('@/components/ds', () => {
       React.createElement(name, props, children)
 
   return {
+
+    ConfirmSheet: () => null,
     Badge: stub('Badge'),
     Button: stub('Button'),
     Card: stub('Card'),

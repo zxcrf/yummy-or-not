@@ -83,7 +83,6 @@ export default function ImportLanding() {
     return (
       <View style={styles.screen} testID="import-loading">
         <EditActionHeader
-          variant="screen"
           onCancel={handleCancel}
           cancelLabel={t('cancel')}
           cancelTestID="import-cancel-btn"
@@ -104,7 +103,6 @@ export default function ImportLanding() {
     return (
       <View style={styles.screen} testID="import-unavailable">
         <EditActionHeader
-          variant="screen"
           onCancel={handleCancel}
           cancelLabel={t('cancel')}
           cancelTestID="import-cancel-btn"
@@ -128,7 +126,6 @@ export default function ImportLanding() {
   return (
     <View style={styles.screen}>
       <EditActionHeader
-        variant="screen"
         onCancel={handleCancel}
         cancelLabel={t('cancel')}
         cancelTestID="import-cancel-btn"

@@ -24,14 +24,12 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
 }))
 
-// Identifiable KeyboardStickyView wrapper (shared setup aliases it to a bare
-// View). Not asserted here but keeps the sheet structure intact.
 jest.mock('react-native-keyboard-controller', () => {
   const React = require('react')
-  const { View } = require('react-native')
+  const { ScrollView } = require('react-native')
   return {
-    KeyboardStickyView: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(View, { testID: 'taster-keyboard-sticky' }, children),
+    KeyboardAwareScrollView: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
+      React.createElement(ScrollView, { testID: 'kb-aware-scroll', ...props }, children),
   }
 })
 
@@ -90,6 +88,9 @@ jest.mock('@/providers/I18nProvider', () => ({
         taster_invalid_name: 'Invalid name',
         taster_delete_confirm: 'Delete this taster?',
         taster_empty: 'No tasters',
+        discard_changes_title: 'Discard changes?',
+        discard_changes_body: 'Your changes will be lost.',
+        discard_confirm: 'Discard',
       }
       return map[key] ?? key
     },
@@ -136,27 +137,96 @@ describe('TasterManageView — pro CRUD', () => {
     expect(saveBtn.props.children).not.toBe('Save this taste')
   })
 
-  // Unified header (ADR 0001): the sheet's save/cancel now live in a single
-  // top EditActionHeader (取消 LEFT · title CENTER · save RIGHT), not a bottom
-  // button row. The header renders inside the KeyboardStickyView so the whole
-  // sheet keeps floating above the keyboard. Cancel must still close the sheet.
-  it('sheet renders the unified EditActionHeader inside the sticky view with cancel that closes', () => {
+  // Full-screen editor: create mode renders name + avatar inputs and the save btn.
+  it('openCreate renders the full-screen editor with both inputs and save button', () => {
     const renderer = render()
     act(() => {
       renderer.root.findByProps({ testID: 'add-taster-btn' }).props.onPress()
     })
-
-    // The save command lives inside the sticky-view subtree (so it floats with
-    // the keyboard), not a detached bottom footer.
-    const sticky = renderer.root.findByProps({ testID: 'taster-keyboard-sticky' })
-    expect(
-      sticky.findAllByProps({ testID: 'taster-save-btn' }).length,
-    ).toBeGreaterThan(0)
-
-    // Cancel control closes the sheet → the name input is gone afterwards.
     expect(renderer.root.findAllByProps({ testID: 'taster-name-input' }).length).toBeGreaterThan(0)
+    expect(renderer.root.findAllByProps({ testID: 'taster-avatar-input' }).length).toBeGreaterThan(0)
+    expect(renderer.root.findAllByProps({ testID: 'taster-save-btn' }).length).toBeGreaterThan(0)
+
+    // Keyboard contract: field/cursor stay above the keyboard via
+    // KeyboardAwareScrollView (16dp margin + safe-area-aware resting pad).
+    // Regression guard for accidental prop removal (insets.bottom mocked to 34).
+    const kb = renderer.root.findByProps({ testID: 'kb-aware-scroll' })
+    expect(kb.props.bottomOffset).toBe(16)
+    expect(kb.props.keyboardShouldPersistTaps).toBe('handled')
+    expect(kb.props.keyboardDismissMode).toBe('interactive')
+    expect(kb.props.contentContainerStyle.paddingBottom).toBe(50)
+  })
+
+  // Full-screen editor: edit mode renders with pre-seeded values.
+  it('openEdit renders the full-screen editor with name + avatar inputs', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'edit-taster-t-partner' }).props.onPress()
+    })
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' }).length).toBeGreaterThan(0)
+    expect(renderer.root.findAllByProps({ testID: 'taster-avatar-input' }).length).toBeGreaterThan(0)
+    expect(renderer.root.findAllByProps({ testID: 'taster-save-btn' }).length).toBeGreaterThan(0)
+  })
+
+  // Non-dirty cancel (create mode, no text entered) closes without confirm sheet.
+  it('cancel on a clean create sheet closes immediately without confirm', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'add-taster-btn' }).props.onPress()
+    })
+    // No text typed → not dirty.
     act(() => {
       renderer.root.findByProps({ testID: 'taster-cancel-btn' }).props.onPress()
+    })
+    // Confirm sheet must NOT appear; editor is closed.
+    expect(renderer.root.findAllByProps({ testID: 'taster-cancel-confirm' })).toHaveLength(0)
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' })).toHaveLength(0)
+  })
+
+  // Dirty create (name typed) → cancel shows confirm → confirming closes editor.
+  it('dirty create: cancel shows confirm sheet, confirming closes editor', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'add-taster-btn' }).props.onPress()
+    })
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-name-input' }).props.onChangeText('Kid')
+    })
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-cancel-btn' }).props.onPress()
+    })
+    // Confirm sheet is visible.
+    expect(
+      renderer.root.findAllByProps({ testID: 'taster-cancel-confirm' }).length,
+    ).toBeGreaterThan(0)
+    // Name input still present (editor not yet closed).
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' }).length).toBeGreaterThan(0)
+    // Tap the confirm button inside the ConfirmSheet.
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-cancel-confirm-confirm' }).props.onPress()
+    })
+    // Editor is now closed.
+    expect(renderer.root.findAllByProps({ testID: 'taster-name-input' })).toHaveLength(0)
+  })
+
+  // Dirty edit (name changed from seeded value) → cancel shows confirm → confirming closes.
+  it('dirty edit: cancel shows confirm sheet, confirming closes editor', () => {
+    const renderer = render()
+    act(() => {
+      renderer.root.findByProps({ testID: 'edit-taster-t-partner' }).props.onPress()
+    })
+    // Partner.displayName = 'Partner'; change it to trigger dirty state.
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-name-input' }).props.onChangeText('Spouse')
+    })
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-cancel-btn' }).props.onPress()
+    })
+    expect(
+      renderer.root.findAllByProps({ testID: 'taster-cancel-confirm' }).length,
+    ).toBeGreaterThan(0)
+    act(() => {
+      renderer.root.findByProps({ testID: 'taster-cancel-confirm-confirm' }).props.onPress()
     })
     expect(renderer.root.findAllByProps({ testID: 'taster-name-input' })).toHaveLength(0)
   })

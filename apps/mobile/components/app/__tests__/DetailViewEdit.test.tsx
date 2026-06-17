@@ -68,6 +68,8 @@ jest.mock('@/components/ds', () => {
       React.createElement('Button', props, children),
     Card: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('Card', props, children),
+    ConfirmSheet: (props: Record<string, unknown>) =>
+      React.createElement('ConfirmSheet', props),
     EditActionHeader: (props: Record<string, unknown>) =>
       React.createElement('EditActionHeader', props),
     Icon: (props: Record<string, unknown>) => React.createElement('Icon', props),
@@ -269,7 +271,7 @@ describe('DetailView editing', () => {
     expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
   })
 
-  it('cancel on the EditActionHeader leaves edit mode (cancelEditing)', async () => {
+  it('cancel on the EditActionHeader leaves edit mode immediately when not dirty', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste())
     const renderer = await renderDetail()
 
@@ -277,8 +279,41 @@ describe('DetailView editing', () => {
     await act(async () => { edit?.props.onPress() })
     expect(inputByLabel(renderer, 'f_what')).toBeTruthy()
 
+    // Cancel without changing anything — not dirty, exits directly, no confirm sheet.
     await act(async () => { editHeader(renderer).props.onCancel() })
     // Back to read mode: header gone, edit fields gone.
+    expect(renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')).toHaveLength(0)
+    expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
+    // Confirm sheet must not have been shown (visible stays false).
+    const confirmSheet = renderer.root.findAll(
+      (node) => node.props.testID === 'detail-cancel-confirm',
+    )
+    expect(confirmSheet.every((n) => n.props.visible === false)).toBe(true)
+  })
+
+  it('cancel on a dirty edit shows the discard confirm sheet; confirming exits edit mode', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste())
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    // Make the form dirty by changing the name field.
+    const nameInput = inputByLabel(renderer, 'f_what')
+    await act(async () => { nameInput?.props.onChangeText('Dirty Name') })
+
+    // Cancel — dirty, so the confirm sheet should open.
+    await act(async () => { editHeader(renderer).props.onCancel() })
+
+    const confirmSheet = renderer.root.find(
+      (node) => node.props.testID === 'detail-cancel-confirm',
+    )
+    expect(confirmSheet.props.visible).toBe(true)
+    // Still in edit mode (name input still present).
+    expect(inputByLabel(renderer, 'f_what')).toBeTruthy()
+
+    // Tap the destructive confirm button → discards and exits edit mode.
+    await act(async () => { confirmSheet.props.onConfirm() })
     expect(renderer.root.findAll((node) => (node.type as unknown) === 'EditActionHeader')).toHaveLength(0)
     expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
   })

@@ -2,8 +2,9 @@
    YUMMY OR NOT — TasterManageView (plain RN + theme, no Tamagui)
 
    Taster persona management (S3b): list personas (self + others),
-   create / rename / re-avatar / delete. Mirrors TagManageView's
-   bottom-sheet + Alert.alert patterns.
+   create / rename / re-avatar / delete. Create/edit use a full-screen
+   editor (unified EditActionHeader + dirty-cancel ConfirmSheet); delete
+   still uses Alert.alert. Mirrors TagManageView.
 
    Gating (§S3b 权限): taster CRUD + multi-taster is pro-only. Free
    accounts see an upgrade affordance instead of the management UI —
@@ -23,7 +24,8 @@
 
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { KeyboardStickyView } from 'react-native-keyboard-controller'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import {
   createTaster,
@@ -32,7 +34,7 @@ import {
   type Taster,
 } from '@yon/shared'
 
-import { Avatar, Button, Card, EditActionHeader, Icon, Input } from '@/components/ds'
+import { Avatar, Button, Card, ConfirmSheet, EditActionHeader, Icon, Input } from '@/components/ds'
 import { invalidateTasters, useTasters } from '@/app/(tabs)/_useTasters'
 import { useActiveTaster, setActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useAuth } from '@/providers/AuthProvider'
@@ -61,11 +63,14 @@ export default function TasterManageView() {
     router.push('/(tabs)')
   }
 
+  const insets = useSafeAreaInsets()
+
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [nameValue, setNameValue] = useState('')
   const [avatarValue, setAvatarValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   // proBlocked surfaces the upgrade prompt when the server answers 403
   // (createTaster throws 'pro_required') — never a crash.
   const [proBlocked, setProBlocked] = useState(false)
@@ -107,6 +112,18 @@ export default function TasterManageView() {
     setNameValue('')
     setAvatarValue('')
     setError('')
+    setConfirmCancelOpen(false)
+  }
+
+  const sheetDirty = sheet?.kind === 'create'
+    ? (nameValue.trim() !== '' || avatarValue.trim() !== '')
+    : sheet?.kind === 'edit'
+      ? (nameValue !== sheet.taster.displayName || avatarValue !== (sheet.taster.avatar ?? ''))
+      : false
+
+  function requestCancelSheet() {
+    if (sheetDirty) setConfirmCancelOpen(true)
+    else closeSheet()
   }
 
   async function submitSheet() {
@@ -242,55 +259,65 @@ export default function TasterManageView() {
         {t('taster_add')}
       </Button>
 
-      {/* Create / edit bottom sheet */}
+      {/* Create / edit full-screen editor */}
       <Modal
         visible={!!sheet}
-        transparent
         animationType="slide"
-        onRequestClose={closeSheet}
+        onRequestClose={requestCancelSheet}
       >
-        <Pressable style={modalStyles.sheetOverlay} onPress={closeSheet}>
-          <KeyboardStickyView>
-            <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              {/* Unified top action bar (ADR 0001): 取消 LEFT · title CENTER ·
-                  save RIGHT. Sits inside the KeyboardStickyView so the whole
-                  sheet keeps floating above the keyboard. */}
-              <EditActionHeader
-                variant="sheet"
-                onCancel={closeSheet}
-                cancelLabel={t('cancel')}
-                cancelTestID="taster-cancel-btn"
-                title={sheetTitle}
-                onPrimary={submitSheet}
-                primaryLabel={t('save')}
-                primaryDisabled={saving || !nameValue.trim()}
-                primaryLoading={saving}
-                primaryTestID="taster-save-btn"
-              />
-              <Input
-                label={t('taster_name_label')}
-                value={nameValue}
-                onChangeText={(v) => {
-                  setNameValue(v)
-                  setError('')
-                }}
-                testID="taster-name-input"
-              />
-              <View style={{ height: space[3] }} />
-              <Input
-                label={t('taster_avatar_label')}
-                value={avatarValue}
-                onChangeText={setAvatarValue}
-                testID="taster-avatar-input"
-              />
-              {error ? (
-                <Text style={modalStyles.errorText} testID="taster-error">
-                  {error}
-                </Text>
-              ) : null}
-            </Pressable>
-          </KeyboardStickyView>
-        </Pressable>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Unified top action bar (ADR 0001): 取消 LEFT · title CENTER ·
+              save RIGHT. Pinned at the top; never overlaps the keyboard. */}
+          <EditActionHeader
+            onCancel={requestCancelSheet}
+            cancelLabel={t('cancel')}
+            cancelTestID="taster-cancel-btn"
+            title={sheetTitle}
+            onPrimary={submitSheet}
+            primaryLabel={t('save')}
+            primaryDisabled={saving || !nameValue.trim()}
+            primaryLoading={saving}
+            primaryTestID="taster-save-btn"
+          />
+          <KeyboardAwareScrollView
+            bottomOffset={16}
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 16 }}
+          >
+            <Input
+              label={t('taster_name_label')}
+              value={nameValue}
+              onChangeText={(v) => {
+                setNameValue(v)
+                setError('')
+              }}
+              testID="taster-name-input"
+            />
+            <Input
+              label={t('taster_avatar_label')}
+              value={avatarValue}
+              onChangeText={setAvatarValue}
+              testID="taster-avatar-input"
+            />
+            {error ? (
+              <Text style={modalStyles.errorText} testID="taster-error">
+                {error}
+              </Text>
+            ) : null}
+          </KeyboardAwareScrollView>
+          <ConfirmSheet
+            visible={confirmCancelOpen}
+            title={t('discard_changes_title')}
+            body={t('discard_changes_body')}
+            confirmLabel={t('discard_confirm')}
+            destructive
+            onConfirm={() => { setConfirmCancelOpen(false); closeSheet() }}
+            onDismiss={() => setConfirmCancelOpen(false)}
+            testID="taster-cancel-confirm"
+          />
+        </View>
       </Modal>
     </ScrollView>
   )
@@ -369,18 +396,6 @@ const styles = StyleSheet.create({
 })
 
 const modalStyles = StyleSheet.create({
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheetContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: 24,
-    paddingBottom: 40,
-  },
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,

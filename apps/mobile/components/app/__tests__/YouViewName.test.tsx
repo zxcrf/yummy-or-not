@@ -10,28 +10,20 @@
 import TestRenderer, { act } from 'react-test-renderer'
 import YouView from '../YouView'
 
-// Identifiable KeyboardStickyView (the shared mock aliases it to a plain View,
-// indistinguishable from any other View). This lets the keyboard test pin that
-// the nickname sheet content is actually wrapped so it rides the keyboard.
+// Full-screen editor uses KeyboardAwareScrollView (not KeyboardStickyView).
 jest.mock('react-native-keyboard-controller', () => {
   const React = require('react')
   const { View } = require('react-native')
   return {
-    KeyboardStickyView: ({
-      children,
-      testID,
-    }: {
-      children: React.ReactNode
-      testID?: string
-    }) => React.createElement(View, { testID }, children),
+    KeyboardAwareScrollView: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
+      React.createElement(View, { testID: 'kb-aware-scroll', ...props }, children),
   }
 })
 
-// EditActionHeader (inside the nickname sheet) calls useSafeAreaInsets(), which
-// throws without a SafeAreaProvider under jest-expo. Stub a zero inset — the
-// 'sheet' variant ignores insets anyway. Mirrors the EditActionHeader unit test.
+// EditActionHeader calls useSafeAreaInsets(), which throws without a
+// SafeAreaProvider under jest-expo. Stub zero insets.
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
 }))
 
 const mockPush = jest.fn()
@@ -79,6 +71,9 @@ jest.mock('@/providers/I18nProvider', () => ({
         auth_signout: 'Sign out',
         cancel: 'Cancel',
         default_name: 'Foodie',
+        discard_changes_body: 'Your changes will be lost.',
+        discard_changes_title: 'Discard changes?',
+        discard_confirm: 'Discard',
         display_name_label: 'Nickname',
         edit_profile: 'Edit nickname',
         invalid_display_name: 'Nickname must be 1–50 characters',
@@ -114,13 +109,24 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
   invalidateTagsCache: jest.fn(),
 }))
 
-function renderYouView(): TestRenderer.ReactTestRenderer {
+// Track mounted renderers for afterEach cleanup (async-leak prevention).
+const mountedRenderers: TestRenderer.ReactTestRenderer[] = []
+
+async function renderYouView(): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer
-  act(() => {
+  await act(async () => {
     renderer = TestRenderer.create(<YouView items={[]} />)
   })
+  mountedRenderers.push(renderer)
   return renderer
 }
+
+afterEach(() => {
+  act(() => {
+    mountedRenderers.forEach((r) => r.unmount())
+  })
+  mountedRenderers.length = 0
+})
 
 function getAllText(renderer: TestRenderer.ReactTestRenderer): string[] {
   const texts: string[] = []
@@ -137,17 +143,17 @@ describe('YouView display name — Mina Park never renders (RISK-02)', () => {
     mockFormatMoney.mockImplementation((n: number) => `$${n.toFixed(2)}`)
   })
 
-  it('falls back to email local-part when displayName is empty', () => {
+  it('falls back to email local-part when displayName is empty', async () => {
     mockUser = { ...mockUser, displayName: '', email: 'alice@example.com' }
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     const texts = getAllText(renderer)
     expect(texts).not.toContain('Mina Park')
     expect(texts).toContain('alice')
   })
 
-  it('skips empty email local-part (e.g. @example.com) and continues to phone fallback', () => {
+  it('skips empty email local-part (e.g. @example.com) and continues to phone fallback', async () => {
     mockUser = { ...mockUser, displayName: '', email: '@example.com', phone: '+8613800138000' }
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     const texts = getAllText(renderer)
     // empty local-part must not become the display name
     expect(texts).not.toContain('')
@@ -156,25 +162,25 @@ describe('YouView display name — Mina Park never renders (RISK-02)', () => {
     expect(texts.some((t) => t.startsWith('Foodie'))).toBe(true)
   })
 
-  it('falls back to Foodie {phone tail} when displayName and email are both absent', () => {
+  it('falls back to Foodie {phone tail} when displayName and email are both absent', async () => {
     mockUser = { ...mockUser, displayName: '', email: '', phone: '+8613800138000' }
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     const texts = getAllText(renderer)
     expect(texts).not.toContain('Mina Park')
     expect(texts.some((t) => t.startsWith('Foodie'))).toBe(true)
   })
 
-  it('falls back to default_name when all fields absent', () => {
+  it('falls back to default_name when all fields absent', async () => {
     mockUser = { ...mockUser, displayName: '', email: '', phone: '' }
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     const texts = getAllText(renderer)
     expect(texts).not.toContain('Mina Park')
     expect(texts).toContain('Foodie')
   })
 
-  it('uses displayName when set', () => {
+  it('uses displayName when set', async () => {
     mockUser = { ...mockUser, displayName: 'Kai Zhang', email: 'kai@example.com' }
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     const texts = getAllText(renderer)
     expect(texts).toContain('Kai Zhang')
     expect(texts).not.toContain('Mina Park')
@@ -190,17 +196,26 @@ describe('YouView nickname edit modal', () => {
     mockPatchUser.mockImplementation(() => {})
   })
 
-  it('edit pencil button opens the modal (input becomes visible)', () => {
-    const renderer = renderYouView()
+  it('edit pencil button opens the modal — input and save button are visible', async () => {
+    const renderer = await renderYouView()
     act(() => {
       renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
     })
-    const input = renderer.root.findByProps({ testID: 'display-name-input' })
-    expect(input).toBeTruthy()
+    expect(renderer.root.findByProps({ testID: 'display-name-input' })).toBeTruthy()
+    expect(renderer.root.findByProps({ testID: 'save-name-btn' })).toBeTruthy()
+
+    // Keyboard contract: the field/cursor stay above the keyboard via
+    // KeyboardAwareScrollView (16dp margin + safe-area-aware resting pad).
+    // Regression guard for accidental prop removal (insets.bottom mocked to 34).
+    const kb = renderer.root.findByProps({ testID: 'kb-aware-scroll' })
+    expect(kb.props.bottomOffset).toBe(16)
+    expect(kb.props.keyboardShouldPersistTaps).toBe('handled')
+    expect(kb.props.keyboardDismissMode).toBe('interactive')
+    expect(kb.props.contentContainerStyle.paddingBottom).toBe(50)
   })
 
   it('save calls updateUser with trimmed displayName', async () => {
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     act(() => {
       renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
     })
@@ -218,8 +233,8 @@ describe('YouView nickname edit modal', () => {
   // Regression (#103): the nickname save button reused the taste-record string
   // t('save_taste') = "Save this taste" / "保存这个口味", which is absurd on a
   // username edit sheet. It must use the generic t('save').
-  it('save button shows the generic save label, not the taste-record string', () => {
-    const renderer = renderYouView()
+  it('save button shows the generic save label, not the taste-record string', async () => {
+    const renderer = await renderYouView()
     act(() => {
       renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
     })
@@ -229,7 +244,7 @@ describe('YouView nickname edit modal', () => {
   })
 
   it('shows error and does not call updateUser for empty input', async () => {
-    const renderer = renderYouView()
+    const renderer = await renderYouView()
     act(() => {
       renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
     })
@@ -242,16 +257,43 @@ describe('YouView nickname edit modal', () => {
     expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
-  // Regression: the nickname sheet had no keyboard handling, so focusing the
-  // input opened the keyboard over the input + save/cancel row. The sheet
-  // content must be wrapped in a KeyboardStickyView so it rides the keyboard.
-  it('renders the nickname input and save button inside a KeyboardStickyView', () => {
-    const renderer = renderYouView()
+  // Full-screen pattern: no KeyboardStickyView wrapper; input lives in
+  // KeyboardAwareScrollView instead (matches AddModal post-ADR-0001).
+  // Cancel button is reachable via cancelTestID="cancel-name-btn" on EditActionHeader.
+  it('dirty cancel → ConfirmSheet appears; confirming it closes the editor', async () => {
+    const renderer = await renderYouView()
     act(() => {
       renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
     })
-    const sticky = renderer.root.findByProps({ testID: 'nickname-keyboard-sticky' })
-    expect(sticky.findByProps({ testID: 'display-name-input' })).toBeTruthy()
-    expect(sticky.findByProps({ testID: 'save-name-btn' })).toBeTruthy()
+    // Make the input dirty (different from the seeded 'Alice')
+    act(() => {
+      renderer.root.findByProps({ testID: 'display-name-input' }).props.onChangeText('Alice Modified')
+    })
+    // Cancel via the header cancel button — dirty guard intercepts
+    act(() => {
+      renderer.root.findByProps({ testID: 'cancel-name-btn' }).props.onPress()
+    })
+    // ConfirmSheet should now be visible
+    expect(renderer.root.findByProps({ testID: 'youview-cancel-confirm' })).toBeTruthy()
+    // Pressing the confirm button closes everything
+    act(() => {
+      renderer.root.findByProps({ testID: 'youview-cancel-confirm-confirm' }).props.onPress()
+    })
+    // editor closed — display-name-input is gone
+    expect(() => renderer.root.findByProps({ testID: 'display-name-input' })).toThrow()
+  })
+
+  it('non-dirty cancel closes the editor immediately with no ConfirmSheet', async () => {
+    const renderer = await renderYouView()
+    act(() => {
+      renderer.root.findByProps({ testID: 'edit-name-btn' }).props.onPress()
+    })
+    // Input is seeded with 'Alice' (same as mockUser.displayName) → not dirty
+    act(() => {
+      renderer.root.findByProps({ testID: 'cancel-name-btn' }).props.onPress()
+    })
+    // Editor should be closed immediately with no confirm sheet
+    expect(() => renderer.root.findByProps({ testID: 'display-name-input' })).toThrow()
+    expect(() => renderer.root.findByProps({ testID: 'youview-cancel-confirm' })).toThrow()
   })
 })

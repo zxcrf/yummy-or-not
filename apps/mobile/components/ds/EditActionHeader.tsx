@@ -39,10 +39,6 @@ export type EditActionHeaderProps = {
   primaryTestID?: string
   /** Icon shown before the primary label. Pass null to omit. Default 'check'. */
   primaryIcon?: IconName | null
-  /** 'screen' (default) sits at the top of a route with safe-area inset +
-   *  bottom border; 'sheet' sits at the top of a bottom sheet (no inset,
-   *  no bottom border). */
-  variant?: 'screen' | 'sheet'
 }
 
 // ---------- Component ----------
@@ -59,22 +55,11 @@ export function EditActionHeader({
   primaryLoading,
   primaryTestID,
   primaryIcon = 'check',
-  variant = 'screen',
 }: EditActionHeaderProps) {
   const insets = useSafeAreaInsets()
 
-  const containerStyle =
-    variant === 'screen'
-      ? {
-          paddingTop: insets.top + 12,
-          paddingBottom: 12,
-          borderBottomWidth: 3,
-          borderBottomColor: colors.ink900,
-        }
-      : {
-          paddingTop: 4,
-          paddingBottom: 12,
-        }
+  const padTop = insets.top + 12
+  const padBottom = 12
 
   const showIcon = !primaryLoading && primaryIcon != null
 
@@ -87,20 +72,24 @@ export function EditActionHeader({
         justifyContent: 'space-between',
         paddingHorizontal: space[5],
         backgroundColor: colors.background,
-        ...containerStyle,
+        paddingTop: padTop,
+        paddingBottom: padBottom,
+        borderBottomWidth: 3,
+        borderBottomColor: colors.ink900,
       }}
     >
       {/* Absolutely-centered title layer. pointerEvents none so it never
           eats taps on the side buttons; left/right gutters keep it clear
-          of the cancel/primary controls. */}
+          of the cancel/primary controls. top/bottom match the padded
+          content box so the title sits on the cancel/保存 centerline. */}
       <View
         pointerEvents="none"
         style={{
           position: 'absolute',
           left: 64,
           right: 64,
-          top: 0,
-          bottom: 0,
+          top: padTop,
+          bottom: padBottom,
           alignItems: 'center',
           justifyContent: 'center',
         }}

@@ -75,6 +75,7 @@ jest.mock('@/providers/AuthProvider', () => ({
 jest.mock('@/components/ds', () => {
   const React = require('react')
   return {
+    ConfirmSheet: () => null,
     Badge: ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement('Badge', props, children),
     Button: ({ children, ...props }: { children?: React.ReactNode }) =>

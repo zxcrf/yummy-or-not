@@ -85,9 +85,20 @@
 
 - **全屏 / 路由屏幕**：去掉底部 sticky footer，主命令改放顶部操作栏。顶部栏永远不会
   和键盘重叠，反而把视口让回给内容（解决 AddModal 视口被底部 footer + 键盘双重挤压
-  的问题）。`variant='screen'`：带 safe-area 顶部 inset + 3px 底边框。
-- **底部 sheet**：操作行仍放在 `KeyboardStickyView` 子树内、位于 sheet 顶部，使整个
-  sheet（连同操作行）继续浮在键盘上方。`variant='sheet'`：无 inset、无底边框。
+  的问题）。带 safe-area 顶部 inset + 3px 底边框。
+- **底部 sheet**（已废弃）：操作行曾放在 `KeyboardStickyView` 子树内、位于 sheet 顶部。
 
-即规则 #4 的「sticky footer 跟随键盘」此后只对 sheet 适用；全屏/路由屏幕由顶部
-EditActionHeader 承担主命令。详见 `.ai/adr/0001-edit-action-header.md`。
+即规则 #4 的「sticky footer 跟随键盘」此后由顶部 EditActionHeader 承担主命令。
+详见 `.ai/adr/0001-edit-action-header.md`。
+
+## 修订 2026-06-17 — 取消 `sheet` 形态，全部编辑表单改全屏（见 ADR 0001 Amendment）
+
+原方案的 `EditActionHeader` 有 `screen` / `sheet` 两个 variant。现已移除 `sheet`：
+五个编辑表单（记录口味 / 编辑 / 编辑昵称 / 家人 / 标签重命名）统一为全屏 `Modal`，
+采用 AddModal 模式（顶部固定 `EditActionHeader` + `KeyboardAwareScrollView`，
+`bottomOffset={16}`，内容 `paddingBottom: insets.bottom + 16`）。**任何编辑表单都
+不再使用 `KeyboardStickyView`**——规则 #4 的「sticky footer 跟随键盘」对所有编辑表单
+均不再适用，主命令一律由顶部操作栏承担。
+
+配套：新增共享 `ConfirmSheet`（绝对定位 overlay，非嵌套 Modal），所有编辑表单在
+未保存改动时点取消会先确认（点击暗色区 = 继续编辑）。
