@@ -7,23 +7,29 @@
 
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { KeyboardStickyView } from 'react-native-keyboard-controller'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { renameTag, deleteTag, type UserTag } from '@yon/shared'
 
-import { EditActionHeader, Icon, Input } from '@/components/ds'
+import { ConfirmSheet, EditActionHeader, Icon, Input } from '@/components/ds'
 import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
-import { colors, space, radius, Text } from '@/theme'
+import { colors, space, Text } from '@/theme'
 import { useI18n } from '@/providers/I18nProvider'
 
 export default function TagManageView() {
   const { t } = useI18n()
   const { tags, loading } = useTags()
+  const insets = useSafeAreaInsets()
 
   // Rename modal state
   const [renaming, setRenaming] = useState<UserTag | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+
+  // True when the user has changed the value from the original tag name
+  const renameDirty = !!renaming && renameValue.trim() !== renaming.name
 
   function openRename(tag: UserTag) {
     setRenaming(tag)
@@ -35,6 +41,15 @@ export default function TagManageView() {
     setRenaming(null)
     setRenameValue('')
     setRenameError('')
+    setConfirmCancelOpen(false)
+  }
+
+  function requestCancelRename() {
+    if (renameDirty) {
+      setConfirmCancelOpen(true)
+    } else {
+      closeRename()
+    }
   }
 
   async function submitRename() {
@@ -117,51 +132,61 @@ export default function TagManageView() {
         </View>
       ))}
 
-      {/* Rename modal */}
+      {/* Rename full-screen editor. Full-screen = pinned header + KeyboardAwareScrollView;
+          no sticky footer, no RN built-in KeyboardAvoidingView (keyboard-ux.md rule). */}
       <Modal
         visible={!!renaming}
-        transparent
         animationType="slide"
-        onRequestClose={closeRename}
+        onRequestClose={requestCancelRename}
       >
-        <Pressable style={modalStyles.sheetOverlay} onPress={closeRename}>
-          {/* The sheet is anchored to the bottom of the screen. KeyboardStickyView
-              translates it up frame-synced with the keyboard so the rename input
-              and the save/cancel buttons stay above the keyboard instead of being
-              hidden behind it — same react-native-keyboard-controller strategy the
-              other input screens use (AddModal footer, AuthScreen). */}
-          <KeyboardStickyView>
-            <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              {/* Save/cancel live in the shared top action bar: 取消 left ·
-                  title center · save right. It stays inside the sticky so the
-                  whole sheet floats above the keyboard. See ADR 0001. */}
-              <EditActionHeader
-                variant="sheet"
-                onCancel={closeRename}
-                cancelLabel={t('cancel')}
-                title={t('tag_manage')}
-                onPrimary={submitRename}
-                primaryLabel={t('save')}
-                primaryTestID="rename-confirm-btn"
-                primaryDisabled={renameSaving || !renameValue.trim()}
-              />
-              <Input
-                label={t('tag_rename')}
-                value={renameValue}
-                onChangeText={(v) => {
-                  setRenameValue(v)
-                  setRenameError('')
-                }}
-                testID="rename-tag-input"
-              />
-              {renameError ? (
-                <Text style={modalStyles.errorText} testID="rename-error">
-                  {renameError}
-                </Text>
-              ) : null}
-            </Pressable>
-          </KeyboardStickyView>
-        </Pressable>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Pinned top action bar: 取消 left · title center · save right (ADR 0001) */}
+          <EditActionHeader
+            onCancel={requestCancelRename}
+            cancelLabel={t('cancel')}
+            cancelTestID="rename-cancel-btn"
+            title={t('tag_manage')}
+            onPrimary={submitRename}
+            primaryLabel={t('save')}
+            primaryTestID="rename-confirm-btn"
+            primaryDisabled={renameSaving || !renameValue.trim()}
+            primaryLoading={renameSaving}
+          />
+          <KeyboardAwareScrollView
+            bottomOffset={16}
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 16 }}
+          >
+            <Input
+              label={t('tag_rename')}
+              value={renameValue}
+              onChangeText={(v) => {
+                setRenameValue(v)
+                setRenameError('')
+              }}
+              testID="rename-tag-input"
+            />
+            {renameError ? (
+              <Text style={modalStyles.errorText} testID="rename-error">
+                {renameError}
+              </Text>
+            ) : null}
+          </KeyboardAwareScrollView>
+
+          {/* Dirty-cancel guard — absolute overlay, NOT a nested Modal (ConfirmSheet design) */}
+          <ConfirmSheet
+            visible={confirmCancelOpen}
+            title={t('discard_changes_title')}
+            body={t('discard_changes_body')}
+            confirmLabel={t('discard_confirm')}
+            destructive
+            onConfirm={() => { setConfirmCancelOpen(false); closeRename() }}
+            onDismiss={() => setConfirmCancelOpen(false)}
+            testID="tag-cancel-confirm"
+          />
+        </View>
       </Modal>
     </ScrollView>
   )
@@ -213,18 +238,6 @@ const styles = StyleSheet.create({
 })
 
 const modalStyles = StyleSheet.create({
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheetContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: 24,
-    paddingBottom: 40,
-  },
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,

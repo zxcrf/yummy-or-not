@@ -22,6 +22,10 @@ import YouView from '../YouView'
 
 const mockRequestPerms = jest.fn()
 const mockLaunchLibrary = jest.fn()
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: (...args: unknown[]) => mockRequestPerms(...args),
   launchImageLibraryAsync: (...args: unknown[]) => mockLaunchLibrary(...args),

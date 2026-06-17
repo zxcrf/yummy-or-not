@@ -111,4 +111,5 @@ export const es: Record<string, string> = {
   family_feed_error: "No se pudo cargar. Por favor, inténtalo de nuevo.",
   upgrade_to_pro: "Actualizar a Pro",
   retry: "Reintentar",
+  discard_changes_title: "¿Descartar cambios?", discard_changes_body: "Se perderán los cambios sin guardar.", discard_confirm: "Descartar",
 };

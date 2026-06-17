@@ -166,6 +166,7 @@ jest.mock('@/components/app/ShareCard', () => ({
 // ---- mock ds components ---------------------------------------------------
 
 jest.mock('@/components/ds', () => ({
+  ConfirmSheet: () => null,
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Button: ({ children, onPress, disabled, testID }: {
     children: React.ReactNode; onPress?: () => void; disabled?: boolean; testID?: string

@@ -18,7 +18,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native'
-import { KeyboardStickyView } from 'react-native-keyboard-controller'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import {
@@ -29,7 +30,7 @@ import {
   type Taste,
 } from '@yon/shared'
 
-import { Avatar, Button, Card, EditActionHeader, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
+import { Avatar, Button, Card, ConfirmSheet, EditActionHeader, Icon, Input, LangSwitcher, Switch } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
 import { compressAsset } from '@/lib/compressAsset'
 import { useAuth } from '@/providers/AuthProvider'
@@ -88,6 +89,7 @@ export default function YouView({ items }: Props) {
   const { t, lang, setLang, formatMoney } = useI18n()
   const { user, signOut, patchUser } = useAuth()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const [warningsEnabled, setWarningsEnabled] = useState(() => user?.warningsEnabled ?? false)
   const [locationEnabled, setLocationEnabled] = useState(() => user?.locationEnabled ?? false)
@@ -99,6 +101,7 @@ export default function YouView({ items }: Props) {
   const [nameInput, setNameInput] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameError, setNameError] = useState('')
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
 
   // S3b-media: avatar upload state. `avatarUploading` drives the spinner over the
   // header; `avatarError` is a non-blocking message (the old avatar stays put on
@@ -183,6 +186,8 @@ export default function YouView({ items }: Props) {
     }
   }
 
+  const nameDirty = nameInput.trim() !== (user?.displayName ?? '').trim()
+
   function openEditName() {
     setNameInput(user?.displayName ?? '')
     setNameError('')
@@ -192,6 +197,15 @@ export default function YouView({ items }: Props) {
   function closeEditName() {
     setEditNameOpen(false)
     setNameError('')
+    setConfirmCancelOpen(false)
+  }
+
+  function requestCancelName() {
+    if (nameDirty) {
+      setConfirmCancelOpen(true)
+    } else {
+      closeEditName()
+    }
   }
 
   async function submitEditName() {
@@ -438,47 +452,60 @@ export default function YouView({ items }: Props) {
         {t('auth_signout')}
       </Button>
 
-      {/* Nickname edit modal */}
+      {/* Nickname edit modal — full-screen editor (matches AddModal pattern) */}
       <Modal
         visible={editNameOpen}
-        transparent
         animationType="slide"
-        onRequestClose={closeEditName}
+        onRequestClose={requestCancelName}
       >
-        <Pressable style={modalStyles.sheetOverlay} onPress={closeEditName}>
-          {/* KeyboardStickyView rides the sheet up with the keyboard so the
-              nickname input and the save/cancel row stay above it instead of
-              being hidden behind it (matches AddModal / TagManageView). */}
-          <KeyboardStickyView testID="nickname-keyboard-sticky">
-            <Pressable style={modalStyles.sheetContent} onPress={() => {}}>
-              <EditActionHeader
-                variant="sheet"
-                onCancel={closeEditName}
-                cancelLabel={t('cancel')}
-                title={t('edit_profile')}
-                onPrimary={submitEditName}
-                primaryLabel={t('save')}
-                primaryTestID="save-name-btn"
-                primaryDisabled={nameSaving || !nameInput.trim()}
-                primaryLoading={nameSaving}
-              />
-              <Input
-                label={t('display_name_label')}
-                value={nameInput}
-                onChangeText={(v) => {
-                  setNameInput(v)
-                  setNameError('')
-                }}
-                testID="display-name-input"
-              />
-              {nameError ? (
-                <Text style={modalStyles.errorText} testID="name-error">
-                  {nameError}
-                </Text>
-              ) : null}
-            </Pressable>
-          </KeyboardStickyView>
-        </Pressable>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <EditActionHeader
+            onCancel={requestCancelName}
+            cancelLabel={t('cancel')}
+            cancelTestID="cancel-name-btn"
+            title={t('edit_profile')}
+            onPrimary={submitEditName}
+            primaryLabel={t('save')}
+            primaryTestID="save-name-btn"
+            primaryDisabled={nameSaving || !nameInput.trim()}
+            primaryLoading={nameSaving}
+          />
+          <KeyboardAwareScrollView
+            bottomOffset={16}
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 16 }}
+          >
+            <Input
+              label={t('display_name_label')}
+              value={nameInput}
+              onChangeText={(v) => {
+                setNameInput(v)
+                setNameError('')
+              }}
+              testID="display-name-input"
+            />
+            {nameError ? (
+              <Text style={styles.errorText} testID="name-error">
+                {nameError}
+              </Text>
+            ) : null}
+          </KeyboardAwareScrollView>
+          <ConfirmSheet
+            visible={confirmCancelOpen}
+            title={t('discard_changes_title')}
+            body={t('discard_changes_body')}
+            confirmLabel={t('discard_confirm')}
+            destructive
+            onConfirm={() => {
+              setConfirmCancelOpen(false)
+              closeEditName()
+            }}
+            onDismiss={() => setConfirmCancelOpen(false)}
+            testID="youview-cancel-confirm"
+          />
+        </View>
       </Modal>
     </ScrollView>
   )
@@ -652,21 +679,7 @@ const styles = StyleSheet.create({
     color: colors.ink900,
     fontWeight: '500',
   },
-})
-
-const modalStyles = StyleSheet.create({
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheetContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    paddingBottom: 40,
-  },
+  // nickname edit
   errorText: {
     color: colors.verdictNah2,
     fontSize: 13,

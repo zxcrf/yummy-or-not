@@ -89,6 +89,7 @@ jest.mock('@/components/ds', () => {
     ({ children, ...props }: { children?: React.ReactNode }) =>
       React.createElement(name, props, children)
   return {
+    ConfirmSheet: () => null,
     Badge: mk('Badge'), Button: mk('Button'), Card: mk('Card'),
     Icon: mk('Icon'), IconButton: mk('IconButton'), Input: mk('Input'),
     Switch: mk('Switch'), Tag: mk('Tag'), Textarea: mk('Textarea'),

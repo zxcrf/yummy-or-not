@@ -47,3 +47,6 @@ export type { LangSwitcherProps, LangEntry } from './LangSwitcher'
 
 export { EditActionHeader } from './EditActionHeader'
 export type { EditActionHeaderProps } from './EditActionHeader'
+
+export { ConfirmSheet } from './ConfirmSheet'
+export type { ConfirmSheetProps } from './ConfirmSheet'

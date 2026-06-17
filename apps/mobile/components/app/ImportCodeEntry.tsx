@@ -48,7 +48,6 @@ export default function ImportCodeEntry() {
   return (
     <View style={styles.root}>
       <EditActionHeader
-        variant="screen"
         onCancel={handleCancel}
         cancelLabel={t('cancel')}
         cancelTestID="import-code-cancel"

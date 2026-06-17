@@ -7,7 +7,8 @@
    3. pressing primary calls onPrimary.
    4. primaryDisabled blocks onPrimary (Pressable.disabled at OS level).
    5. primaryLoading renders <ActivityIndicator>, NOT the primary label.
-   6. variant 'screen' applies borderBottomWidth 3; 'sheet' does not.
+   6. always applies borderBottomWidth 3 (sheet variant removed).
+   7. absolute title layer top === insets.top + 12, bottom === 12.
 
    Mount pattern follows docs/engineering/jest-async-leaks.md:
    `await act(async)` + afterEach unmount of every renderer.
@@ -17,10 +18,10 @@ import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
 import { ActivityIndicator } from 'react-native'
 
-// Provide a deterministic safe-area inset without a provider (matches the
-// AddModalFooter test pattern). The component calls useSafeAreaInsets().
+// Provide a deterministic safe-area inset without a provider.
+// top: 50 → padTop = 50 + 12 = 62, padBottom = 12.
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 50, left: 0, right: 0, bottom: 0 }),
 }))
 
 import { EditActionHeader } from '../EditActionHeader'
@@ -125,9 +126,8 @@ describe('EditActionHeader — primaryLoading', () => {
   })
 })
 
-describe('EditActionHeader — variant bottom border', () => {
+describe('EditActionHeader — bottom border', () => {
   function flatStyles(renderer: TestRenderer.ReactTestRenderer) {
-    // Collect every node style (object or array) flattened into plain objects.
     const out: Record<string, unknown>[] = []
     renderer.root.findAll(() => true).forEach((node) => {
       const s = node.props.style
@@ -139,15 +139,30 @@ describe('EditActionHeader — variant bottom border', () => {
     return out
   }
 
-  it("variant 'screen' applies borderBottomWidth 3", async () => {
-    const renderer = await render(<EditActionHeader {...baseProps} variant="screen" />)
+  it('always applies borderBottomWidth 3', async () => {
+    const renderer = await render(<EditActionHeader {...baseProps} />)
     const hasBorder = flatStyles(renderer).some((s) => s.borderBottomWidth === 3)
     expect(hasBorder).toBe(true)
   })
+})
 
-  it("variant 'sheet' does NOT apply a bottom border", async () => {
-    const renderer = await render(<EditActionHeader {...baseProps} variant="sheet" />)
-    const hasBorder = flatStyles(renderer).some((s) => s.borderBottomWidth === 3)
-    expect(hasBorder).toBe(false)
+describe('EditActionHeader — title absolute layer position', () => {
+  // With insets.top = 50: padTop = 62, padBottom = 12.
+  // The absolute title View must use those values so the title sits on the
+  // cancel/保存 centerline rather than floating into the status bar area.
+  // This assertion FAILS against the old top:0 / bottom:0 code.
+
+  it('title layer has top === 62 (insets.top + 12) and bottom === 12', async () => {
+    const renderer = await render(<EditActionHeader {...baseProps} />)
+
+    // Find the pointerEvents="none" absolute title container.
+    const titleLayer = renderer.root.findAll(
+      (node) => node.props.pointerEvents === 'none',
+    )
+    expect(titleLayer.length).toBeGreaterThan(0)
+
+    const style = titleLayer[0].props.style as Record<string, unknown>
+    expect(style.top).toBe(62)
+    expect(style.bottom).toBe(12)
   })
 })
