@@ -73,7 +73,7 @@ jest.mock('@/components/ds', () => {
 
 const routes = [
   { name: 'index', key: 'index-key' },
-  { name: 'todo', key: 'todo-key' },
+  { name: 'recall', key: 'recall-key' },
   { name: 'nearby', key: 'nearby-key' },
   { name: 'you', key: 'you-key' },
 ]
@@ -126,7 +126,7 @@ describe('AppNav desktop language switcher', () => {
   })
 })
 
-describe('AppNav nav restructure — 想吃 replaces 统计, Recall folded into Library', () => {
+describe('AppNav nav restructure — Recall replaces 想吃 (4-B)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
@@ -150,16 +150,16 @@ describe('AppNav nav restructure — 想吃 replaces 统计, Recall folded into 
   it.each([
     ['sidebar (desktop)', true],
     ['bottom bar (mobile)', false],
-  ])('renders a To-Try entry and no Stats/Recall entry in the %s', (_label, gtMd) => {
+  ])('renders a Recall entry and no To-Try/Stats entry in the %s', (_label, gtMd) => {
     const renderer = renderTree(gtMd as boolean)
     const labels = renderer.root
       .findAll((n) => typeof n.props.children === 'string')
       .map((n) => n.props.children as string)
 
-    expect(labels).toContain('To-Try')
+    expect(labels).toContain('Recall')
     expect(labels).not.toContain('Stats')
-    // Recall is no longer a destination — its search lives inside Library.
-    expect(labels).not.toContain('Recall')
+    // 想吃/To-Try is folded into Library title dropdown — no longer a tab.
+    expect(labels).not.toContain('To-Try')
   })
 })
 
@@ -196,17 +196,17 @@ describe('AppNav — 附近 (nearby) is the 3rd bottom tab', () => {
     expect(labels).toContain('Nearby')
   })
 
-  it('Nearby sits AFTER To-Try and BEFORE You (3rd position) in the bottom bar', () => {
+  it('Nearby sits AFTER Recall and BEFORE You (3rd position) in the bottom bar', () => {
     const renderer = renderTree('index', false)
     const labels = renderer.root
       .findAll((n) => typeof n.props.children === 'string')
       .map((n) => n.props.children as string)
 
-    const todo = labels.indexOf('To-Try')
+    const recall = labels.indexOf('Recall')
     const nearby = labels.indexOf('Nearby')
     const you = labels.indexOf('You')
-    expect(todo).toBeGreaterThanOrEqual(0)
-    expect(nearby).toBeGreaterThan(todo)
+    expect(recall).toBeGreaterThanOrEqual(0)
+    expect(nearby).toBeGreaterThan(recall)
     expect(you).toBeGreaterThan(nearby)
   })
 

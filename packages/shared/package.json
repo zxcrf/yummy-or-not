@@ -8,6 +8,11 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./i18n": "./src/i18n/index.ts",
+    "./i18n/locales/en": "./src/i18n/locales/en.ts",
+    "./i18n/locales/zh": "./src/i18n/locales/zh.ts",
+    "./i18n/locales/es": "./src/i18n/locales/es.ts",
+    "./i18n/locales/ja": "./src/i18n/locales/ja.ts",
+    "./i18n/locales/ko": "./src/i18n/locales/ko.ts",
     "./api-client": "./src/api-client.ts"
   },
   "scripts": {

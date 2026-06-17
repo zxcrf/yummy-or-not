@@ -7,8 +7,8 @@
    Routing is handled by expo-router's <Tabs>; the chrome is a fully
    custom `tabBar` (AppNav) that swaps bottom-bar ↔ sidebar via the
    Tamagui `gtMd` media query. The sections map to the shell:
-   Library / Add (center FAB) / To-Try / You. Recall is folded into
-   Library — searching the 口味 list surfaces past verdicts.
+   Library / Add (center FAB) / Recall / Nearby / You. 想吃/To-Try
+   is folded into Library via the title dropdown (plan 2).
    ============================================================ */
 
 import { Tabs } from 'expo-router'
@@ -28,7 +28,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Library' }} />
-      <Tabs.Screen name="todo" options={{ title: 'To-Try' }} />
+      <Tabs.Screen name="recall" options={{ title: 'Recall' }} />
       <Tabs.Screen name="nearby" options={{ title: 'Nearby' }} />
       <Tabs.Screen name="you" options={{ title: 'You' }} />
     </Tabs>
