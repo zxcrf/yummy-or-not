@@ -2,6 +2,7 @@
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const en: Record<string, string> = {
   nav_tastes: "Tastes", nav_recall: "Recall", nav_saved: "Saved", nav_you: "You", nav_stats: "Stats", nav_todo: "To-Try", nav_nearby: "Nearby",
+  recall_today: "Today", recall_yesterday: "Yesterday", recall_repurchase_badge: "Again", recall_empty: "No memories yet.",
   my_tastes: "My Tastes", count_logged: "{n} logged", search_log: "Search your log…",
   count_todo: "{n} to try", search_todo: "Search your to-try list…",
   sort_recent: "Recent", sort_nearby: "Nearby",
