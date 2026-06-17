@@ -2,6 +2,7 @@
    Open source (CC0-1.0, public domain). PRs welcome — add or fix freely. */
 export const zh: Record<string, string> = {
   nav_tastes: "口味", nav_recall: "回忆", nav_saved: "收藏", nav_you: "我的", nav_stats: "统计", nav_todo: "想吃", nav_nearby: "附近",
+  recall_today: "今天", recall_yesterday: "昨天", recall_repurchase_badge: "再买", recall_empty: "还没有回忆。",
   my_tastes: "我的口味", count_logged: "{n} 条记录", search_log: "搜索你的记录…",
   count_todo: "{n} 个想吃", search_todo: "搜索想吃清单…",
   sort_recent: "最近", sort_nearby: "附近",
