@@ -2,7 +2,7 @@
   "expo": {
     "name": "Yummy or Not",
     "slug": "yummy-or-not",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "yummyornot",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.yummyornot.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "ACCESS_FINE_LOCATION"
       ],
