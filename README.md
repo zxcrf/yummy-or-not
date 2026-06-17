@@ -7,6 +7,10 @@ Next time you're about to spend, a quick search tells you what past-you thought.
 Fully internationalized (中文 default, English, 한국어, 日本語, Español) with the
 verdicts localized too.
 
+> **⚠️ Personal project — All Rights Reserved.** This repository is public for
+> hosting and viewing only. It is **not** open source and grants **no** rights
+> to use, copy, modify, distribute, or use it commercially. See [LICENSE](./LICENSE).
+
 ## Repo layout (pnpm + turbo monorepo)
 
 ```
