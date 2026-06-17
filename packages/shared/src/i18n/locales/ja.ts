@@ -116,4 +116,8 @@ export const ja: Record<string, string> = {
   taster_sheet_title: "テイスターを切り替え",
   taster_self_label: "（自分）",
   viewing_taster: "{name} の味覚を表示中",
+  // Plan 3 — single-line filter bar
+  filter_sheet_title: "絞り込み",
+  filter_taste: "評価",
+  filter_tags: "タグ",
 };

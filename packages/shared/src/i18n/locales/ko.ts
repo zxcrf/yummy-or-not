@@ -116,4 +116,8 @@ export const ko: Record<string, string> = {
   taster_sheet_title: "테이스터 전환",
   taster_self_label: "(나)",
   viewing_taster: "{name}의 입맛 보는 중",
+  // Plan 3 — single-line filter bar
+  filter_sheet_title: "필터",
+  filter_taste: "평가",
+  filter_tags: "태그",
 };
