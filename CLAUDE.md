@@ -109,11 +109,12 @@ OAuth callback URL 也注册在 `yon.baobao.click`，换域名需同步改 provi
 
 **日常 / nightly / dev 构建走 GitHub Actions；只有正式 release 才用 EAS。**
 
-- **GHA `.github/workflows/android-apk.yml` = 默认。** push 到 main 且改动 `apps/mobile/` 或
-  `packages/shared/` 时自动触发——所以**合并即已在构建 APK，无需手动再跑任何东西**。本地
-  Gradle 产出 `app-release.apk`，作为 workflow **artifact** 上传（不是 EAS URL）。取包：
-  `gh run download <run-id> -n app-release-<sha>`。免登录、无限流。
-  需要时手动触发：`gh workflow run android-apk.yml`。
+- **GHA `.github/workflows/android-apk.yml` = 默认。** 触发条件是**推送 `v*` tag**（如
+  `git tag v0.1.3 && git push origin v0.1.3`）**或手动 dispatch**（`gh workflow run android-apk.yml`）。
+  **不再** push 到 main 时自动构建——这是为了在仓库设回 private 后省 CI 分钟（公开仓库无限免费，
+  私有仓库吃 2000/3000 分钟/月额度，每次合并都出 14 分钟 APK 会很快耗尽）。日常想要某次 commit
+  的包，直接手动 dispatch 即可。本地 Gradle 产出 `app-release.apk`，作为 workflow **artifact**
+  上传（不是 EAS URL），retention 1 天。取包：`gh run download <run-id> -n app-release-<sha>`。
 - **EAS cloud build 仅用于正式发版**（有限流、需 `eas-wynston` 交互登录）。**禁止**用 EAS 出
   dev/nightly 包。发 release 前，EAS 构建必须与 GHA 构建**完全对齐**：同一套构建 env、提前烧入
   内容（`EXPO_PUBLIC_API_URL` 等所有 baked 变量）、同一签名/keystore——EAS 产物须与 GHA 产物
