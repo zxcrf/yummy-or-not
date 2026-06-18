@@ -72,6 +72,12 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: '700',
     fontSize: 28,
+    // Explicit, generous line box: bold CJK glyphs at 28px are taller than the
+    // font's default line height on Android, so without this the top/bottom of
+    // 「我的口味」/「标签管理」/「家人」 get clipped. includeFontPadding keeps the
+    // ascent/descent padding that protects the glyph ink bounds.
+    lineHeight: 38,
+    includeFontPadding: true,
   },
   left: {
     position: 'absolute',
