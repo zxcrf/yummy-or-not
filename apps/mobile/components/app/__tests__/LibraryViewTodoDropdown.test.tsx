@@ -417,6 +417,38 @@ describe('LibraryView title dropdown — todo mode filtering (plan 2 red tests)'
     expect(emptyText.length).toBeGreaterThan(0) // FAILS — empty state uses reciept icon, not bookmark
   })
 
+  // ── (d) z-order: the open dropdown menu must paint OVER the filter/cards ───
+  // RN paints later siblings on top. The dropdown overlay must therefore be a
+  // LATER sibling than the filter-row/ScrollView in document order, else the
+  // tag chips + cards paint over the menu and it looks "covered by the tags"
+  // (user-reported UI bug). We assert the open menu node appears AFTER the
+  // filter-row node in a depth-first walk of the tree.
+  it('(d) the open dropdown menu renders after the filter-row (so it paints on top)', () => {
+    mockItems = [makeTaste({ name: 'Ramen', status: 'tasted', verdict: 'yum' })]
+    const renderer = renderLibrary()
+
+    // Open the dropdown.
+    const dropdown = findTitleDropdown(renderer)
+    expect(dropdown).toBeDefined()
+    act(() => { dropdown!.props.onPress() })
+
+    // Depth-first ordered list of every node's testID.
+    const order: string[] = []
+    renderer.root.findAll((n) => {
+      if (typeof n.props.testID === 'string') order.push(n.props.testID)
+      return false
+    })
+
+    const filterRowIdx = order.indexOf('filter-row')
+    const menuIdx = order.indexOf('title-dropdown-menu')
+
+    expect(filterRowIdx).toBeGreaterThanOrEqual(0)
+    expect(menuIdx).toBeGreaterThanOrEqual(0)
+    // FAILS against the old layout (menu rendered before the ScrollView, so
+    // menuIdx < filterRowIdx). Passes once the menu is a later sibling.
+    expect(menuIdx).toBeGreaterThan(filterRowIdx)
+  })
+
   it('(c) tasted empty state still uses the reciept icon (not bookmark)', () => {
     // Regression guard: the existing tasted empty state must not be replaced.
     mockItems = [] // no items at all

@@ -182,8 +182,10 @@ export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
             activeOpacity={0.7}
           >
-            <Text style={{ fontWeight: '700', fontSize: 28 }}>{titleLabel}</Text>
-            <Text style={{ fontWeight: '700', fontSize: 20, color: colors.ink500 }}>▾</Text>
+            {/* lineHeight 38 + includeFontPadding: bold CJK at 28px clips top/
+                bottom on Android without an explicit, generous line box. */}
+            <Text style={{ fontWeight: '700', fontSize: 28, lineHeight: 38, includeFontPadding: true }}>{titleLabel}</Text>
+            <Text style={{ fontWeight: '700', fontSize: 20, lineHeight: 38, color: colors.ink500 }}>▾</Text>
           </TouchableOpacity>
         }
         right={headerRight}
@@ -205,69 +207,6 @@ export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
           />
         </View>
       </View>
-
-      {/* ── Dropdown: transparent full-screen backdrop + floating menu ──────
-          Rendered as siblings after the header so the menu overlays the
-          ScrollView but stays in the same test-renderer tree (no Modal portal).
-          The backdrop catches outside-taps on all platforms. */}
-      {dropdownOpen && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-          {/* Transparent backdrop — catches taps outside the menu */}
-          <Pressable
-            testID="dropdown-backdrop"
-            style={StyleSheet.absoluteFill}
-            onPress={() => setDropdownOpen(false)}
-          />
-          {/* Floating menu — dropped from the centered title (just below the bar).
-              alignSelf:center keeps it under the now-centered title; marginTop
-              clears the ~52px header bar. */}
-          <View
-            testID="title-dropdown-menu"
-            style={{
-              alignSelf: 'center',
-              marginTop: 56,
-              backgroundColor: colors.background,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: colors.ink100,
-              minWidth: 180,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.12,
-              shadowRadius: 4,
-              elevation: 4,
-            }}
-          >
-            <Pressable
-              testID="dropdown-item-tasted"
-              onPress={() => {
-                setViewMode('tasted')
-                setDropdownOpen(false)
-              }}
-              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
-            >
-              {viewMode === 'tasted' && (
-                <Text style={{ color: colors.ink900 }}>✓</Text>
-              )}
-              <Text style={{ color: colors.ink900 }}>{t('my_tastes')}</Text>
-            </Pressable>
-            <Pressable
-              testID="dropdown-item-todo"
-              onPress={() => {
-                setViewMode('todo')
-                setDropdownOpen(false)
-              }}
-              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
-            >
-              {viewMode === 'todo' && (
-                <Text style={{ color: colors.ink900 }}>✓</Text>
-              )}
-              <Text style={{ color: colors.ink900 }}>{t('nav_todo')}</Text>
-              <Text style={{ color: colors.colorMuted }}>{todoCount}</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
@@ -404,6 +343,71 @@ export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
           </View>
         )}
       </ScrollView>
+
+      {/* ── Dropdown: transparent full-screen backdrop + floating menu ──────
+          MUST render AFTER the ScrollView: RN paints later siblings on top, so
+          placing this before the ScrollView let the filter chips + cards paint
+          over the menu (bug: dropdown looked covered by the tag row). Mirrors
+          the filter-sheet placement below. No Modal portal — same test tree.
+          The backdrop catches outside-taps on all platforms. */}
+      {dropdownOpen && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Transparent backdrop — catches taps outside the menu */}
+          <Pressable
+            testID="dropdown-backdrop"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setDropdownOpen(false)}
+          />
+          {/* Floating menu — dropped from the centered title (just below the bar).
+              alignSelf:center keeps it under the now-centered title; marginTop
+              clears the ~52px header bar. */}
+          <View
+            testID="title-dropdown-menu"
+            style={{
+              alignSelf: 'center',
+              marginTop: 56,
+              backgroundColor: colors.background,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.ink100,
+              minWidth: 180,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.12,
+              shadowRadius: 4,
+              elevation: 4,
+            }}
+          >
+            <Pressable
+              testID="dropdown-item-tasted"
+              onPress={() => {
+                setViewMode('tasted')
+                setDropdownOpen(false)
+              }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
+            >
+              {viewMode === 'tasted' && (
+                <Text style={{ color: colors.ink900 }}>✓</Text>
+              )}
+              <Text style={{ color: colors.ink900 }}>{t('my_tastes')}</Text>
+            </Pressable>
+            <Pressable
+              testID="dropdown-item-todo"
+              onPress={() => {
+                setViewMode('todo')
+                setDropdownOpen(false)
+              }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
+            >
+              {viewMode === 'todo' && (
+                <Text style={{ color: colors.ink900 }}>✓</Text>
+              )}
+              <Text style={{ color: colors.ink900 }}>{t('nav_todo')}</Text>
+              <Text style={{ color: colors.colorMuted }}>{todoCount}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ── Filter sheet — absoluteFill sibling (no Modal portal, matches plan-2 dropdown pattern) ── */}
       {filterSheetOpen && (
