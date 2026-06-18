@@ -80,20 +80,41 @@ jest.mock('react-native-reanimated', () => {
     interpolate: (_v: unknown, _i: unknown, output: number[]) => output[0],
     interpolateColor: (_v: unknown, _i: unknown, output: string[]) => output[0],
     Easing: { in: (e: unknown) => e, ease: undefined },
+    FadeIn: { duration: () => ({}) },
+    FadeOut: { duration: () => ({}) },
   }
 })
 
+// The form (with its Cancel/Save handlers) mounts at phase 'open', reached via
+// the entrance timer — advance past it so AddModal renders and hands AddRoute
+// its onClose/onSaved before we drive a close.
+function mountToOpen(): TestRenderer.ReactTestRenderer {
+  let renderer!: TestRenderer.ReactTestRenderer
+  act(() => {
+    renderer = TestRenderer.create(<AddRoute />)
+  })
+  act(() => {
+    jest.advanceTimersByTime(600)
+  })
+  act(() => {
+    renderer.update(<AddRoute />)
+  })
+  return renderer
+}
+
 describe('AddRoute dismissal (issue #46)', () => {
   beforeEach(() => {
+    jest.useFakeTimers()
     mockBack.mockClear()
     mockReplace.mockClear()
   })
+  afterEach(() => {
+    jest.clearAllTimers()
+    jest.useRealTimers()
+  })
 
   it('pops the route on close even when the close animation is interrupted', () => {
-    let renderer!: TestRenderer.ReactTestRenderer
-    act(() => {
-      renderer = TestRenderer.create(<AddRoute />)
-    })
+    const renderer = mountToOpen()
 
     act(() => {
       mockOnCloseFromModal()
@@ -108,10 +129,7 @@ describe('AddRoute dismissal (issue #46)', () => {
   })
 
   it('navigates to the created taste on save even when the animation is interrupted', () => {
-    let renderer!: TestRenderer.ReactTestRenderer
-    act(() => {
-      renderer = TestRenderer.create(<AddRoute />)
-    })
+    const renderer = mountToOpen()
 
     act(() => {
       mockOnSavedFromModal('taste-123')
