@@ -347,4 +347,35 @@ describe('AddRoute — form visibility is decoupled from the morph progress', ()
       renderer.unmount()
     })
   })
+
+  it('dissolves the exit overlay so the pink FAB "+" never lands and hangs on close', () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(<AddRoute />)
+    })
+    // Reach 'open' first.
+    act(() => {
+      jest.advanceTimersByTime(1000)
+    })
+    act(() => {
+      renderer.update(<AddRoute />)
+    })
+
+    // Cancel: phase → 'closing', progress → 0 (mock applies the target). The
+    // overlay must be faded out (opacity 0) at progress 0 rather than landing as
+    // a crisp pink FAB circle that visibly hangs until the route unmounts.
+    act(() => {
+      onCloseFromModal()
+    })
+    act(() => {
+      renderer.update(<AddRoute />)
+    })
+    const overlay = findMorphOverlay(renderer)
+    expect(overlay).not.toBeNull()
+    expect(flatten(overlay!.props.style)!.opacity).toBe(0)
+
+    act(() => {
+      renderer.unmount()
+    })
+  })
 })

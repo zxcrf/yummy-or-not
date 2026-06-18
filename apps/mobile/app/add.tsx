@@ -149,6 +149,11 @@ export default function AddRoute() {
       height: interpolate(p, [0, 1], [fab.height, SH]),
       borderRadius: interpolate(p, [0, 1], [fab.width / 2, 0]),
       backgroundColor: interpolateColor(p, [0, 0.5, 1], ['#ff2e88', '#fff0e0', '#fff6e6']),
+      // On CLOSE, dissolve the overlay through its final stretch so it never
+      // lands as a crisp pink FAB circle (+ icon) that visibly hangs for the
+      // frames between progress reaching 0 and the route unmounting. Entrance
+      // keeps full opacity (the FAB grows in solidly).
+      opacity: phase === 'closing' ? interpolate(p, [0, 0.35], [0, 1], 'clamp') : 1,
       overflow: 'hidden' as const,
     }
   })
