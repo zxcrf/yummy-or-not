@@ -83,6 +83,29 @@ export default function AddRoute() {
 
   useFocusEffect(assertOpen)
 
+  // Deterministic primary open trigger. The open used to be armed ONLY from
+  // useFocusEffect + AppState 'active', and both are lifecycle-timing-dependent:
+  //   - AppState 'change' only delivers FUTURE transitions. After an Android
+  //     photo/video crop the activity is RECREATED and AddRoute remounts with
+  //     progress back at 0; the app is already 'active', so the freshly
+  //     registered listener never receives an 'active' event — that arm is
+  //     simply missed.
+  //   - useFocusEffect re-runs on focus, but it is gated on expo-router's
+  //     async-loaded navigation being ready and on the focus event landing;
+  //     it is not a synchronous mount guarantee.
+  // When the arms don't fire, assertOpen never runs and the morph strands at
+  // progress≈0 — the pink FAB circle over the list (issues #46→#55→#125→#126,
+  // this recurrence; intermittent, matching a timing race).
+  // A plain mount effect ALWAYS runs synchronously after every mount (initial
+  // push AND crop-recreation remount) with no dependency on navigation
+  // readiness, focus delivery, or AppState — making "route is mounted" itself
+  // the open invariant. assertOpen is idempotent (guards on closing +
+  // progress≥0.999), so this and the focus/AppState re-arms coexist safely;
+  // closing.current keeps a late arm from snapping a closing modal back open.
+  useEffect(() => {
+    assertOpen()
+  }, [assertOpen])
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') assertOpen()
