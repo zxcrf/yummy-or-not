@@ -92,11 +92,30 @@ jest.mock('react-native-reanimated', () => {
     interpolateColor: (v: number, input: number[], output: string[]) =>
       v >= input[input.length - 1] ? output[output.length - 1] : output[0],
     Easing: { in: (e: unknown) => e, ease: undefined },
+    FadeIn: { duration: () => ({}) },
+    FadeOut: { duration: () => ({}) },
   }
 })
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AddRoute = require('../add').default
+
+// The form (with its Cancel/Save handlers) mounts at phase 'open', reached via
+// the entrance timer — advance past it so AddModal renders and hands AddRoute
+// its onClose/onSaved before we drive a close.
+function mountToOpen(): TestRenderer.ReactTestRenderer {
+  let renderer!: TestRenderer.ReactTestRenderer
+  act(() => {
+    renderer = TestRenderer.create(<AddRoute />)
+  })
+  act(() => {
+    jest.advanceTimersByTime(500)
+  })
+  act(() => {
+    renderer.update(<AddRoute />)
+  })
+  return renderer
+}
 
 describe('AddRoute close/save navigates even when the close animation is preempted', () => {
   beforeEach(() => {
@@ -112,10 +131,7 @@ describe('AddRoute close/save navigates even when the close animation is preempt
   })
 
   it('Cancel: navigation fires via the backstop deadline, not the animation callback', () => {
-    let renderer!: TestRenderer.ReactTestRenderer
-    act(() => {
-      renderer = TestRenderer.create(<AddRoute />)
-    })
+    const renderer = mountToOpen()
 
     act(() => {
       onCloseFromModal()
@@ -136,10 +152,7 @@ describe('AddRoute close/save navigates even when the close animation is preempt
   })
 
   it('Save: replace→detail fires via the backstop deadline, exactly once', () => {
-    let renderer!: TestRenderer.ReactTestRenderer
-    act(() => {
-      renderer = TestRenderer.create(<AddRoute />)
-    })
+    const renderer = mountToOpen()
 
     act(() => {
       onSavedFromModal('taste-42')
@@ -167,10 +180,7 @@ describe('AddRoute close/save navigates even when the close animation is preempt
       return v
     }
     try {
-      let renderer!: TestRenderer.ReactTestRenderer
-      act(() => {
-        renderer = TestRenderer.create(<AddRoute />)
-      })
+      const renderer = mountToOpen()
       act(() => {
         onCloseFromModal()
       })

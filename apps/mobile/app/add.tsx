@@ -30,6 +30,8 @@ import Animated, {
   Easing,
   interpolate,
   interpolateColor,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated'
 import { router } from 'expo-router'
 
@@ -179,21 +181,40 @@ export default function AddRoute() {
       ) : null}
 
       {/* STEADY, BULLETPROOF FORM LAYER.
-          Always mounted (so the draft loads and async work warms regardless of
-          the animation), full-screen and opaque. Visible only when 'open' — its
-          opacity is a pure function of the plain `phase` state, never of
-          `progress`. This is what survives activity recreation: a normal RN view
-          that no SharedValue can hide. */}
+          Full-screen; its opacity/visibility is a pure function of the plain
+          `phase` state, NEVER of `progress` — this is what survives activity
+          recreation (a normal RN view that no SharedValue can hide).
+          Background is opaque cream only when 'open'; transparent while
+          'closing' so the morph shrink + Library reveal show through.
+
+          The form CONTENT mounts only at 'open' and is wrapped in reanimated
+          layout animations (FadeIn/FadeOut). These are SAFE: their RESTING style
+          is the static opacity above (so a recreation just shows the form — it
+          can never strand at a SharedValue-driven opacity); they only animate
+          the one-shot mount/unmount transition, giving the form content the
+          materialize-in / dissolve-out feel without re-coupling visibility to
+          `progress`. */}
       <View
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: '#fff6e6', opacity: phase === 'open' ? 1 : 0 },
+          {
+            backgroundColor: phase === 'closing' ? 'transparent' : '#fff6e6',
+            opacity: phase === 'entering' ? 0 : 1,
+          },
         ]}
         pointerEvents={phase === 'open' ? 'auto' : 'none'}
       >
-        <AddErrorBoundary onClose={handleClose}>
-          <AddModal onClose={handleClose} onSaved={handleSaved} />
-        </AddErrorBoundary>
+        {phase === 'open' ? (
+          <Animated.View
+            style={{ flex: 1 }}
+            entering={FadeIn.duration(240)}
+            exiting={FadeOut.duration(160)}
+          >
+            <AddErrorBoundary onClose={handleClose}>
+              <AddModal onClose={handleClose} onSaved={handleSaved} />
+            </AddErrorBoundary>
+          </Animated.View>
+        ) : null}
       </View>
 
       {/* TRANSIENT MORPH OVERLAY — entrance & exit only.

@@ -124,6 +124,8 @@ jest.mock('react-native-reanimated', () => {
     interpolateColor: (v: number, input: number[], output: string[]) =>
       v >= input[input.length - 1] ? output[output.length - 1] : output[0],
     Easing: { in: (e: unknown) => e, ease: undefined },
+    FadeIn: { duration: () => ({}) },
+    FadeOut: { duration: () => ({}) },
   }
 })
 
@@ -292,29 +294,36 @@ describe('AddRoute — form visibility is decoupled from the morph progress', ()
     })
   })
 
-  it('a fast cancel before the entrance timer is not re-opened by the pending entrance timer', () => {
+  it('cancel after open removes the form content and navigates', () => {
+    const marker = (r: TestRenderer.ReactTestRenderer) =>
+      r.root.findAll((n) => n.props.testID === 'add-modal-marker').length
+
     let renderer!: TestRenderer.ReactTestRenderer
     act(() => {
       renderer = TestRenderer.create(<AddRoute />)
     })
-
-    // Cancel immediately (before ENTER_MS) — phase → 'closing'.
-    act(() => {
-      onCloseFromModal()
-    })
-
-    // Now let BOTH the (still-pending) entrance timer and the close backstop fire.
+    // Reach 'open' — the form content (and its Cancel handler) mounts here.
     act(() => {
       jest.advanceTimersByTime(1000)
     })
     act(() => {
       renderer.update(<AddRoute />)
     })
+    expect(marker(renderer)).toBe(1)
 
-    // The route navigated (close backstop) and the entrance timer did NOT
-    // re-show the form: the form layer is hidden (opacity 0), not re-opened.
+    // Cancel → phase 'closing': content is unmounted (FadeOut on device) and the
+    // close-nav backstop fires. The form never lingers.
+    act(() => {
+      onCloseFromModal()
+    })
+    act(() => {
+      jest.advanceTimersByTime(1000)
+    })
+    act(() => {
+      renderer.update(<AddRoute />)
+    })
     expect(mockBack).toHaveBeenCalledTimes(1)
-    expect(flatten(findFormLayer(renderer).props.style)!.opacity).toBe(0)
+    expect(marker(renderer)).toBe(0)
 
     act(() => {
       renderer.unmount()
