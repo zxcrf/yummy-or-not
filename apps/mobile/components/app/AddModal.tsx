@@ -24,7 +24,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useMemo, useState } from 'react'
-import { Modal, Pressable, StyleSheet, View } from 'react-native'
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
@@ -66,6 +66,8 @@ import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useTasters } from '@/app/(tabs)/_useTasters'
 import { PhotoPreview } from './PhotoPreview'
+import LocationPicker from './LocationPicker'
+import LocationPinRow from './LocationPinRow'
 import { type AddDraft, clearDraft, isDraftMeaningful, loadDraft, saveDraft } from './addDraft'
 import { useRouter } from 'expo-router'
 
@@ -165,6 +167,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [locating, setLocating] = useState(false)
   const [locRecorded, setLocRecorded] = useState(false)
   const [locFailed, setLocFailed] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   // For a VIDEO record this slot holds the extracted JPEG poster (or null when
@@ -1013,6 +1016,12 @@ export default function AddModal({ onClose, onSaved }: Props) {
                 ) : null}
               </>
             ) : null}
+            <LocationPinRow
+              lat={lat}
+              lng={lng}
+              onOpenPicker={() => setPickerOpen(true)}
+              onClear={() => { setLat(null); setLng(null) }}
+            />
           </View>
           <Input
             label={t('f_price')}
@@ -1182,6 +1191,20 @@ export default function AddModal({ onClose, onSaved }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Map point-picker (Android). Confirm sets the pin; if the place name is
+          still empty, seed it from the reverse-geocoded address. */}
+      <LocationPicker
+        visible={pickerOpen}
+        initial={lat != null && lng != null ? { lat, lng } : null}
+        onCancel={() => setPickerOpen(false)}
+        onConfirm={(coords, resolved) => {
+          setLat(coords.lat)
+          setLng(coords.lng)
+          if (!place && resolved) setPlace(resolved)
+          setPickerOpen(false)
+        }}
+      />
     </View>
   )
 }

@@ -52,6 +52,8 @@ function parsePatchForm(form: FormData): UpdateTasteInput {
   const status = form.get('status');
   const notes = form.get('notes');
   const warnBeforeBuy = form.get('warnBeforeBuy');
+  const lat = form.get('lat');
+  const lng = form.get('lng');
   if (typeof name === 'string') patch.name = name;
   if (typeof place === 'string') patch.place = place;
   if (typeof price === 'string') patch.price = price;
@@ -59,6 +61,11 @@ function parsePatchForm(form: FormData): UpdateTasteInput {
   if (status === 'tasted') patch.status = status;
   if (typeof notes === 'string') patch.notes = notes;
   if (typeof warnBeforeBuy === 'string') patch.warnBeforeBuy = warnBeforeBuy === 'true';
+  // Coordinates ride along when the user edits the pin together with a new
+  // photo. An empty string is the explicit "clear the pin" signal (→ null);
+  // a numeric string sets it. updateTaste re-validates/clamps either way.
+  if (typeof lat === 'string') patch.lat = lat === '' ? null : Number(lat);
+  if (typeof lng === 'string') patch.lng = lng === '' ? null : Number(lng);
   const tags = form.getAll('tags').map(String);
   if (tags.length) patch.tags = tags;
   return patch;

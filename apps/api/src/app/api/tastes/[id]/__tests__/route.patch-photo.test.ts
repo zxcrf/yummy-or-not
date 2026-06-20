@@ -174,6 +174,38 @@ describe('PATCH /api/tastes/[id] photo upload', () => {
     expect(mockedUpdateTaste).not.toHaveBeenCalled();
   });
 
+  it('parses lat/lng from a multipart PATCH (pin edited alongside a photo)', async () => {
+    const form = new FormData();
+    form.append('name', 'New');
+    form.append('lat', '31.2304');
+    form.append('lng', '121.4737');
+    form.append('photo', new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }), 'photo.jpg');
+    const req = new Request('http://localhost/api/tastes/t1', { method: 'PATCH', body: form }) as never;
+
+    await PATCH(req, ctx());
+
+    expect(mockedUpdateTaste).toHaveBeenCalledWith(
+      'u1',
+      't1',
+      expect.objectContaining({ name: 'New', lat: 31.2304, lng: 121.4737 }),
+      { imageKey: 't/11111111-1111-1111-1111-111111111111/orig.jpg' },
+    );
+  });
+
+  it('reads an empty lat/lng multipart field as clear-the-pin (null)', async () => {
+    const form = new FormData();
+    form.append('name', 'New');
+    form.append('lat', '');
+    form.append('lng', '');
+    form.append('photo', new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }), 'photo.jpg');
+    const req = new Request('http://localhost/api/tastes/t1', { method: 'PATCH', body: form }) as never;
+
+    await PATCH(req, ctx());
+
+    const patch = mockedUpdateTaste.mock.calls[0][2];
+    expect(patch).toMatchObject({ lat: null, lng: null });
+  });
+
   it('keeps JSON-only PATCH behavior unchanged', async () => {
     mockedUpdateTaste.mockResolvedValueOnce({ ...taste, name: 'Json' } as never);
 

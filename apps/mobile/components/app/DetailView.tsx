@@ -9,7 +9,7 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Image, Modal, Pressable, StyleSheet, View, View as RNView } from 'react-native'
+import { Alert, Image, Modal, Platform, Pressable, StyleSheet, View, View as RNView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller'
 import { Image as ExpoImage } from 'expo-image'
@@ -26,6 +26,8 @@ import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
 import { compressAsset } from '@/lib/compressAsset'
 import { VideoPlayerModal } from './VideoPlayerModal'
+import LocationPicker from './LocationPicker'
+import LocationPinRow from './LocationPinRow'
 import {
   Badge,
   Button,
@@ -96,6 +98,11 @@ export default function DetailView() {
   const [editPhoto, setEditPhoto] = useState<PhotoInput | null>(null)
   const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null)
   const editPhotoPickInFlight = useRef(false)
+  // Location split: `editPlace` is the human NICKNAME (above); editLat/editLng are
+  // the physical pin set via the map picker, edited independently of the name.
+  const [editLat, setEditLat] = useState<number | null>(null)
+  const [editLng, setEditLng] = useState<number | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // Tag chip candidates: built-in choices first, then library extras, then the
   // item's own legacy tags not in either. Mirrors AddModal.tsx:153-157.
@@ -284,6 +291,8 @@ export default function DetailView() {
     setEditNotes(item.notes)
     setEditVerdict(item.verdict ?? 'yum')
     setEditTags(item.tags)
+    setEditLat(item.lat ?? null)
+    setEditLng(item.lng ?? null)
     setEditPhoto(null)
     setEditPhotoPreview(null)
     setSaveError(null)
@@ -342,6 +351,8 @@ export default function DetailView() {
     editNotes !== item.notes ||
     (item.status !== 'todo' && editVerdict !== item.verdict) ||
     JSON.stringify(editTags) !== JSON.stringify(item.tags) ||
+    editLat !== (item.lat ?? null) ||
+    editLng !== (item.lng ?? null) ||
     editPhoto !== null
   )
 
@@ -395,6 +406,9 @@ export default function DetailView() {
         ...(item.status === 'todo' ? {} : { verdict: editVerdict }),
         tags: editTags,
         notes: editNotes,
+        // Physical pin — sent every save so clearing it (null) persists too.
+        lat: editLat,
+        lng: editLng,
       }
       const updated = editPhoto
         ? await updateTaste(item.id, patch, editPhoto)
@@ -950,6 +964,12 @@ export default function DetailView() {
               onChangeText={setEditPlace}
               placeholder="Tiger Sugar · Hongdae"
             />
+            <LocationPinRow
+              lat={editLat}
+              lng={editLng}
+              onOpenPicker={() => setPickerOpen(true)}
+              onClear={() => { setEditLat(null); setEditLng(null) }}
+            />
             <Input
               label={t('f_price')}
               value={editPrice}
@@ -1412,6 +1432,20 @@ export default function DetailView() {
         onConfirm={() => { setConfirmCancelOpen(false); cancelEditing() }}
         onDismiss={() => setConfirmCancelOpen(false)}
         testID="detail-cancel-confirm"
+      />
+
+      {/* Map point-picker (Android). Confirm sets the pin; if the user hasn't
+          named the place yet, seed the nickname from the resolved address. */}
+      <LocationPicker
+        visible={pickerOpen}
+        initial={editLat != null && editLng != null ? { lat: editLat, lng: editLng } : null}
+        onCancel={() => setPickerOpen(false)}
+        onConfirm={(coords, place) => {
+          setEditLat(coords.lat)
+          setEditLng(coords.lng)
+          if (!editPlace && place) setEditPlace(place)
+          setPickerOpen(false)
+        }}
       />
     </View>
   )
