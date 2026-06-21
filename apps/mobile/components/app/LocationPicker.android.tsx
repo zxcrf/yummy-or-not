@@ -190,7 +190,7 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
                 <Text style={{ color: colors.ink500, fontSize: 15, lineHeight: 22 }}>
                   {t('loc_consent_body')}
                 </Text>
-                <Button variant="primary" block onPress={grantConsent} style={{ marginTop: space[2] }}>
+                <Button variant="primary" block onPress={grantConsent} testID="loc-picker-consent-agree" style={{ marginTop: space[2] }}>
                   {t('loc_consent_agree')}
                 </Button>
               </View>
