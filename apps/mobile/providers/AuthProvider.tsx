@@ -48,7 +48,7 @@ import {
 } from '@yon/shared'
 import { clearPersistedTastes, setTastesUser } from '@/app/(tabs)/_useTastes'
 import { clearTagsCache, setTagsUser } from '@/app/(tabs)/_useTags'
-import { setTastersUser } from '@/app/(tabs)/_useTasters'
+import { setTastersUser, clearPersistedTasters } from '@/app/(tabs)/_useTasters'
 import { setActiveTasterUser, clearActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 
 // ----------------------------------------------------------------
@@ -290,11 +290,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Drop the cold-start session snapshot so the next launch can't paint
       // this account's profile optimistically after sign-out.
       clearStoredSession()
-      // Purge cached taste + tag data + photos so the next account starts clean.
+      // Purge cached taste + tag + persona data + photos (in-memory AND the
+      // persisted cold-start caches) so the next account starts clean.
       await clearPersistedTastes()
       setTastesUser(null)
       clearTagsCache()
-      setTastersUser(null)
+      await clearPersistedTasters()
       await clearActiveTaster()
       try {
         await Promise.all([Image.clearDiskCache(), Image.clearMemoryCache()])
