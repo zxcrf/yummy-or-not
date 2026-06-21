@@ -52,6 +52,7 @@ jest.mock('@/app/(tabs)/_useTags', () => ({
 }))
 jest.mock('@/app/(tabs)/_useTasters', () => ({
   setTastersUser: jest.fn(),
+  clearPersistedTasters: jest.fn(async () => {}),
 }))
 jest.mock('@/app/(tabs)/_useActiveTaster', () => ({
   setActiveTasterUser: jest.fn(),
