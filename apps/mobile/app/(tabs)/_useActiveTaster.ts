@@ -68,8 +68,15 @@ async function hydrate(): Promise<void> {
  * Point the active-taster state at a (new) account. Call on sign-in and
  * sign-out. Resets the in-memory selection to the self default (null), emits so
  * mounted views clear immediately, then re-hydrates the new account's choice.
+ *
+ * No-ops when the account is unchanged (mirrors setTastesUser): the optimistic
+ * cold start scopes once from the persisted session, then the background
+ * getMe() revalidate re-applies the SAME account — without this guard that
+ * second call would reset the selection to null and re-read AsyncStorage,
+ * flashing the taster switcher back to the self default mid-session.
  */
 export function setActiveTasterUser(id: string | null): void {
+  if (id === userId) return
   userId = id
   epoch++
   active = null

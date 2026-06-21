@@ -16,6 +16,10 @@ import { getTags, type UserTag } from '@yon/shared'
 
 let cache: UserTag[] | null = null
 let inFlight: Promise<UserTag[]> | null = null
+/** Current account id scoping the cache (null when signed out). Lets
+ *  setTagsUser() no-op on a repeated same-account call so a background
+ *  session revalidate cannot wipe a freshly-fetched list. */
+let userId: string | null = null
 /** Epoch — bumped by setTagsUser() and invalidateTagsCache() so any
  *  in-flight fetch that resolves after the bump is discarded. */
 let epoch = 0
@@ -52,8 +56,16 @@ function revalidate(): Promise<UserTag[]> {
  * Call on sign-in and sign-out so the cache never leaks across accounts.
  * Bumps the epoch so any in-flight fetch for the previous user is discarded.
  * Immediately emits [] so mounted views clear the previous account's tags.
+ *
+ * No-ops when the account is unchanged (mirrors setTastesUser): the optimistic
+ * cold start scopes the cache once from the persisted session, then the
+ * background getMe() revalidate re-applies the SAME account — without this
+ * guard that second call would clear the just-fetched tags and emit [],
+ * leaving the library's tag filter blank until a manual refetch.
  */
-export function setTagsUser(_id: string | null): void {
+export function setTagsUser(id: string | null): void {
+  if (id === userId) return
+  userId = id
   cache = null
   inFlight = null
   epoch++
@@ -74,6 +86,7 @@ export function invalidateTagsCache(): void {
 export function clearTagsCache(): void {
   cache = null
   inFlight = null
+  userId = null
   epoch++
   emit([])
 }
