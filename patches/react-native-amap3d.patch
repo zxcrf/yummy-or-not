@@ -1,0 +1,25 @@
+diff --git a/lib/android/src/main/java/qiuxiang/amap3d/map_view/MapViewManager.kt b/lib/android/src/main/java/qiuxiang/amap3d/map_view/MapViewManager.kt
+index 3e8ce69632125c6ecb0439e9eeecf3f5829c2fef..1143723b390a7ea829cf9817c3d66b925fb2d5b9 100644
+--- a/lib/android/src/main/java/qiuxiang/amap3d/map_view/MapViewManager.kt
++++ b/lib/android/src/main/java/qiuxiang/amap3d/map_view/MapViewManager.kt
+@@ -27,7 +27,19 @@ internal class MapViewManager : ViewGroupManager<MapView>() {
+ 
+   override fun onDropViewInstance(view: MapView) {
+     super.onDropViewInstance(view)
+-    view.onDestroy()
++    // The host activity never drives this map's lifecycle (no onPause/onResume),
++    // so AMap's TextureMapView is still "resumed" when React unmounts it. Calling
++    // onDestroy() straight from a resumed state NPEs inside the AMap SDK and
++    // crashes the whole app — which is exactly what happens every time a screen
++    // that mounts a map (e.g. the location picker) is dismissed. Pause first to
++    // complete the lifecycle, and guard the teardown so a dismiss can never take
++    // the app down. See react-native-maps#414 / #5668 for the same root cause.
++    try {
++      view.onPause()
++      view.onDestroy()
++    } catch (e: Throwable) {
++      android.util.Log.w("amap3d", "MapView teardown threw on unmount (suppressed)", e)
++    }
+   }
+ 
+   override fun getCommandsMap(): Map<String, Int> {
