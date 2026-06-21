@@ -216,9 +216,49 @@ describe('DetailView editing', () => {
       verdict: 'yum',
       tags: ['Coffee'],
       notes: 'Better now',
+      // The pin rides along every save (null here — the fixture has no coords).
+      lat: null,
+      lng: null,
     })
     expect(inputByLabel(renderer, 'f_what')).toBeUndefined()
     expect(renderer.root.findAll((node) => node.children.includes('Cortado'))).not.toHaveLength(0)
+  })
+
+  // Regression: editing a taste used to DROP its coordinates entirely — the
+  // edit PATCH never carried lat/lng, so the server (which now persists them)
+  // would have nothing to write and a re-save could orphan the pin. A taste
+  // opened for edit must round-trip its existing pin through the save payload
+  // so editing the name/notes never silently loses the physical location.
+  it('preserves the existing lat/lng pin in the save payload', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste({ lat: 31.2304, lng: 121.4737 }))
+    mockedUpdateTaste.mockResolvedValueOnce(taste({ lat: 31.2304, lng: 121.4737, name: 'Latte' }))
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    const nameInput = inputByLabel(renderer, 'f_what')
+    await act(async () => { nameInput?.props.onChangeText('Latte') })
+
+    await act(async () => { await editHeader(renderer).props.onPrimary() })
+
+    const [, payload] = mockedUpdateTaste.mock.calls[0]
+    expect(payload.lat).toBe(31.2304)
+    expect(payload.lng).toBe(121.4737)
+  })
+
+  // The "定位地址" pin row renders in edit mode (below the place-nickname input)
+  // so the user can see/clear the pin even on platforms without the map picker.
+  it('renders the location pin row in edit mode', async () => {
+    mockedGetTaste.mockResolvedValueOnce(taste({ lat: 31.2304, lng: 121.4737 }))
+    const renderer = await renderDetail()
+
+    const edit = buttons(renderer).find((button) => button.children.includes('edit'))
+    await act(async () => { edit?.props.onPress() })
+
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'location-pin-row'),
+    ).not.toHaveLength(0)
   })
 
   it('shows the rating picker when editing a tasted item', async () => {

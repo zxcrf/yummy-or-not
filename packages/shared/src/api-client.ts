@@ -207,6 +207,10 @@ export async function updateTaste(
     if (input.price !== undefined) fd.append("price", input.price);
     if (input.notes !== undefined) fd.append("notes", input.notes);
     if (input.warnBeforeBuy !== undefined) fd.append("warnBeforeBuy", String(input.warnBeforeBuy));
+    // Send coordinates whenever the patch carries them (editing the pin alongside
+    // a photo). An explicit null becomes "" — the server reads that as clear-the-pin.
+    if (input.lat !== undefined) fd.append("lat", input.lat === null ? "" : String(input.lat));
+    if (input.lng !== undefined) fd.append("lng", input.lng === null ? "" : String(input.lng));
     input.tags?.forEach((t) => fd.append("tags", t));
     return apiFetch<Taste>(`/api/tastes/${id}`, { method: "PATCH", body: fd });
   }

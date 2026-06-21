@@ -168,6 +168,57 @@ it('trusted server image option sets image and returns previous image', async ()
   expect(row.notes).toBe('old');
 });
 
+// Regression: updateTaste had NO lat/lng in its field map, so a PATCH that
+// changed the pin was silently dropped — the column never moved. Editing a
+// taste's physical location must persist; clearing it (null) must wipe it.
+it('persists a lat/lng pin patch and clears it with null', async () => {
+  const user = await createUser({ email: 'pin@example.com', displayName: 'pin' });
+  const created = await createTaste(user.id, { name: 'Boba', verdict: 'yum' });
+
+  // Set a pin.
+  const set = await updateTaste(user.id, created.id, { lat: 31.2304, lng: 121.4737 });
+  if (set === null || typeof set === 'string') throw new Error(`expected a Taste, got ${String(set)}`);
+  expect(set.lat).toBeCloseTo(31.2304, 4);
+  expect(set.lng).toBeCloseTo(121.4737, 4);
+
+  const setRow = memdb().public.one(
+    `SELECT lat, lng FROM tastes WHERE id = '${created.id}'`,
+  ) as { lat: number; lng: number };
+  expect(setRow.lat).toBeCloseTo(31.2304, 4);
+  expect(setRow.lng).toBeCloseTo(121.4737, 4);
+
+  // Clear it with explicit null.
+  const cleared = await updateTaste(user.id, created.id, { lat: null, lng: null });
+  if (cleared === null || typeof cleared === 'string') throw new Error(`expected a Taste, got ${String(cleared)}`);
+  expect(cleared.lat).toBeNull();
+  expect(cleared.lng).toBeNull();
+});
+
+// A patch that doesn't mention coordinates must leave an existing pin intact —
+// the `'lat' in patch` guard means an unrelated edit never wipes the pin.
+it('leaves the pin untouched when the patch omits lat/lng', async () => {
+  const user = await createUser({ email: 'keep-pin@example.com', displayName: 'keep' });
+  const created = await createTaste(user.id, { name: 'Latte', verdict: 'yum', lat: 1.5, lng: 2.5 });
+
+  const updated = await updateTaste(user.id, created.id, { name: 'Flat White' });
+  if (updated === null || typeof updated === 'string') throw new Error(`expected a Taste, got ${String(updated)}`);
+  expect(updated.name).toBe('Flat White');
+  expect(updated.lat).toBeCloseTo(1.5, 4);
+  expect(updated.lng).toBeCloseTo(2.5, 4);
+});
+
+// Out-of-range / non-finite coordinates are clamped to null on write (parity
+// with the create path) so a malformed patch can't store garbage.
+it('clamps an out-of-range coordinate patch to null', async () => {
+  const user = await createUser({ email: 'clamp@example.com', displayName: 'clamp' });
+  const created = await createTaste(user.id, { name: 'Tea', verdict: 'yum', lat: 10, lng: 20 });
+
+  const updated = await updateTaste(user.id, created.id, { lat: 999, lng: 121 });
+  if (updated === null || typeof updated === 'string') throw new Error(`expected a Taste, got ${String(updated)}`);
+  expect(updated.lat).toBeNull();
+  expect(updated.lng).toBeCloseTo(121, 4);
+});
+
 it('trusted server image option returns null for non-owner and does not alter columns', async () => {
   const owner = await createUser({ email: 'real-owner@example.com', displayName: 'owner' });
   const stranger = await createUser({ email: 'stranger@example.com', displayName: 'stranger' });

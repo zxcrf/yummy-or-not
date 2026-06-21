@@ -279,6 +279,14 @@ export function normalizePrice(raw: string): string {
   return trimmed;
 }
 
+/** Clamp an untrusted coordinate to a stored value: a finite number within
+ *  ±`max` passes through, anything else (null, undefined, NaN, out of range)
+ *  becomes null. Shared by the create and update paths so a pin is validated
+ *  identically however it arrives. */
+function clampCoord(v: unknown, max: number): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= -max && v <= max ? v : null;
+}
+
 /** Flatten a single tag value that may be a JSON-encoded array string (legacy data). */
 function normalizeTag(tag: string): string[] {
   const t = tag.trim();
@@ -428,14 +436,8 @@ export async function createTaste(
 
   const normalizedPrice = normalizePrice(price);
   const warnBeforeBuy = !isTodo && effectiveVerdict === 'nah';
-  const normalizedLat =
-    typeof input.lat === 'number' && Number.isFinite(input.lat) && input.lat >= -90 && input.lat <= 90
-      ? input.lat
-      : null;
-  const normalizedLng =
-    typeof input.lng === 'number' && Number.isFinite(input.lng) && input.lng >= -180 && input.lng <= 180
-      ? input.lng
-      : null;
+  const normalizedLat = clampCoord(input.lat, 90);
+  const normalizedLng = clampCoord(input.lng, 180);
 
   // S3b: attribute the record to the active taster. An explicit tasterId (the
   // client's active persona) must belong to THIS account — otherwise an
@@ -562,6 +564,19 @@ export async function updateTaste(
       values.push(val);
       setClauses.push(`${col} = $${values.length}`);
     }
+  }
+
+  // Coordinates are patched separately from fieldMap so the same set→clear
+  // semantics as the create path apply: a finite in-range number sets the
+  // pin, anything else (explicit null, NaN, out of range) clears it. Only
+  // touched when the key is PRESENT, so an unrelated patch never wipes coords.
+  if ('lat' in patch) {
+    values.push(clampCoord(patch.lat, 90));
+    setClauses.push(`lat = $${values.length}`);
+  }
+  if ('lng' in patch) {
+    values.push(clampCoord(patch.lng, 180));
+    setClauses.push(`lng = $${values.length}`);
   }
 
   if (options.imageKey !== undefined) {

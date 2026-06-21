@@ -247,6 +247,9 @@ describe('DetailView edit-mode photo (issue #129)', () => {
         verdict: 'yum',
         tags: ['Coffee'],
         notes: 'Too bitter',
+        // The pin rides along every save (null here — the fixture has no coords).
+        lat: null,
+        lng: null,
       },
       photo,
     )
