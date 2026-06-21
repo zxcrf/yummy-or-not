@@ -24,13 +24,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { MapView } from 'react-native-amap3d'
-import {
-  gcj02ToWgs84,
-  reverseGeocode,
-  wgs84ToGcj02,
-} from '@yon/shared'
+import { reverseGeocode } from '@yon/shared'
 
 import { initAmapIfConsented } from '@/lib/amapPrivacy'
+import {
+  PICKER_FALLBACK,
+  initialCameraFromPin,
+  pinFromCameraTarget,
+} from '@/lib/locationPicker'
 import { requestLocateResult } from '@/app/(tabs)/_useUserCoords'
 import { useI18n } from '@/providers/I18nProvider'
 import { Button, Card, Icon } from '@/components/ds'
@@ -39,10 +40,6 @@ import { colors, space, radius, Text } from '@/theme'
 // Shared with NearbyHeatView — agreeing in either surface unlocks both. Kept in
 // sync by value (a storage key never changes); see NearbyHeatView CONSENT_KEY.
 const CONSENT_KEY = 'yon_amap_consent'
-// Shanghai People's Square — fallback center when the taste has no pin yet and
-// we have no GPS fix. WGS-84; converted to GCJ-02 before it reaches AMap.
-const FALLBACK = { lat: 31.2304, lng: 121.4737 }
-const PICK_ZOOM = 16
 const REVERSE_DEBOUNCE_MS = 500
 
 export interface LatLngLiteral {
@@ -57,12 +54,6 @@ export interface LocationPickerProps {
   onCancel: () => void
   /** Fires with the chosen pin (WGS-84) and the reverse-geocoded address (or null). */
   onConfirm: (coords: LatLngLiteral, place: string | null) => void
-}
-
-/** GCJ-02 initial camera for the picker, converted from the WGS-84 seed. */
-function initialCamera(seed: LatLngLiteral) {
-  const g = wgs84ToGcj02(seed.lat, seed.lng)
-  return { target: { latitude: g.lat, longitude: g.lng }, zoom: PICK_ZOOM }
 }
 
 export default function LocationPicker({ visible, initial, onCancel, onConfirm }: LocationPickerProps) {
@@ -146,7 +137,7 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     (e: { nativeEvent: { cameraPosition: { target?: { latitude: number; longitude: number } } } }) => {
       const target = e.nativeEvent.cameraPosition.target
       if (!target) return
-      const wgs = gcj02ToWgs84(target.latitude, target.longitude)
+      const wgs = pinFromCameraTarget(target)
       setPin(wgs)
       scheduleReverse(wgs)
     },
@@ -156,8 +147,7 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
   const recenterOnMe = useCallback(async () => {
     const res = await requestLocateResult()
     if (!res.coords) return
-    const g = wgs84ToGcj02(res.coords.lat, res.coords.lng)
-    mapRef.current?.moveCamera({ target: { latitude: g.lat, longitude: g.lng }, zoom: PICK_ZOOM }, 400)
+    mapRef.current?.moveCamera(initialCameraFromPin({ lat: res.coords.lat, lng: res.coords.lng }), 400)
   }, [])
 
   const confirm = useCallback(() => {
@@ -211,7 +201,7 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
             <MapView
               ref={mapRef}
               style={{ flex: 1 }}
-              initialCameraPosition={initialCamera(pin ?? FALLBACK)}
+              initialCameraPosition={initialCameraFromPin(pin ?? PICKER_FALLBACK)}
               onCameraIdle={onCameraIdle}
             />
 
