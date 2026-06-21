@@ -21,6 +21,9 @@
   "pnpm": {
     "overrides": {
       "postcss@<8.5.10": ">=8.5.10"
+    },
+    "patchedDependencies": {
+      "react-native-amap3d": "patches/react-native-amap3d.patch"
     }
   }
 }
