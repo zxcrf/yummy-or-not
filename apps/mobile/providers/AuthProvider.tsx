@@ -7,6 +7,24 @@
    after refresh(), and (c) clear it on sign-out.
 
    Token persistence uses expo-secure-store only. Storage key: `yon_token`.
+
+   Cold-start optimization (口味 snapshot):
+   Previously the app blocked on a full splash until getMe() resolved
+   (~2s over the network) before painting anything. Now, when a stored
+   token AND a persisted session snapshot both exist, we OPTIMISTICALLY
+   paint the signed-in app from cache immediately (loading → false within
+   a frame) and revalidate getMe() in the background. The home page
+   (LibraryView) likewise hydrates its own persisted taste list, so the
+   user sees their last-known 口味 right away while the latest data syncs.
+
+   Snapshot safety:
+   • The user/providers snapshot is persisted in AsyncStorage (key
+     `yon_user`) on every successful refresh, and removed on sign-out /
+     signed-out revalidate.
+   • A background revalidate only tears down the optimistic session on a
+     DEFINITIVE auth rejection (401/403) or an explicit signed-out
+     response (user: null). A transient failure (offline, 5xx) keeps the
+     cached session so going offline doesn't bounce the user to login.
    ============================================================ */
 
 import {
@@ -18,6 +36,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Image } from 'expo-image'
 import {
   getAuthToken,
@@ -105,6 +124,67 @@ async function deleteStoredToken(): Promise<void> {
 }
 
 // ----------------------------------------------------------------
+// Session snapshot — the user + providers persisted in AsyncStorage so the
+// app can paint the signed-in UI on cold start before getMe() returns.
+// Non-secret (it's the user's own profile, scoped to this device and cleared
+// on sign-out); the bearer token stays in SecureStore.
+// ----------------------------------------------------------------
+
+const USER_KEY = 'yon_user'
+
+interface SessionSnapshot {
+  user: User
+  providers: ProviderStatus[]
+}
+
+/** Read the persisted session snapshot (or null). Best-effort. */
+async function readStoredSession(): Promise<SessionSnapshot | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<SessionSnapshot> | null
+    // Only trust a snapshot that carries a concrete user id — the id scopes
+    // every per-account cache, so a malformed snapshot must not be used.
+    if (parsed && parsed.user && typeof parsed.user.id === 'string') {
+      return {
+        user: parsed.user as User,
+        providers: Array.isArray(parsed.providers) ? parsed.providers : [],
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** Persist the session snapshot. Best-effort, fire-and-forget. */
+function writeStoredSession(snapshot: SessionSnapshot): void {
+  void AsyncStorage.setItem(USER_KEY, JSON.stringify(snapshot)).catch(() => {
+    // ignore — the snapshot is an optimization, not a source of truth.
+  })
+}
+
+/** Remove the persisted session snapshot (sign-out / signed-out revalidate). */
+function clearStoredSession(): void {
+  void AsyncStorage.removeItem(USER_KEY).catch(() => {
+    // ignore — best-effort.
+  })
+}
+
+/**
+ * Whether a getMe() rejection is a DEFINITIVE auth failure (the token is bad
+ * or forbidden) versus a transient one (offline, server 5xx). apiFetch throws
+ * Error('http_<status>') for non-2xx, or a fetch TypeError on network failure.
+ * Only a 401/403 means "this session is no longer valid" — everything else is
+ * treated as transient so a flaky network never bounces a signed-in user to
+ * the login screen during an optimistic cold start.
+ */
+function isAuthError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : ''
+  return msg === 'http_401' || msg === 'http_403'
+}
+
+// ----------------------------------------------------------------
 // Provider
 // ----------------------------------------------------------------
 
@@ -117,37 +197,79 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [loading, setLoading] = useState(true)
 
-  const refresh = useCallback(async () => {
-    try {
-      const { user, providers } = await getMe()
-      // Scope the shared taste + tag caches to this account before any view reads them.
-      setTastesUser(user?.id ?? null)
-      setTagsUser(user?.id ?? null)
-      setTastersUser(user?.id ?? null)
-      setActiveTasterUser(user?.id ?? null)
-      setUser(user)
-      setProviders(providers)
-      // Capture the token a just-completed login put in memory.
-      writeStoredToken(getAuthToken())
-    } catch {
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  /**
+   * Apply a resolved session to React state + scope every per-account cache to
+   * the user. Must run before any view reads those caches so the namespaced
+   * storage keys (and emitted clears) point at the right account.
+   */
+  const applySession = useCallback(
+    (nextUser: User | null, nextProviders: ProviderStatus[]) => {
+      setTastesUser(nextUser?.id ?? null)
+      setTagsUser(nextUser?.id ?? null)
+      setTastersUser(nextUser?.id ?? null)
+      setActiveTasterUser(nextUser?.id ?? null)
+      setUser(nextUser)
+      setProviders(nextProviders)
+    },
+    [],
+  )
 
-  // Bootstrap: load persisted token then refresh the session.
+  const refresh = useCallback(
+    async (opts?: { background?: boolean }) => {
+      try {
+        const { user, providers } = await getMe()
+        applySession(user, providers)
+        // Capture the token a just-completed login put in memory.
+        writeStoredToken(getAuthToken())
+        // Keep the cold-start snapshot in sync with the latest session.
+        if (user) writeStoredSession({ user, providers })
+        else clearStoredSession()
+      } catch (e) {
+        // A background revalidate runs while an optimistic (cached) session is
+        // already painted. A transient failure must NOT tear it down — only a
+        // definitive auth rejection signs the user out. A foreground refresh
+        // (no cached session on screen) clears on any failure as before.
+        if (opts?.background && !isAuthError(e)) return
+        applySession(null, [])
+        clearStoredSession()
+      } finally {
+        setLoading(false)
+      }
+    },
+    [applySession],
+  )
+
+  // Bootstrap: load the persisted token, then either paint optimistically from
+  // the cached snapshot (revalidating in the background) or block on getMe().
   useEffect(() => {
     let active = true
     ;(async () => {
       const stored = await readStoredToken()
-      if (stored) setAuthToken(stored)
-      if (active) await refresh()
+      if (!stored) {
+        // No token → definitely signed out; resolve the gate immediately.
+        if (active) await refresh()
+        return
+      }
+      setAuthToken(stored)
+      // Optimistic cold start: paint the last-known session right away and
+      // revalidate quietly. Skips the ~2s splash so the home page (and its
+      // persisted 口味 list) appear within a frame.
+      const snapshot = await readStoredSession()
+      if (!active) return
+      if (snapshot) {
+        applySession(snapshot.user, snapshot.providers)
+        setLoading(false)
+        void refresh({ background: true })
+        return
+      }
+      // Token but no snapshot (first launch after login, or a client upgraded
+      // before snapshots existed) → fall back to the blocking refresh.
+      await refresh()
     })()
     return () => {
       active = false
     }
-  }, [refresh])
+  }, [refresh, applySession])
 
   const patchUser = useCallback((partial: Partial<User>) => {
     setUser((prev) => (prev ? { ...prev, ...partial } : prev))
@@ -165,6 +287,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // the old token on next launch (fire-and-forget deletion race).
       await deleteStoredToken()
       setAuthToken(null)
+      // Drop the cold-start session snapshot so the next launch can't paint
+      // this account's profile optimistically after sign-out.
+      clearStoredSession()
       // Purge cached taste + tag data + photos so the next account starts clean.
       await clearPersistedTastes()
       setTastesUser(null)
