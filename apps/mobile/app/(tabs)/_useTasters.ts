@@ -18,6 +18,10 @@ import { getActiveTaster, setActiveTaster } from './_useActiveTaster'
 
 let cache: Taster[] | null = null
 let inFlight: Promise<Taster[]> | null = null
+/** Current account id scoping the cache (null when signed out). Lets
+ *  setTastersUser() no-op on a repeated same-account call so a background
+ *  session revalidate cannot wipe a freshly-fetched persona list. */
+let userId: string | null = null
 /** Bumped by setTastersUser() and invalidateTasters() so an in-flight fetch
  *  that resolves after the bump is discarded. */
 let epoch = 0
@@ -67,8 +71,14 @@ function revalidate(): Promise<Taster[]> {
 // ----------------------------------------------------------------
 
 /** Point the cache at a (new) account and clear prior state. Call on sign-in /
- *  sign-out so personas never leak across accounts. */
-export function setTastersUser(_id: string | null): void {
+ *  sign-out so personas never leak across accounts.
+ *
+ *  No-ops when the account is unchanged (mirrors setTastesUser) so the
+ *  background session revalidate — which re-applies the same account after the
+ *  optimistic cold-start scope — cannot wipe a freshly-fetched persona list. */
+export function setTastersUser(id: string | null): void {
+  if (id === userId) return
+  userId = id
   cache = null
   inFlight = null
   epoch++
