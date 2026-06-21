@@ -97,6 +97,9 @@ jest.mock('@/components/ds', () => ({
       {status === 'todo' && todoLabel ? <span data-testid="todo-badge-label">{todoLabel}</span> : null}
     </div>
   ),
+  Badge: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
+    <span data-testid={testID}>{children}</span>
+  ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
   Input: ({ value, onChangeText }: { value: string; onChangeText?: (t: string) => void }) => (
     <input value={value} onChange={(e) => onChangeText?.(e.target.value)} />

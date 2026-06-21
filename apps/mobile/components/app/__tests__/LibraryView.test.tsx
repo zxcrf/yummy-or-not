@@ -173,6 +173,9 @@ jest.mock('@/components/ds', () => {
         {distanceLabel ? <Text>{distanceLabel}</Text> : null}
       </View>
     ),
+    Badge: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
+      <View testID={testID}><Text>{children}</Text></View>
+    ),
     Icon: () => null,
     Input: ({ onChangeText, value, placeholder, accessibilityLabel }: {
       onChangeText?: (v: string) => void

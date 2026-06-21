@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ExpoRouter from 'expo-router'
 import { colors, space, Text } from '@/theme'
 import { formatDistance } from '@yon/shared'
-import { FoodCard, Icon, Input, Tag } from '@/components/ds'
+import { Badge, FoodCard, Icon, Input, Tag } from '@/components/ds'
 import { PageHeader } from '@/components/app/PageHeader'
 import { useI18n } from '@/providers/I18nProvider'
 import { useAuth } from '@/providers/AuthProvider'
@@ -51,6 +51,33 @@ function normalizeVerdictParam(verdict: string | string[] | undefined): VerdictF
 interface LibraryViewProps {
   /** Pinned to the top-right of the page header (the taster avatar). */
   headerRight?: ReactNode
+}
+
+/**
+ * Active-state marker for the title dropdown rows. Always occupies the same
+ * 8px-wide slot so the active and inactive labels stay left-aligned (an
+ * inline checkmark would indent only the active row). The 8×8 accent dot is
+ * the design-system active indicator, matching the RecallView timeline rail.
+ */
+function ActiveDot({ active }: { active: boolean }) {
+  return (
+    <View
+      testID="dropdown-marker-slot"
+      style={{ width: 8, alignItems: 'center', justifyContent: 'center' }}
+    >
+      {active && (
+        <View
+          testID="dropdown-active-dot"
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.accent,
+          }}
+        />
+      )}
+    </View>
+  )
 }
 
 export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
@@ -386,9 +413,11 @@ export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
               }}
               style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
             >
-              {viewMode === 'tasted' && (
-                <Text style={{ color: colors.ink900 }}>✓</Text>
-              )}
+              {/* Active marker — fixed-width slot keeps every label left-aligned
+                  whether or not the row is active (no checkmark-indent jump). The
+                  8×8 accent dot is the design-system active indicator (mirrors the
+                  RecallView timeline rail dot). */}
+              <ActiveDot active={viewMode === 'tasted'} />
               <Text style={{ color: colors.ink900 }}>{t('my_tastes')}</Text>
             </Pressable>
             <Pressable
@@ -399,11 +428,11 @@ export default function LibraryView({ headerRight }: LibraryViewProps = {}) {
               }}
               style={{ flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }}
             >
-              {viewMode === 'todo' && (
-                <Text style={{ color: colors.ink900 }}>✓</Text>
-              )}
+              <ActiveDot active={viewMode === 'todo'} />
               <Text style={{ color: colors.ink900 }}>{t('nav_todo')}</Text>
-              <Text style={{ color: colors.colorMuted }}>{todoCount}</Text>
+              {/* Count follows the DS count-pill language (same Badge used for
+                  回购/bought counts) instead of a bare muted number. */}
+              <Badge testID="todo-count" tone="dark">{todoCount}</Badge>
             </Pressable>
           </View>
         </View>
