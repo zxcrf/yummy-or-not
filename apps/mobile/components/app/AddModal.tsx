@@ -66,8 +66,8 @@ import { invalidateTagsCache, useTags } from '@/app/(tabs)/_useTags'
 import { useActiveTaster } from '@/app/(tabs)/_useActiveTaster'
 import { useTasters } from '@/app/(tabs)/_useTasters'
 import { PhotoPreview } from './PhotoPreview'
-import LocationPicker from './LocationPicker'
 import LocationPinRow from './LocationPinRow'
+import { useLocationPicker } from '@/providers/LocationPickerProvider'
 import { type AddDraft, clearDraft, isDraftMeaningful, loadDraft, saveDraft } from './addDraft'
 import { useRouter } from 'expo-router'
 
@@ -167,7 +167,7 @@ export default function AddModal({ onClose, onSaved }: Props) {
   const [locating, setLocating] = useState(false)
   const [locRecorded, setLocRecorded] = useState(false)
   const [locFailed, setLocFailed] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const { open: openLocationPicker } = useLocationPicker()
 
   // `photo` is the value handed to createTaste (RNFile on native, File on web).
   // For a VIDEO record this slot holds the extracted JPEG poster (or null when
@@ -1019,7 +1019,17 @@ export default function AddModal({ onClose, onSaved }: Props) {
             <LocationPinRow
               lat={lat}
               lng={lng}
-              onOpenPicker={() => setPickerOpen(true)}
+              onOpenPicker={() =>
+                openLocationPicker(
+                  lat != null && lng != null ? { lat, lng } : null,
+                  (coords, resolved) => {
+                    setLat(coords.lat)
+                    setLng(coords.lng)
+                    // Seed the nickname from the address only if it's still empty.
+                    if (!place && resolved) setPlace(resolved)
+                  },
+                )
+              }
               onClear={() => { setLat(null); setLng(null) }}
             />
           </View>
@@ -1191,20 +1201,6 @@ export default function AddModal({ onClose, onSaved }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
-
-      {/* Map point-picker (Android). Confirm sets the pin; if the place name is
-          still empty, seed it from the reverse-geocoded address. */}
-      <LocationPicker
-        visible={pickerOpen}
-        initial={lat != null && lng != null ? { lat, lng } : null}
-        onCancel={() => setPickerOpen(false)}
-        onConfirm={(coords, resolved) => {
-          setLat(coords.lat)
-          setLng(coords.lng)
-          if (!place && resolved) setPlace(resolved)
-          setPickerOpen(false)
-        }}
-      />
     </View>
   )
 }

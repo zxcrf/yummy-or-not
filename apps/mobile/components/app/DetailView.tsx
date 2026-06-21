@@ -26,8 +26,8 @@ import { getCachedTaste, invalidateTastes } from '@/app/(tabs)/_useTastes'
 import { useTags } from '@/app/(tabs)/_useTags'
 import { compressAsset } from '@/lib/compressAsset'
 import { VideoPlayerModal } from './VideoPlayerModal'
-import LocationPicker from './LocationPicker'
 import LocationPinRow from './LocationPinRow'
+import { useLocationPicker } from '@/providers/LocationPickerProvider'
 import {
   Badge,
   Button,
@@ -102,7 +102,7 @@ export default function DetailView() {
   // the physical pin set via the map picker, edited independently of the name.
   const [editLat, setEditLat] = useState<number | null>(null)
   const [editLng, setEditLng] = useState<number | null>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const { open: openLocationPicker } = useLocationPicker()
 
   // Tag chip candidates: built-in choices first, then library extras, then the
   // item's own legacy tags not in either. Mirrors AddModal.tsx:153-157.
@@ -967,7 +967,16 @@ export default function DetailView() {
             <LocationPinRow
               lat={editLat}
               lng={editLng}
-              onOpenPicker={() => setPickerOpen(true)}
+              onOpenPicker={() =>
+                openLocationPicker(
+                  editLat != null && editLng != null ? { lat: editLat, lng: editLng } : null,
+                  (coords, place) => {
+                    setEditLat(coords.lat)
+                    setEditLng(coords.lng)
+                    if (!editPlace && place) setEditPlace(place)
+                  },
+                )
+              }
               onClear={() => { setEditLat(null); setEditLng(null) }}
             />
             <Input
@@ -1432,20 +1441,6 @@ export default function DetailView() {
         onConfirm={() => { setConfirmCancelOpen(false); cancelEditing() }}
         onDismiss={() => setConfirmCancelOpen(false)}
         testID="detail-cancel-confirm"
-      />
-
-      {/* Map point-picker (Android). Confirm sets the pin; if the user hasn't
-          named the place yet, seed the nickname from the resolved address. */}
-      <LocationPicker
-        visible={pickerOpen}
-        initial={editLat != null && editLng != null ? { lat: editLat, lng: editLng } : null}
-        onCancel={() => setPickerOpen(false)}
-        onConfirm={(coords, place) => {
-          setEditLat(coords.lat)
-          setEditLng(coords.lng)
-          if (!editPlace && place) setEditPlace(place)
-          setPickerOpen(false)
-        }}
       />
     </View>
   )

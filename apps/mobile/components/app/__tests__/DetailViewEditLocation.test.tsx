@@ -1,12 +1,13 @@
 /* ============================================================
    Wiring tests — confirming a map pin in DetailView edit mode.
 
-   The map picker is mocked to a prop-capturing stub so we can drive its
-   onConfirm directly (the native map can't mount here). What matters is the
-   wiring on the DetailView side, which is identical on every platform and would
-   otherwise only be exercised on-device: a confirmed pin must reach the PATCH
-   payload as lat/lng, must seed the place NICKNAME only when it is empty (never
-   clobber a name the user typed), and the clear affordance must null the pin.
+   DetailView no longer renders the picker; it calls the app-root picker via
+   useLocationPicker().open(initial, onConfirm) (the persistent, never-unmounted
+   host lives at the root — see LocationPickerProvider). These tests mock the
+   opener + the pin row to drive that flow without the native map, and assert the
+   DetailView-side wiring (platform-independent): the current pin is passed as the
+   seed; a confirmed pin reaches the PATCH payload; the nickname is seeded only
+   when empty; and clear nulls the pin.
    ============================================================ */
 
 import React from 'react'
@@ -15,13 +16,27 @@ import { getTaste, updateTaste, type Taste } from '@yon/shared'
 
 import DetailView from '../DetailView'
 
-// Capture the props the (mocked) LocationPicker is rendered with, so the test
-// can invoke onConfirm exactly as the real picker would on a confirmed pick.
-const mockPicker = { props: null as null | Record<string, unknown> }
-jest.mock('../LocationPicker', () => ({
+// Capture the (initial, onConfirm) the screen hands to the app-root picker.
+const mockPickerOpen = {
+  initial: undefined as unknown,
+  onConfirm: null as null | ((c: { lat: number; lng: number }, p: string | null) => void),
+}
+jest.mock('@/providers/LocationPickerProvider', () => ({
+  useLocationPicker: () => ({
+    open: (initial: unknown, onConfirm: (c: { lat: number; lng: number }, p: string | null) => void) => {
+      mockPickerOpen.initial = initial
+      mockPickerOpen.onConfirm = onConfirm
+    },
+  }),
+}))
+
+// Capture the pin row's props so we can fire onOpenPicker / onClear directly (the
+// Android-only "pick on map" button doesn't render under the jest platform).
+const mockPinRow = { props: null as null | Record<string, unknown> }
+jest.mock('../LocationPinRow', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
-    mockPicker.props = props
+    mockPinRow.props = props
     return null
   },
 }))
@@ -41,17 +56,14 @@ jest.mock('@/app/(tabs)/_useTastes', () => ({
   invalidateTastes: jest.fn(async () => []),
   getCachedTaste: jest.fn(() => undefined),
 }))
-
 jest.mock('@/app/(tabs)/_useTags', () => ({
   useTags: () => ({ tags: [], loading: false }),
   invalidateTagsCache: jest.fn(),
 }))
-
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'taste-1' }),
   useRouter: () => ({ back: jest.fn(), canGoBack: jest.fn(() => true), replace: jest.fn() }),
 }))
-
 jest.mock('@/providers/I18nProvider', () => ({
   useI18n: () => ({
     t: (key: string, values?: Record<string, unknown>) =>
@@ -62,7 +74,6 @@ jest.mock('@/providers/I18nProvider', () => ({
     },
   }),
 }))
-
 jest.mock('@/components/ds', () => {
   const React = require('react')
   return {
@@ -104,7 +115,6 @@ async function renderDetail(): Promise<TestRenderer.ReactTestRenderer> {
   mounted.push(renderer)
   return renderer
 }
-
 function inputByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return renderer.root.findAll((n) => (n.type as unknown) === 'Input').find((n) => n.props.label === label)
 }
@@ -117,35 +127,36 @@ async function openEdit(renderer: TestRenderer.ReactTestRenderer) {
     .find((b) => b.children.includes('edit'))
   await act(async () => { edit?.props.onPress() })
 }
+function fireOpenPicker() {
+  return act(async () => { (mockPinRow.props!.onOpenPicker as () => void)() })
+}
 
 describe('DetailView — map pin confirm wiring', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockPicker.props = null
+    mockPinRow.props = null
+    mockPickerOpen.initial = undefined
+    mockPickerOpen.onConfirm = null
   })
-
   afterEach(() => {
     act(() => { mounted.forEach((r) => r.unmount()) })
     mounted.length = 0
   })
 
-  it('writes a confirmed pin into the PATCH payload', async () => {
+  it('writes a confirmed pin into the PATCH payload (named place not overwritten)', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste({ place: 'Corner Cafe' }))
     mockedUpdateTaste.mockResolvedValueOnce(taste())
     const renderer = await renderDetail()
     await openEdit(renderer)
 
-    // Picker is rendered (with visible=false) so its onConfirm is wired up.
-    expect(mockPicker.props).not.toBeNull()
-    const onConfirm = mockPicker.props!.onConfirm as (c: { lat: number; lng: number }, p: string | null) => void
-    await act(async () => { onConfirm({ lat: 39.9087, lng: 116.3975 }, 'Beijing Cafe') })
+    await fireOpenPicker()
+    expect(mockPickerOpen.onConfirm).toBeTruthy()
+    await act(async () => { mockPickerOpen.onConfirm!({ lat: 39.9087, lng: 116.3975 }, 'Beijing Cafe') })
 
     await act(async () => { await editHeader(renderer).props.onPrimary() })
-
     const [, payload] = mockedUpdateTaste.mock.calls[0]
     expect(payload.lat).toBe(39.9087)
     expect(payload.lng).toBe(116.3975)
-    // place already had a value → the address must NOT overwrite the nickname.
     expect(payload.place).toBe('Corner Cafe')
   })
 
@@ -155,12 +166,10 @@ describe('DetailView — map pin confirm wiring', () => {
     const renderer = await renderDetail()
     await openEdit(renderer)
 
-    const onConfirm = mockPicker.props!.onConfirm as (c: { lat: number; lng: number }, p: string | null) => void
-    await act(async () => { onConfirm({ lat: 39.9087, lng: 116.3975 }, 'Beijing Cafe') })
+    await fireOpenPicker()
+    await act(async () => { mockPickerOpen.onConfirm!({ lat: 39.9087, lng: 116.3975 }, 'Beijing Cafe') })
 
-    // The nickname input reflects the seeded address immediately...
     expect(inputByLabel(renderer, 'f_where')?.props.value).toBe('Beijing Cafe')
-
     await act(async () => { await editHeader(renderer).props.onPrimary() })
     const [, payload] = mockedUpdateTaste.mock.calls[0]
     expect(payload.place).toBe('Beijing Cafe')
@@ -168,21 +177,19 @@ describe('DetailView — map pin confirm wiring', () => {
   })
 
   it('passes the current pin to the picker as its initial seed', async () => {
-    // Platform-independent wiring: the picker's `initial` is derived from the
-    // edited pin, so reopening on this taste centers the map on its location.
     mockedGetTaste.mockResolvedValueOnce(taste({ lat: 31.2304, lng: 121.4737 }))
     const renderer = await renderDetail()
     await openEdit(renderer)
-
-    expect(mockPicker.props!.initial).toEqual({ lat: 31.2304, lng: 121.4737 })
+    await fireOpenPicker()
+    expect(mockPickerOpen.initial).toEqual({ lat: 31.2304, lng: 121.4737 })
   })
 
-  it('passes a null seed to the picker when the taste has no pin', async () => {
+  it('passes a null seed when the taste has no pin', async () => {
     mockedGetTaste.mockResolvedValueOnce(taste({ lat: null, lng: null }))
     const renderer = await renderDetail()
     await openEdit(renderer)
-
-    expect(mockPicker.props!.initial).toBeNull()
+    await fireOpenPicker()
+    expect(mockPickerOpen.initial).toBeNull()
   })
 
   it('clears the pin to null through the row clear action', async () => {
@@ -191,9 +198,7 @@ describe('DetailView — map pin confirm wiring', () => {
     const renderer = await renderDetail()
     await openEdit(renderer)
 
-    const clear = renderer.root.findAllByProps({ testID: 'location-pin-clear' })[0]
-    await act(async () => { clear.props.onPress() })
-
+    await act(async () => { (mockPinRow.props!.onClear as () => void)() })
     await act(async () => { await editHeader(renderer).props.onPrimary() })
     const [, payload] = mockedUpdateTaste.mock.calls[0]
     expect(payload.lat).toBeNull()

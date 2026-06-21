@@ -1,31 +1,22 @@
 /* ============================================================
-   YUMMY OR NOT — LocationPicker (Android, AMap center-pin)
+   YUMMY OR NOT — LocationPickerHost (Android, AMap center-pin)
 
-   A full-screen map sheet for setting a taste's PHYSICAL pin (lat/lng),
-   separate from its place NICKNAME. Center-pin UX: a fixed pin sits in the
-   middle of the screen; the user drags the map under it and the pin's target
-   coordinate is read from the camera center on idle, then reverse-geocoded for
-   a human-readable address preview. Confirm returns WGS-84 coords + the
-   resolved address; the caller decides what to do with them.
+   The single, app-root map picker (mounted once by LocationPickerProvider).
+   Center-pin UX: a fixed pin sits in the screen middle; the user drags the map
+   under it; the camera centre on idle is the chosen point, reverse-geocoded for
+   an address preview. Confirm returns WGS-84 coords + the address.
 
-   COORDINATE SYSTEM: stored coords are WGS-84; AMap renders GCJ-02. We convert
-   on the way IN (wgs84ToGcj02 for the initial camera) and on the way OUT
-   (gcj02ToWgs84 for the picked center) so the stored pin lines up with the rest
-   of the app (createTaste / reverseGeocode all speak WGS-84).
+   ⚠️ NEVER UNMOUNTS THE MAP. react-native-amap3d crashes the app when its native
+   MapView is destroyed (MapViewManager.onDropViewInstance → TextureMapView
+   .onDestroy NPEs). So once the user has opened the picker and consented, the
+   <MapView> stays mounted for the app's lifetime; closing only hides the overlay
+   with display:none (no unmount → no onDestroy → no crash). Reopening recenters
+   the live map via moveCamera (initialCameraPosition only applies on first mount).
 
-   COMPLIANCE: identical AMap consent gate to NearbyHeatView — the SDK is NOT
-   initialized until the user has explicitly agreed (高德《合规使用方案》). Consent
-   is shared via the same AsyncStorage key, so agreeing in either surface
-   unlocks both. The pure coordinate math it leans on lives in @yon/shared and
-   IS unit-tested.
-
-   ⚠️ NOT a <Modal>: an Android RN <Modal> renders into a separate Dialog
-   window, and react-native-amap3d's native GL surface CRASHES the app when that
-   window is torn down on dismiss (every close path — ✕, confirm, back-swipe —
-   would "exit the app"). So we render a full-screen in-window overlay instead,
-   keeping the MapView in the host activity window exactly like NearbyHeatView
-   (which is stable). Android hardware-back / predictive-back is handled via
-   BackHandler so it closes the picker rather than unwinding the navigator.
+   COORDINATE SYSTEM: stored coords are WGS-84; AMap renders GCJ-02. We convert in
+   (wgs84ToGcj02) and out (gcj02ToWgs84) so the stored pin matches the rest of the
+   app. COMPLIANCE: the AMap SDK is not initialised until the user agrees (shared
+   consent key with NearbyHeatView).
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -40,37 +31,40 @@ import {
   PICKER_FALLBACK,
   initialCameraFromPin,
   pinFromCameraTarget,
+  type LatLng,
 } from '@/lib/locationPicker'
 import { requestLocateResult } from '@/app/(tabs)/_useUserCoords'
 import { useI18n } from '@/providers/I18nProvider'
 import { Button, Card, Icon } from '@/components/ds'
 import { colors, space, radius, Text } from '@/theme'
 
-// Shared with NearbyHeatView — agreeing in either surface unlocks both. Kept in
-// sync by value (a storage key never changes); see NearbyHeatView CONSENT_KEY.
+// Shared with NearbyHeatView — agreeing in either surface unlocks both.
 const CONSENT_KEY = 'yon_amap_consent'
 const REVERSE_DEBOUNCE_MS = 500
 
-export interface LatLngLiteral {
-  lat: number
-  lng: number
-}
-
-export interface LocationPickerProps {
+export interface LocationPickerHostProps {
+  /** True while the picker is open (overlay shown). When false the overlay is
+   *  hidden with display:none but the consented map stays mounted underneath. */
   visible: boolean
-  /** Existing pin (WGS-84) to open on, or null to start at the GPS / fallback center. */
-  initial: LatLngLiteral | null
+  /** Seed pin (WGS-84) for the current open, or null for the GPS/fallback centre. */
+  initial: LatLng | null
+  /** Latches true on the first open; keeps the map mounted forever after. */
+  keepMounted: boolean
   onCancel: () => void
-  /** Fires with the chosen pin (WGS-84) and the reverse-geocoded address (or null). */
-  onConfirm: (coords: LatLngLiteral, place: string | null) => void
+  onConfirm: (coords: LatLng, place: string | null) => void
 }
 
-export default function LocationPicker({ visible, initial, onCancel, onConfirm }: LocationPickerProps) {
+export default function LocationPickerHost({
+  visible,
+  initial,
+  keepMounted,
+  onCancel,
+  onConfirm,
+}: LocationPickerHostProps) {
   const { t } = useI18n()
   const insets = useSafeAreaInsets()
   const [consent, setConsent] = useState<boolean | null>(null) // null = loading
-  // The live pin (WGS-84) under the center crosshair, updated on camera idle.
-  const [pin, setPin] = useState<LatLngLiteral | null>(null)
+  const [pin, setPin] = useState<LatLng | null>(null)
   const [address, setAddress] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
 
@@ -78,17 +72,10 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
   const reverseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reverseSeq = useRef(0)
 
-  // Seed the pin from the incoming prop each time the sheet opens so reopening on
-  // a different taste never shows the previous one's coordinates.
+  // Restore consent the first time the picker is ever opened; init the SDK if
+  // granted. Runs once (keepMounted latches true and never resets).
   useEffect(() => {
-    if (!visible) return
-    setPin(initial)
-    setAddress(null)
-  }, [visible, initial])
-
-  // Restore persisted consent when the sheet opens; init the SDK if granted.
-  useEffect(() => {
-    if (!visible) return
+    if (!keepMounted) return
     let cancelled = false
     ;(async () => {
       try {
@@ -104,7 +91,20 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     return () => {
       cancelled = true
     }
-  }, [visible])
+  }, [keepMounted])
+
+  // Seed the pin each time the picker opens (or the seed changes while open) so
+  // reopening on a different taste never shows the previous one's coordinates.
+  // On reopen the live map is recentred via moveCamera; on the very first open
+  // the map isn't mounted yet and picks up initialCameraPosition instead.
+  useEffect(() => {
+    if (!visible) return
+    setPin(initial)
+    setAddress(null)
+    if (mapRef.current) {
+      mapRef.current.moveCamera(initialCameraFromPin(initial ?? PICKER_FALLBACK), 0)
+    }
+  }, [visible, initial])
 
   useEffect(() => {
     return () => {
@@ -112,10 +112,8 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     }
   }, [])
 
-  // Android hardware-back / predictive-back: while the overlay is up, intercept
-  // it to close the picker (onCancel) and CONSUME the event (return true) so it
-  // never reaches the navigator — otherwise back would pop the host screen /
-  // dismiss AddModal and look like the app exiting.
+  // Android hardware-back / predictive-back: while open, close the picker and
+  // CONSUME the event so it never reaches the navigator.
   useEffect(() => {
     if (!visible) return
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -135,9 +133,7 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     }
   }, [])
 
-  // Debounced reverse-geocode of the current pin. A failure leaves the address
-  // blank (never blocks confirming) — coords are the source of truth.
-  const scheduleReverse = useCallback((wgs: LatLngLiteral) => {
+  const scheduleReverse = useCallback((wgs: LatLng) => {
     if (reverseTimer.current) clearTimeout(reverseTimer.current)
     const seq = ++reverseSeq.current
     setResolving(true)
@@ -154,17 +150,18 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     }, REVERSE_DEBOUNCE_MS)
   }, [])
 
-  // onCameraIdle fires after each pan/zoom settles. cameraPosition.target is the
-  // GCJ-02 center under the fixed pin → convert to WGS-84 for storage + reverse.
   const onCameraIdle = useCallback(
     (e: { nativeEvent: { cameraPosition: { target?: { latitude: number; longitude: number } } } }) => {
+      // Ignore camera events while hidden (a moveCamera during a reseed shouldn't
+      // schedule a network reverse-geocode for a picker the user isn't looking at).
+      if (!visible) return
       const target = e.nativeEvent.cameraPosition.target
       if (!target) return
       const wgs = pinFromCameraTarget(target)
       setPin(wgs)
       scheduleReverse(wgs)
     },
-    [scheduleReverse],
+    [visible, scheduleReverse],
   )
 
   const recenterOnMe = useCallback(async () => {
@@ -178,15 +175,19 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     onConfirm(pin, address)
   }, [pin, address, onConfirm])
 
-  // Render nothing (and mount no native MapView) while closed. The parent always
-  // renders <LocationPicker visible={...} />, so the overlay is purely visible-gated.
-  if (!visible) return null
+  // Render nothing (and mount NO native MapView) until the picker has been opened
+  // at least once. After that the overlay stays mounted and is shown/hidden via
+  // display so the map is never torn down.
+  if (!keepMounted) return null
 
   return (
-    <View testID="loc-picker-overlay" style={styles.overlay}>
+    <View
+      testID="loc-picker-overlay"
+      style={[styles.overlay, { display: visible ? 'flex' : 'none' }]}
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
       <View style={styles.container}>
-        {/* Header: cancel ✕ + title + confirm. paddingTop carries the status-bar
-            inset so the buttons sit BELOW the status bar / map attribution. */}
+        {/* Header: cancel ✕ + title + confirm. paddingTop carries the status-bar inset. */}
         <View testID="loc-picker-header" style={[styles.header, { paddingTop: insets.top + space[2] }]}>
           <Pressable testID="loc-picker-cancel" onPress={onCancel} hitSlop={12} style={styles.headerBtn}>
             <Icon name="close" size={22} color={colors.ink900} />
@@ -225,6 +226,8 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
             </Card>
           </ScrollView>
         ) : (
+          // consent granted → the MapView stays mounted from here on (never
+          // conditionally unmounted; only the outer overlay's display toggles).
           <View style={{ flex: 1 }}>
             <MapView
               ref={mapRef}
@@ -267,8 +270,6 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
 }
 
 const styles = StyleSheet.create({
-  // Full-screen in-window overlay (NOT a Modal — see header note). Sits above the
-  // host screen via a high elevation/zIndex and fills it edge-to-edge.
   overlay: {
     position: 'absolute',
     top: 0,
@@ -301,7 +302,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    // Lift the pin so its tip (bottom) sits on the camera center.
     marginBottom: 40,
   },
   controls: { position: 'absolute', right: space[3], top: space[3], gap: space[2] },
