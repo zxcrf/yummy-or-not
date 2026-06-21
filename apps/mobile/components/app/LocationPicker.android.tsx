@@ -16,12 +16,21 @@
    COMPLIANCE: identical AMap consent gate to NearbyHeatView — the SDK is NOT
    initialized until the user has explicitly agreed (高德《合规使用方案》). Consent
    is shared via the same AsyncStorage key, so agreeing in either surface
-   unlocks both. Native MapView → NOT jest-tested (mirrors NearbyHeatView); the
-   pure coordinate math it leans on lives in @yon/shared and IS unit-tested.
+   unlocks both. The pure coordinate math it leans on lives in @yon/shared and
+   IS unit-tested.
+
+   ⚠️ NOT a <Modal>: an Android RN <Modal> renders into a separate Dialog
+   window, and react-native-amap3d's native GL surface CRASHES the app when that
+   window is torn down on dismiss (every close path — ✕, confirm, back-swipe —
+   would "exit the app"). So we render a full-screen in-window overlay instead,
+   keeping the MapView in the host activity window exactly like NearbyHeatView
+   (which is stable). Android hardware-back / predictive-back is handled via
+   BackHandler so it closes the picker rather than unwinding the navigator.
    ============================================================ */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { MapView } from 'react-native-amap3d'
 import { reverseGeocode } from '@yon/shared'
@@ -58,6 +67,7 @@ export interface LocationPickerProps {
 
 export default function LocationPicker({ visible, initial, onCancel, onConfirm }: LocationPickerProps) {
   const { t } = useI18n()
+  const insets = useSafeAreaInsets()
   const [consent, setConsent] = useState<boolean | null>(null) // null = loading
   // The live pin (WGS-84) under the center crosshair, updated on camera idle.
   const [pin, setPin] = useState<LatLngLiteral | null>(null)
@@ -101,6 +111,19 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
       if (reverseTimer.current) clearTimeout(reverseTimer.current)
     }
   }, [])
+
+  // Android hardware-back / predictive-back: while the overlay is up, intercept
+  // it to close the picker (onCancel) and CONSUME the event (return true) so it
+  // never reaches the navigator — otherwise back would pop the host screen /
+  // dismiss AddModal and look like the app exiting.
+  useEffect(() => {
+    if (!visible) return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onCancel()
+      return true
+    })
+    return () => sub.remove()
+  }, [visible, onCancel])
 
   const grantConsent = useCallback(async () => {
     initAmapIfConsented(true)
@@ -155,11 +178,16 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
     onConfirm(pin, address)
   }, [pin, address, onConfirm])
 
+  // Render nothing (and mount no native MapView) while closed. The parent always
+  // renders <LocationPicker visible={...} />, so the overlay is purely visible-gated.
+  if (!visible) return null
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onCancel} transparent={false}>
+    <View testID="loc-picker-overlay" style={styles.overlay}>
       <View style={styles.container}>
-        {/* Header: cancel ✕ + title + confirm. */}
-        <View style={styles.header}>
+        {/* Header: cancel ✕ + title + confirm. paddingTop carries the status-bar
+            inset so the buttons sit BELOW the status bar / map attribution. */}
+        <View testID="loc-picker-header" style={[styles.header, { paddingTop: insets.top + space[2] }]}>
           <Pressable testID="loc-picker-cancel" onPress={onCancel} hitSlop={12} style={styles.headerBtn}>
             <Icon name="close" size={22} color={colors.ink900} />
           </Pressable>
@@ -222,8 +250,8 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
               </Pressable>
             </View>
 
-            {/* Address preview / hint card pinned to the bottom. */}
-            <View style={styles.footer} pointerEvents="none">
+            {/* Address preview / hint card pinned to the bottom (clears the nav bar). */}
+            <View style={[styles.footer, { bottom: insets.bottom + space[4] }]} pointerEvents="none">
               <View style={styles.footerCard}>
                 <Text style={styles.footerHint}>{t('loc_picker_hint')}</Text>
                 <Text testID="loc-picker-address" style={styles.footerAddress} numberOfLines={2}>
@@ -234,11 +262,23 @@ export default function LocationPicker({ visible, initial, onCancel, onConfirm }
           </View>
         )}
       </View>
-    </Modal>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  // Full-screen in-window overlay (NOT a Modal — see header note). Sits above the
+  // host screen via a high elevation/zIndex and fills it edge-to-edge.
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    elevation: 1000,
+    backgroundColor: colors.background,
+  },
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
@@ -246,7 +286,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space[3],
-    paddingTop: space[5],
     paddingBottom: space[3],
     borderBottomWidth: 1,
     borderBottomColor: colors.ink100,

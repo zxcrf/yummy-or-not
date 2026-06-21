@@ -14,8 +14,16 @@
    ============================================================ */
 
 import TestRenderer, { act } from 'react-test-renderer'
+import { BackHandler, Modal } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { wgs84ToGcj02, gcj02ToWgs84, reverseGeocode } from '@yon/shared'
+
+// Nonzero top inset so the safe-area regression (header crammed under the status
+// bar) is detectable: a large value the old fixed paddingTop could never reach.
+const TOP_INSET = 100
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: TOP_INSET, bottom: 0, left: 0, right: 0 }),
+}))
 
 // --- Native map: capture mount props + expose onCameraIdle to the test. ---
 const mapMounts: Array<Record<string, unknown>> = []
@@ -121,10 +129,18 @@ async function settleCameraAt(gcj: { lat: number; lng: number }): Promise<void> 
   })
 }
 
+// Android hardware-back handlers the component registers while visible.
+let backPressHandlers: Array<() => boolean> = []
+
 describe('LocationPicker.android — real component', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     mapMounts.length = 0
+    backPressHandlers = []
+    jest.spyOn(BackHandler, 'addEventListener').mockImplementation(((_evt: string, cb: () => boolean) => {
+      backPressHandlers.push(cb)
+      return { remove: jest.fn() }
+    }) as never)
     await AsyncStorage.clear()
     mockReverse.mockResolvedValue({ place: 'Resolved Address' })
     mockRequestLocate.mockResolvedValue({ coords: { lat: 31.2, lng: 121.5 }, status: 'ok' })
@@ -163,6 +179,46 @@ describe('LocationPicker.android — real component', () => {
       expect(mapMounts.length).toBeGreaterThan(0)
       // No consent-agree button once the map is up.
       expect(mounted[0].root.findAllByProps({ testID: 'loc-picker-consent-agree' })).toHaveLength(0)
+    })
+  })
+
+  // Regressions from the first on-device build (v1.1.4):
+  //  1. the header sat under the status bar / map attribution → nearly untappable;
+  //  2. wrapping the AMap MapView in a <Modal> put its native GL surface in a
+  //     separate Android Dialog window, which crashed the app on dismiss — so
+  //     ✕ / confirm / back-swipe all "exited the app".
+  describe('on-device regressions (safe area + no Modal)', () => {
+    beforeEach(async () => {
+      await AsyncStorage.setItem(CONSENT_KEY, 'true')
+    })
+
+    it('pads the header by the top safe-area inset (not crammed under the status bar)', async () => {
+      const renderer = await renderPicker({ initial: CHINA })
+      const header = byId(renderer, 'loc-picker-header')
+      const flat = require('react-native').StyleSheet.flatten(header.props.style) as { paddingTop: number }
+      // Must include the inset; the old fixed paddingTop could never reach TOP_INSET.
+      expect(flat.paddingTop).toBeGreaterThanOrEqual(TOP_INSET)
+    })
+
+    it('does NOT render the AMap map inside a React Native <Modal> (Dialog-window crash)', async () => {
+      const renderer = await renderPicker({ initial: CHINA })
+      // No <Modal> anywhere — the picker is a full-screen in-window overlay.
+      expect(renderer.root.findAllByType(Modal)).toHaveLength(0)
+      expect(renderer.root.findAllByProps({ testID: 'loc-picker-overlay' }).length).toBeGreaterThan(0)
+    })
+
+    it('handles Android hardware-back by closing the picker (onCancel), consuming the event', async () => {
+      const onCancel = jest.fn()
+      await renderPicker({ initial: CHINA, onCancel })
+
+      // The component registered a back handler while visible.
+      expect(backPressHandlers.length).toBeGreaterThan(0)
+      const handled = backPressHandlers[backPressHandlers.length - 1]()
+
+      // It closes the picker AND consumes the event (true) so back never reaches
+      // the navigator (which would pop the screen / look like the app exiting).
+      expect(onCancel).toHaveBeenCalledTimes(1)
+      expect(handled).toBe(true)
     })
   })
 
