@@ -135,6 +135,9 @@ jest.mock('@/components/ds', () => {
         <Text>{name}</Text>
       </View>
     ),
+    Badge: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
+      <View testID={testID}><Text>{children}</Text></View>
+    ),
     Icon: ({ name }: { name: string }) => (
       <View testID={`icon-${name}`} />
     ),
@@ -447,6 +450,105 @@ describe('LibraryView title dropdown — todo mode filtering (plan 2 red tests)'
     // FAILS against the old layout (menu rendered before the ScrollView, so
     // menuIdx < filterRowIdx). Passes once the menu is a later sibling.
     expect(menuIdx).toBeGreaterThan(filterRowIdx)
+  })
+
+  // ── (e) active marker is a dot, labels stay aligned, count is a badge ──────
+  // User-reported: the active row used a ✓ checkmark which indented only the
+  // active label (想吃 / 我的口味 misaligned), and the count was a bare muted
+  // number. The active marker must now be the design-system accent dot in a
+  // fixed-width slot that BOTH rows reserve (so labels line up), and the count
+  // must render through the DS Badge.
+  it('(e) active row shows an accent dot (not a checkmark) and inactive row reserves the slot', () => {
+    mockItems = [
+      makeTaste({ name: 'Ramen', status: 'tasted', verdict: 'yum' }),
+      makeTaste({ name: 'Sushi Wish', status: 'todo', verdict: null }),
+    ]
+    const renderer = renderLibrary()
+
+    const dropdown = findTitleDropdown(renderer)
+    act(() => { dropdown!.props.onPress() })
+
+    // Default is tasted mode → exactly one active dot, and it lives in the
+    // tasted row. (Count host nodes only — jest-expo wraps every <View> in a
+    // composite class, so each testID otherwise matches twice.)
+    const dots = renderer.root.findAll(
+      (n) => n.props.testID === 'dropdown-active-dot' && typeof n.type === 'string',
+    )
+    expect(dots).toHaveLength(1)
+    const tastedItem = findDropdownItem(renderer, 'dropdown-item-tasted')
+    expect(
+      tastedItem!.findAll(
+        (n) => n.props.testID === 'dropdown-active-dot' && typeof n.type === 'string',
+      ),
+    ).toHaveLength(1)
+
+    // BOTH rows reserve the fixed-width marker slot → labels stay left-aligned
+    // regardless of which row is active.
+    const slots = renderer.root.findAll(
+      (n) => n.props.testID === 'dropdown-marker-slot' && typeof n.type === 'string',
+    )
+    expect(slots).toHaveLength(2)
+
+    // The old checkmark must be gone entirely.
+    const checks = renderer.root.findAll(
+      (n) => typeof n.props.children === 'string' && n.props.children === '✓',
+    )
+    expect(checks).toHaveLength(0)
+  })
+
+  it('(e) the active dot follows viewMode — moves to the todo row when 想吃 is selected', () => {
+    mockItems = [
+      makeTaste({ name: 'Ramen', status: 'tasted', verdict: 'yum' }),
+      makeTaste({ name: 'Sushi Wish', status: 'todo', verdict: null }),
+    ]
+    const renderer = renderLibrary()
+
+    const dropdown = findTitleDropdown(renderer)
+    act(() => { dropdown!.props.onPress() })
+    act(() => { findDropdownItem(renderer, 'dropdown-item-todo')!.props.onPress() })
+
+    // Re-open the dropdown; the single active dot must now sit in the todo row.
+    act(() => { dropdown!.props.onPress() })
+    const dots = renderer.root.findAll(
+      (n) => n.props.testID === 'dropdown-active-dot' && typeof n.type === 'string',
+    )
+    expect(dots).toHaveLength(1)
+    const todoItem = findDropdownItem(renderer, 'dropdown-item-todo')
+    expect(
+      todoItem!.findAll(
+        (n) => n.props.testID === 'dropdown-active-dot' && typeof n.type === 'string',
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('(e) the todo count renders through the DS Badge (testID=todo-count)', () => {
+    mockItems = [
+      makeTaste({ name: 'Sushi Wish', status: 'todo', verdict: null }),
+      makeTaste({ name: 'Pho Wish', status: 'todo', verdict: null }),
+    ]
+    const renderer = renderLibrary()
+
+    const dropdown = findTitleDropdown(renderer)
+    act(() => { dropdown!.props.onPress() })
+
+    const badge = renderer.root.findAll(
+      (n) => n.props.testID === 'todo-count' && typeof n.type === 'string',
+    )
+    expect(badge).toHaveLength(1)
+    // The badge must live inside the todo row and carry the count (2).
+    const todoItem = findDropdownItem(renderer, 'dropdown-item-todo')
+    const inBadge: string[] = []
+    todoItem!.findAll((n) => {
+      if (n.props.testID === 'todo-count') {
+        n.findAll((c) => {
+          if (typeof c.props.children === 'number') inBadge.push(String(c.props.children))
+          if (typeof c.props.children === 'string') inBadge.push(c.props.children)
+          return false
+        })
+      }
+      return false
+    })
+    expect(inBadge.join(' ')).toMatch(/2/)
   })
 
   it('(c) tasted empty state still uses the reciept icon (not bookmark)', () => {

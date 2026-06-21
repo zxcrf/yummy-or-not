@@ -142,6 +142,9 @@ jest.mock('@/components/ds', () => {
         <Text>{name}</Text>
       </View>
     ),
+    Badge: ({ children, testID }: { children?: React.ReactNode; testID?: string }) => (
+      <View testID={testID}><Text>{children}</Text></View>
+    ),
     Icon: ({ name }: { name: string }) => (
       <View testID={`icon-${name}`} />
     ),
