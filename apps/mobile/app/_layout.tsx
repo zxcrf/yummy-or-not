@@ -21,6 +21,7 @@ import { fontMapForLocale } from '@/constants/fonts'
 import { AddTransitionProvider } from '@/providers/AddTransitionProvider'
 import { AuthProvider } from '@/providers/AuthProvider'
 import { I18nProvider } from '@/providers/I18nProvider'
+import { LocationPickerProvider } from '@/providers/LocationPickerProvider'
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -65,6 +66,7 @@ export default function RootLayout() {
             <StatusBar style="dark" />
             <AppGate>
               <AddTransitionProvider>
+               <LocationPickerProvider>
                 <Stack
                   screenOptions={{
                     headerShown: false,
@@ -104,6 +106,7 @@ export default function RootLayout() {
                     }}
                   />
                 </Stack>
+               </LocationPickerProvider>
               </AddTransitionProvider>
             </AppGate>
           </AuthProvider>
